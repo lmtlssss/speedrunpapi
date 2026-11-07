@@ -24,8 +24,8 @@ speedrunpapi scan circuit.circom --json
 Or download the same standalone bundle:
 
 ```sh
-curl -fsSL https://colony.technology/colony-cli.mjs -o colony.mjs
-node colony.mjs scan circuit.circom --json
+curl -fsSL https://colony.technology/speedrunpapi.mjs -o speedrunpapi.mjs
+node speedrunpapi.mjs scan circuit.circom --json
 ```
 
 Python 3.9+ and Node.js 20+:
