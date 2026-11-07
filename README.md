@@ -67,6 +67,14 @@ To display the scan workflow status in a repository README, save the above steps
 
 Replace `OWNER/REPO` with that repository. The badge shows the workflow status. An issued, source-bound Certified certificate has its own public registry URL.
 
+## Registry publishing
+
+The package names are `colony-taa` on npm and PyPI. The tagged v0.2.0 artifacts are already available on [GitHub Releases](https://github.com/lmtlssss/colony-taa/releases/tag/v0.2.0).
+
+For PyPI's first publish, add a pending GitHub trusted publisher under your PyPI account: project `colony-taa`, owner `lmtlssss`, repository `colony-taa`, workflow `publish.yml`. After that, run the `Publish ᑕ. package` GitHub Action with `registry=pypi`.
+
+For npm, establish ownership by publishing v0.2.0 once with your npm account. Then connect the same GitHub repository and `publish.yml` under the package's npm trusted publisher settings, allow `npm publish`, and run the Action with `registry=npm`. GitHub OIDC supplies short-lived publishing credentials.
+
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/colony-taa/releases).
 
 This public distribution contains the standalone client and its Action. Colony's private service infrastructure, billing, credentials and internal research remain separate.
