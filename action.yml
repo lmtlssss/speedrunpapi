@@ -1,0 +1,66 @@
+name: 'ᑕ. Carry Contract Check'
+description: 'Scan circuit source and attach the exact verdict and optional signed certificate'
+inputs:
+  file:
+    description: 'Circuit source or normalized carry-graph file in this checkout'
+    required: true
+  api_key:
+    description: 'Optional paid API key to sign the source-scanned verdict'
+    required: false
+  public:
+    description: 'Registry listing for signed Certified certificates'
+    required: false
+    default: 'false'
+outputs:
+  verdict:
+    description: 'Certified | Broken | Unknown'
+    value: ${{ steps.scan.outputs.verdict }}
+  certificate_id:
+    description: 'Signed certificate ID when an API key is supplied'
+    value: ${{ steps.scan.outputs.certificate_id }}
+runs:
+  using: composite
+  steps:
+    - name: Run ᑕ. locally
+      id: scan
+      shell: bash
+      env:
+        COLONY_SOURCE: ${{ inputs.file }}
+        COLONY_ACTION_CLI: ${{ github.action_path }}/bin/colony.mjs
+        COLONY_API_KEY: ${{ inputs.api_key }}
+        COLONY_CERT_PUBLIC: ${{ inputs.public }}
+      run: |
+        set -euo pipefail
+        set +e
+        node "$COLONY_ACTION_CLI" scan "$COLONY_SOURCE" --json > colony-analysis.json
+        status=$?
+        set -e
+        if ! jq -e '.verdict == "Certified" or .verdict == "Broken" or .verdict == "Unknown"' colony-analysis.json > /dev/null; then
+          echo "::error::No valid scan verdict"
+          exit 1
+        fi
+        verdict=$(jq -r .verdict colony-analysis.json)
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        cert_id=$(jq -r '.certificate_id // empty' colony-analysis.json)
+        echo "certificate_id=$cert_id" >> "$GITHUB_OUTPUT"
+        if [ -n "$cert_id" ]; then
+          curl -fLsS "https://api.colony.technology/v1/cert/$cert_id" -o colony-certificate.json
+          jq -e '.signature_valid == true' colony-certificate.json > /dev/null
+        fi
+        if [ "$status" -eq 2 ] || [ "$verdict" = "Broken" ]; then
+          echo "::error::ᑕ. found multiple valid witnesses"
+          exit 1
+        fi
+        if [ "$status" -eq 3 ] || [ "$verdict" = "Unknown" ]; then
+          echo "::warning::ᑕ. did not decide this source"
+        fi
+        if [ "$status" -gt 3 ]; then exit "$status"; fi
+    - name: Upload scan and certificate
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: colony-verdict
+        path: |
+          colony-analysis.json
+          colony-certificate.json
+        if-no-files-found: warn

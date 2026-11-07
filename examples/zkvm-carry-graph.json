@@ -1,0 +1,31 @@
+{
+  "format": "carry-graph-v1",
+  "domain": "zkvm",
+  "op": "add",
+  "limb_bits": 8,
+  "limbs": 4,
+  "equations": [
+    "a[0]+b[0]=sum[0]+256*carry[0]",
+    "a[1]+b[1]+carry[0]=sum[1]+256*carry[1]",
+    "a[2]+b[2]+carry[1]=sum[2]+256*carry[2]",
+    "a[3]+b[3]+carry[2]=sum[3]+256*carry[3]"
+  ],
+  "ranges": [
+    "a[0]:8",
+    "b[0]:8",
+    "sum[0]:8",
+    "carry[0]:1",
+    "a[1]:8",
+    "b[1]:8",
+    "sum[1]:8",
+    "carry[1]:1",
+    "a[2]:8",
+    "b[2]:8",
+    "sum[2]:8",
+    "carry[2]:1",
+    "a[3]:8",
+    "b[3]:8",
+    "sum[3]:8",
+    "carry[3]:1"
+  ]
+}

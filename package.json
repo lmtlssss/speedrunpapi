@@ -1,0 +1,36 @@
+{
+  "name": "colony-taa",
+  "version": "0.2.0",
+  "description": "ᑕ. exact arithmetic circuit verification by state contraction",
+  "type": "module",
+  "bin": {
+    "colony": "bin/colony.mjs",
+    "taa": "bin/colony.mjs"
+  },
+  "files": [
+    "bin/colony.mjs",
+    "examples/",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lmtlssss/colony-taa.git"
+  },
+  "homepage": "https://colony.technology",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "keywords": [
+    "circom",
+    "zk",
+    "r1cs",
+    "verilog",
+    "bitvm",
+    "zkvm",
+    "formal-verification",
+    "arithmetic-circuits",
+    "state-contraction"
+  ]
+}
