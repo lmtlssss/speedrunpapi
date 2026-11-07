@@ -13,6 +13,10 @@ jobs:
       - run: npm pack --dry-run
       - run: node bin/colony.mjs version
       - run: node bin/colony.mjs scan examples/modsum-safe.circom --json
+      - name: Test reusable ᑕ. Action
+        uses: ./
+        with:
+          file: examples/modsum-safe.circom
       - name: Broken case returns code 2
         run: |
           set +e

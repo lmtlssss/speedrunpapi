@@ -59,6 +59,14 @@ Try `colony scan examples/modsum-safe.circom --json` or `colony scan examples/mo
 
 The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and uploads the result. Add an optional `api_key` to request a signed certificate. Source is analyzed again by the hosted API before signing.
 
+To display the scan workflow status in a repository README, save the above steps in `.github/workflows/colony.yml`, then add:
+
+```markdown
+[![ᑕ. scan](https://github.com/OWNER/REPO/actions/workflows/colony.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/colony.yml)
+```
+
+Replace `OWNER/REPO` with that repository. The badge shows the workflow status. An issued, source-bound Certified certificate has its own public registry URL.
+
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/colony-taa/releases).
 
 This public distribution contains the standalone client and its Action. Colony's private service infrastructure, billing, credentials and internal research remain separate.
