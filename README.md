@@ -15,13 +15,6 @@ npm install -g colony-taa
 colony scan circuit.circom --json
 ```
 
-The npm registry release is pending. Until it is published, install the public repository directly:
-
-```sh
-npm install -g github:lmtlssss/colony-taa
-colony scan circuit.circom --json
-```
-
 Or download the same standalone bundle:
 
 ```sh
@@ -35,8 +28,6 @@ Python 3.9+ and Node.js 20+:
 pip install colony-taa
 colony scan circuit.circom --json
 ```
-
-The PyPI registry release is pending. The `python/` directory is an installable local package using the same bundled engine.
 
 ## Three verdicts
 
@@ -67,13 +58,9 @@ To display the scan workflow status in a repository README, save the above steps
 
 Replace `OWNER/REPO` with that repository. The badge shows the workflow status. An issued, source-bound Certified certificate has its own public registry URL.
 
-## Registry publishing
+## Packages
 
-The package names are `colony-taa` on npm and PyPI. The tagged v0.2.0 artifacts are already available on [GitHub Releases](https://github.com/lmtlssss/colony-taa/releases/tag/v0.2.0).
-
-For PyPI's first publish, add a pending GitHub trusted publisher under your PyPI account: project `colony-taa`, owner `lmtlssss`, repository `colony-taa`, workflow `publish.yml`. After that, run the `Publish ᑕ. package` GitHub Action with `registry=pypi`.
-
-For npm, establish ownership by publishing v0.2.0 once with your npm account. Then connect the same GitHub repository and `publish.yml` under the package's npm trusted publisher settings, allow `npm publish`, and run the Action with `registry=npm`. GitHub OIDC supplies short-lived publishing credentials.
+`colony-taa` on [npm](https://www.npmjs.com/package/colony-taa) and [PyPI](https://pypi.org/project/colony-taa/). Source and artifacts: [v0.2.0 release](https://github.com/lmtlssss/colony-taa/releases/tag/v0.2.0).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/colony-taa/releases).
 
