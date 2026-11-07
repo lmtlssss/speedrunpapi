@@ -1,5 +1,8 @@
 name: Publish ᑕ. package
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       registry:
@@ -14,7 +17,7 @@ permissions:
   id-token: write
 jobs:
   npm:
-    if: inputs.registry == 'npm'
+    if: github.event_name == 'push' || inputs.registry == 'npm'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,14 +25,15 @@ jobs:
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
-      - name: Match the published release
-        run: test "$(node -p 'require("./package.json").version')" = "0.5.0"
+      - name: Match tagged source and package version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: test "v$(node -p 'require("./package.json").version')" = "$GITHUB_REF_NAME"
       - name: Publish signed npm provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
   pypi:
-    if: inputs.registry == 'pypi'
+    if: github.event_name == 'push' || inputs.registry == 'pypi'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
