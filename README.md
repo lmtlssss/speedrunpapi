@@ -31,7 +31,7 @@ node speedrunpapi.mjs scan circuit.circom --json
 Python 3.9+ and Node.js 20+:
 
 ```sh
-pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.2/speedrunpapi-0.3.2-py3-none-any.whl
+pip install speedrunpapi
 speedrunpapi scan circuit.circom --json
 ```
 
@@ -68,7 +68,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.3.2` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.2 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.2); PyPI publication follows trusted-publisher registration.
+`speedrunpapi@0.3.2` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.3.2/). The matching wheel is also in the [v0.3.2 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.2).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
