@@ -1,4 +1,4 @@
-# ᑕ. — exact arithmetic circuit verification
+# ᑕ. exact arithmetic circuit verification
 
 [Live race](https://colony.technology/demo) · [Proofs](https://colony.technology/proofs) · [Packs](https://colony.technology/packs) · [API](https://colony.technology/api)
 
