@@ -16,6 +16,19 @@ jobs:
       - run: node bin/speedrunpapi.mjs scan examples/and.circom --json
       - run: node bin/speedrunpapi.mjs scan examples/compare.circom --json
       - run: node bin/speedrunpapi.mjs scan examples/mux.circom --json
+      - name: Check compiler R1CS source-bound certificate
+        run: |
+          node bin/speedrunpapi.mjs scan examples/circom_multiplier.r1cs --json > /tmp/r1cs-result.json
+          node bin/speedrunpapi.mjs verify /tmp/r1cs-result.json --source examples/circom_multiplier.r1cs
+      - name: Free R1CS wire remains undecided
+        run: |
+          set +e
+          node bin/speedrunpapi.mjs scan examples/free_wire.r1cs --json > /tmp/free-r1cs.json
+          status=$?
+          set -e
+          test "$status" -eq 3
+          node -e 'let r=require("/tmp/free-r1cs.json");if(r.verdict!=="Unknown")process.exit(1)'
+
       - name: Test reusable ᑕ. Action
         uses: ./
         with:
