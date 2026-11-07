@@ -1157,6 +1157,15 @@ var effects = {
   OP_VERIFY: [1, 0],
   OP_DUP: [1, 2],
   OP_2DUP: [2, 4],
+  OP_TOALTSTACK: [1, 0],
+  OP_FROMALTSTACK: [0, 1],
+  OP_SHA256: [1, 1],
+  OP_HASH256: [1, 1],
+  OP_HASH160: [1, 1],
+  OP_RIPEMD160: [1, 1],
+  OP_SIZE: [1, 2],
+  OP_NIP: [2, 1],
+  OP_TUCK: [2, 3],
   OP_DROP: [1, 0],
   OP_SWAP: [2, 2],
   OP_OVER: [2, 3],
@@ -1187,6 +1196,15 @@ var opcodes = new Map([
   [118, "OP_DUP"],
   [110, "OP_2DUP"],
   [117, "OP_DROP"],
+  [107, "OP_TOALTSTACK"],
+  [108, "OP_FROMALTSTACK"],
+  [168, "OP_SHA256"],
+  [170, "OP_HASH256"],
+  [169, "OP_HASH160"],
+  [166, "OP_RIPEMD160"],
+  [130, "OP_SIZE"],
+  [119, "OP_NIP"],
+  [125, "OP_TUCK"],
   [124, "OP_SWAP"],
   [120, "OP_OVER"],
   [123, "OP_ROT"],
@@ -1257,14 +1275,22 @@ function scanNativeBitvm(source, id = "script") {
     if (source.length > 128 * 1024) throw Error("Script source exceeds 128 KiB");
     const hex = /^(?:0x)?(?:[0-9a-f]{2})+$/i.test(source.trim());
     const program = hex ? parseHex(source) : parseAsm(source);
-    let required = 0, depth = 0, peak = 0;
+    let required = 0, depth = 0, peak = 0, altDepth = 0, altPeak = 0;
     const histogram = {};
     for (const op of program) {
+      if (op.name === "OP_FROMALTSTACK") {
+        if (altDepth === 0) throw Error("OP_FROMALTSTACK without prior OP_TOALTSTACK");
+        altDepth--;
+      }
       if (depth < op.need) {
         required += op.need - depth;
         depth = op.need;
       }
       depth += op.give - op.need;
+      if (op.name === "OP_TOALTSTACK") {
+        altDepth++;
+        altPeak = Math.max(altPeak, altDepth);
+      }
       peak = Math.max(peak, depth);
       histogram[op.name] = (histogram[op.name] || 0) + 1;
     }
@@ -1275,8 +1301,10 @@ function scanNativeBitvm(source, id = "script") {
       minimum_initial_items: required,
       final_stack_items_for_minimum_input: depth,
       extra_stack_peak: peak,
+      alternate_stack_peak: altPeak,
+      alternate_stack_final: altDepth,
       opcodes: histogram,
-      scope: "At most one final stack for a fixed initial stack on successful execution of this supported Bitcoin Script subset. Script validity, runtime limits, BitVM dispute proof validity and existence are separate."
+      scope: "At most one final main and alternate stack for a fixed initial stack on successful execution of parsed deterministic Bitcoin Script operations, including alternate-stack transfer and cryptographic hash primitives. Transaction context, Script consensus validity and BitVM dispute proof validity are outside this scope."
     };
     return {
       id,
@@ -1392,11 +1420,117 @@ function instruction(word, pc, regs) {
   } else throw Error("Unsupported RV32IM control, memory or system opcode");
   return { rd, value: rd === 0 ? 0 : value, name };
 }
+function decodeV2(word, pc, regs, memory) {
+  const opcode = word & 127, rd = word >>> 7 & 31, f3 = word >>> 12 & 7;
+  const rs1 = word >>> 15 & 31, rs2 = word >>> 20 & 31;
+  const a = regs[rs1], b = regs[rs2];
+  let next_pc = u32(pc + 4), value = 0, name = "", write;
+  let target = false, register = 0;
+  if (opcode === 99) {
+    const imm = signExtend(word >>> 31 << 12 | (word >>> 7 & 1) << 11 | (word >>> 25 & 63) << 5 | (word >>> 8 & 15) << 1, 13);
+    const tests = { 0: a === b, 1: a !== b, 4: signed(a) < signed(b), 5: signed(a) >= signed(b), 6: a < b, 7: a >= b };
+    if (!(f3 in tests)) throw Error("Unsupported RV32IM branch condition");
+    name = ["BEQ", "BNE", "", "", "BLT", "BGE", "BLTU", "BGEU"][f3];
+    if (tests[f3]) {
+      next_pc = u32(pc + imm);
+      target = true;
+    }
+  } else if (opcode === 111) {
+    const imm = signExtend(word >>> 31 << 20 | (word >>> 12 & 255) << 12 | (word >>> 20 & 1) << 11 | (word >>> 21 & 1023) << 1, 21);
+    name = "JAL";
+    register = rd;
+    value = u32(pc + 4);
+    next_pc = u32(pc + imm);
+    target = true;
+  } else if (opcode === 103 && f3 === 0) {
+    name = "JALR";
+    register = rd;
+    value = u32(pc + 4);
+    next_pc = u32(a + signExtend(word >>> 20, 12)) & ~1;
+    target = true;
+  } else if (opcode === 3 && f3 === 2) {
+    name = "LW";
+    register = rd;
+    const address = u32(a + signExtend(word >>> 20, 12));
+    if (address % 4 || !memory.has(address)) throw Error("Unaligned/uninitialized LW");
+    value = memory.get(address);
+  } else if (opcode === 35 && f3 === 2) {
+    name = "SW";
+    const imm = signExtend(word >>> 25 << 5 | word >>> 7 & 31, 12);
+    const address = u32(a + imm);
+    if (address % 4) throw Error("Unaligned SW");
+    write = { address, value: b };
+  } else {
+    const out = instruction(word, pc, regs);
+    name = out.name;
+    register = out.rd;
+    value = out.value;
+  }
+  if (target && next_pc % 4) throw Error("Unaligned control target");
+  return { rd: register, value: register === 0 ? 0 : value, next_pc, name, ...write ? { write } : {} };
+}
+function scanV2(trace, id, t0) {
+  if (Object.keys(trace).sort().join(",") !== "format,initial_memory,initial_pc,initial_registers,steps" || !uint(trace.initial_pc) || trace.initial_pc % 4 || !Array.isArray(trace.initial_registers) || trace.initial_registers.length !== 32 || !trace.initial_registers.every(uint) || trace.initial_registers[0] !== 0 || !Array.isArray(trace.initial_memory) || trace.initial_memory.length > 1024 || !Array.isArray(trace.steps) || trace.steps.length < 1 || trace.steps.length > 4096)
+    throw Error("Invalid RV32IM v2 state bounds");
+  const memory = /* @__PURE__ */ new Map();
+  for (const cell of trace.initial_memory) {
+    if (!cell || typeof cell !== "object" || Array.isArray(cell) || Object.keys(cell).sort().join(",") !== "address,value" || !uint(cell.address) || cell.address % 4 || !uint(cell.value) || memory.has(cell.address))
+      throw Error("Invalid initial memory cell");
+    memory.set(cell.address, cell.value);
+  }
+  const regs = [...trace.initial_registers];
+  let pc = trace.initial_pc;
+  const histogram = {};
+  const written = /* @__PURE__ */ new Set();
+  for (let i = 0; i < trace.steps.length; i++) {
+    const step = trace.steps[i];
+    if (!step || typeof step !== "object" || Array.isArray(step) || !["instruction,next_pc,pc,rd,value", "instruction,memory_write,next_pc,pc,rd,value"].includes(Object.keys(step).sort().join(",")) || step.pc !== pc || !uint(step.next_pc) || step.next_pc % 4 || !uint(step.rd) || step.rd > 31 || !uint(step.value) || typeof step.instruction !== "string" || !/^0x[0-9a-f]{8}$/i.test(step.instruction))
+      throw Error("Invalid RV32IM v2 step " + i);
+    const effect = decodeV2(Number.parseInt(step.instruction.slice(2), 16), pc, regs, memory);
+    if (step.rd !== effect.rd || step.value !== effect.value || step.next_pc !== effect.next_pc)
+      throw Error("Incorrect RV32IM transition at step " + i);
+    if (effect.write) {
+      if (!step.memory_write || Object.keys(step.memory_write).sort().join(",") !== "address,value" || step.memory_write.address !== effect.write.address || step.memory_write.value !== effect.write.value)
+        throw Error("Incorrect RV32IM memory write at step " + i);
+      if (!memory.has(effect.write.address) && memory.size >= 1024) throw Error("Memory state capacity exceeded");
+      memory.set(effect.write.address, effect.write.value);
+    } else if ("memory_write" in step) throw Error("Unexpected memory write");
+    regs[effect.rd] = effect.value;
+    regs[0] = 0;
+    pc = effect.next_pc;
+    written.add(effect.rd);
+    histogram[effect.name] = (histogram[effect.name] || 0) + 1;
+  }
+  const certificate = {
+    type: "rv32im_control_memory_trace",
+    steps: trace.steps.length,
+    initial_pc: trace.initial_pc,
+    final_pc: pc,
+    operations: histogram,
+    registers_written: written.size,
+    final_registers: regs,
+    final_memory: [...memory].sort((a, b) => a[0] - b[0]).map(([address, value]) => ({ address, value })),
+    scope: "Every listed RV32IM arithmetic, conditional branch, jump, aligned LW and SW transition is checked against the fixed initial register and word-memory state. No program halt, host syscall, zkVM commitment or cryptographic proof is asserted."
+  };
+  return {
+    id,
+    domain: "zkvm",
+    verdict: "Certified",
+    witness_count: "\u22641",
+    method: "rv32im_control_memory_trace_exact",
+    theorem: "Decoded register, control-flow and word-memory transitions match every source-bound record",
+    time_ms: performance.now() - t0,
+    certificate,
+    source_note: certificate.scope,
+    check: { ok: true, kind: "rv32im_trace_checked" }
+  };
+}
 function scanNativeZkvm(source, id = "zkvm_trace") {
   const t0 = performance.now();
   try {
     if (source.length > 128 * 1024) throw Error("Trace exceeds 128 KiB");
     const trace = JSON.parse(source);
+    if (trace?.format === "rv32im-trace-v2") return scanV2(trace, id, t0);
     if (trace?.format !== "rv32im-trace-v1" || Object.keys(trace).sort().join(",") !== "format,initial_pc,initial_registers,steps")
       throw Error("Unsupported zkVM trace schema");
     if (!uint(trace.initial_pc) || trace.initial_pc % 4 !== 0 || !Array.isArray(trace.initial_registers) || trace.initial_registers.length !== 32 || !trace.initial_registers.every(uint) || trace.initial_registers[0] !== 0 || !Array.isArray(trace.steps) || trace.steps.length < 1 || trace.steps.length > 4096)
@@ -1512,7 +1646,7 @@ function scanPasted(source, options = {}) {
   const ext = options.format || options.filename?.toLowerCase().split(".").pop();
   const id = options.id || options.filename?.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || "pasted";
   const trimmed = input.trimStart();
-  if (/"format"\s*:\s*"rv32im-trace-v1"/.test(trimmed))
+  if (/"format"\s*:\s*"rv32im-trace-v[12]"/.test(trimmed))
     return scanNativeZkvm(input, id);
   if (!trimmed.startsWith("{") && (ext === "bitvm" || ext === "script" || /^\s*(?:OP_[A-Z0-9_]+|0x[0-9a-f]{2,})\b/i.test(input)))
     return scanNativeBitvm(input, id);
@@ -1737,6 +1871,7 @@ function proveR1CSUniqueness(parsed) {
   const inputEnd = firstInput + parsed.nPubIn + parsed.nPrvIn;
   for (let j = firstInput; j < inputEnd; j++) known.add(j);
   const pivots = [];
+  const nonlinear_pivots = [];
   let changed = true;
   while (changed) {
     changed = false;
@@ -1744,8 +1879,13 @@ function proveR1CSUniqueness(parsed) {
       const { A, B, C } = parsed.constraints[i];
       const a = unknownTerms(A, known), b = unknownTerms(B, known), c = unknownTerms(C, known);
       let candidate = null;
-      if (!a.length && !b.length && c.length === 1) candidate = c[0].wire;
-      else {
+      let nonlinear = false;
+      if (A.length === 1 && B.length === 1 && C.length === 0 && A[0].wire === B[0].wire && A[0].wire > 0 && !known.has(A[0].wire)) {
+        candidate = A[0].wire;
+        nonlinear = true;
+      }
+      if (!nonlinear && !a.length && !b.length && c.length === 1) candidate = c[0].wire;
+      else if (!nonlinear) {
         const ca = fixedConstant(A), cb = fixedConstant(B);
         if (ca !== null && a.length === 0 && ca !== 0n) {
           const coeffs = /* @__PURE__ */ new Map();
@@ -1763,20 +1903,21 @@ function proveR1CSUniqueness(parsed) {
       }
       if (candidate !== null && !known.has(candidate)) {
         known.add(candidate);
-        pivots.push({ constraint: i, wire: candidate });
+        if (nonlinear) nonlinear_pivots.push({ constraint: i, wire: candidate, rule: "nonzero_scaled_square_zero" });
+        else pivots.push({ constraint: i, wire: candidate });
         changed = true;
       }
     }
   }
   const free = Array.from({ length: parsed.nWires }, (_, i) => i).filter((i) => !known.has(i));
-  return { complete: !free.length, pivots, free };
+  return { complete: !free.length, pivots, nonlinear_pivots, free };
 }
 function scanR1CSBinary(bytes, id = "binary_r1cs") {
   const t0 = performance.now();
   try {
     const parsed = parseR1CSBinary(bytes);
     const proof = proveR1CSUniqueness(parsed);
-    const coupled = proof.complete ? null : proveR1CSCoupledRank(parsed, proof.pivots);
+    const coupled = proof.complete ? null : proveR1CSCoupledRank(parsed, [...proof.pivots, ...proof.nonlinear_pivots]);
     if (!proof.complete && !coupled?.complete) return {
       id,
       domain: "r1cs",
@@ -1789,8 +1930,9 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
       check: { ok: true, kind: "unknown_skip" }
     };
     const rankMode = !proof.complete;
+    const hasNonlinear = proof.nonlinear_pivots.length > 0;
     const certificate = {
-      type: rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness",
+      type: hasNonlinear ? "r1cs_square_zero_elimination" : rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness",
       field: "BN254",
       n_wires: parsed.nWires,
       n_constraints: parsed.nConstraints,
@@ -1798,6 +1940,7 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
       private_inputs: parsed.nPrvIn,
       public_outputs: parsed.nPubOut,
       pivots: proof.pivots,
+      nonlinear_pivots: proof.nonlinear_pivots,
       ...rankMode ? {
         linear_rows: coupled.linearRows,
         remaining_unknown: coupled.unknown,
@@ -1806,14 +1949,14 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
       } : {},
       scope: "At most one full wire assignment for each fixed public AND private input tuple; existence not asserted"
     };
-    const method = rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness";
+    const method = hasNonlinear ? "r1cs_square_zero_elimination" : rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness";
     return {
       id,
       domain: "r1cs",
       verdict: "Certified",
       witness_count: "\u22641",
       method,
-      theorem: rankMode ? "full-column-rank linear subsystem determines coupled wires over BN254" : "nonzero constant pivots determine all non-input wires",
+      theorem: hasNonlinear ? "source-bound zero-square constraints force their wires to zero over BN254; remaining pivots determine the extension" : rankMode ? "full-column-rank linear subsystem determines coupled wires over BN254" : "nonzero constant pivots determine all non-input wires",
       time_ms: performance.now() - t0,
       certificate,
       source_note: certificate.scope,
@@ -1915,7 +2058,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.4.0");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.5.0");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -1955,7 +2098,9 @@ async function main() {
         "r1cs_triangular_uniqueness",
         "r1cs_coupled_linear_rank",
         "bitcoin_script_deterministic_subset",
-        "rv32im_execution_trace_exact"
+        "rv32im_execution_trace_exact",
+        "rv32im_control_memory_trace_exact",
+        "r1cs_square_zero_elimination"
       ].includes(x.method)) {
         const sourceIdx = args.indexOf("--source");
         const sourcePath = sourceIdx >= 0 ? args[sourceIdx + 1] : void 0;

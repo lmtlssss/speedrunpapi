@@ -1,0 +1,43 @@
+name: Colony verification bounty
+description: Reproduce a bounded circuit result or report a soundness gap with source evidence.
+title: "[bounty] "
+body:
+  - type: dropdown
+    id: challenge
+    attributes:
+      label: Challenge
+      options:
+        - "B01 / native BitVM Script"
+        - "B02 / zkVM execution trace"
+        - "B03 / binary R1CS uniqueness"
+        - "B04 / headline reproduction"
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source and exact checksum
+      description: Link to the reproducible source or attach a minimal fixture. Include the sha256 checksum and public result URL if signed.
+    validations:
+      required: true
+  - type: textarea
+    id: run
+    attributes:
+      label: Reproduction commands and environment
+      description: State speedrunpapi version, operating system, CPU, toolchain, and literal invocation. No API keys or private data.
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Expected result, observed result, and scope
+      description: Include Certified / Broken / Unknown, witness conditions, console output, and how you independently checked the result.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Independent evidence
+      description: Link a public test run or minimal altered-source case that reproduces the claim.
+    validations:
+      required: true

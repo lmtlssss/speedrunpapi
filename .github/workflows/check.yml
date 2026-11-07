@@ -51,6 +51,23 @@ jobs:
           jq -e '.verdict == "Unknown"' /tmp/invalid-zkvm.json
           jq -e '.verdict == "Unknown"' /tmp/invalid-r1cs.json
 
+      - name: Exact BitVM, control-flow zkVM and nonlinear R1CS source rechecks
+        run: |
+          set -euo pipefail
+          for fixture in native_alt_hash.bitvm native_alt_hash_hex.script rv32im_memory_branch_v2.zkvm nonlinear_square_zero.r1cs; do
+            node bin/speedrunpapi.mjs scan "examples/$fixture" --json > /tmp/extended.json
+            node bin/speedrunpapi.mjs verify /tmp/extended.json --source "examples/$fixture" | grep exact_source_recheck
+          done
+          set +e
+          node bin/speedrunpapi.mjs scan examples/rv32im_bad_branch_v2.zkvm --json > /tmp/bad-branch.json
+          branch_status=$?
+          node bin/speedrunpapi.mjs scan examples/nonlinear_two_roots.r1cs --json > /tmp/two-roots.json
+          roots_status=$?
+          set -e
+          test "$branch_status" -eq 3
+          test "$roots_status" -eq 3
+          jq -e '.verdict == "Unknown"' /tmp/bad-branch.json
+          jq -e '.verdict == "Unknown"' /tmp/two-roots.json
       - name: Test reusable ᑕ. Action
         uses: ./
         with:

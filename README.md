@@ -41,7 +41,7 @@ speedrunpapi scan circuit.circom --json
 - `Broken` — a supported pattern admits distinct witnesses; the result includes a counterexample.
 - `Unknown` — the source needs a supported adapter or a complete constraint graph.
 
-Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns; exact bounded `carry-graph-v1` JSON; native Bitcoin Script assembly and bytecode for the listed deterministic opcode subset; and RV32IM arithmetic-register guest traces for zkVM projects. Script certificates state deterministic final-stack behavior for a fixed initial stack. Guest trace certificates validate each supplied RISC-V instruction word and register write. These are scoped execution claims, separate from full BitVM or zkVM proof-system validity. Branches, memory access, signatures and unsupported opcodes return `Unknown`.
+Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns; exact bounded `carry-graph-v1` JSON; native Bitcoin Script assembly and bytecode for the listed deterministic opcode subset; and RV32IM arithmetic-register guest traces for zkVM projects. Script certificates state deterministic final-stack behavior for a fixed initial stack. Guest trace certificates validate each supplied RISC-V instruction word and register write. These are scoped execution claims, separate from full BitVM or zkVM proof-system validity. The v2 RV32IM format checks conditional branches, jumps, aligned LW/SW word memory, and arithmetic transitions. Bitcoin Script supports alternate-stack transfer and hash opcodes. Host syscalls, signatures and unsupported operations return `Unknown`.
 
 Binary snarkjs `.r1cs` v1 accepts triangular constant pivots and new coupled full-column-rank linear subsystems over BN254. Its guarantee is **at most one wire assignment with fixed public and private input values**. Rank-deficient or unrecognized nonlinear systems return `Unknown`. For `.r1cs`, `.bitvm`, `.script` or `.zkvm`, use `speedrunpapi verify result.json --source source.file` to re-run the source parser and exact certificate check. Source bytes and checker scope remain part of every signed result.
 
@@ -53,7 +53,7 @@ Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan exa
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.4.0
+- uses: lmtlssss/speedrunpapi@v0.5.0
   with:
     file: circuits/main.circom
 ```
@@ -70,7 +70,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.4.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.4.0/). The matching wheel is also in the [v0.4.0 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.4.0).
+`speedrunpapi@0.5.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.5.0/). The matching wheel is also in the [v0.5.0 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.5.0).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

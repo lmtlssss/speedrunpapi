@@ -23,8 +23,10 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
       - name: Match the published release
-        run: test "$(node -p 'require("./package.json").version')" = "0.4.0"
+        run: test "$(node -p 'require("./package.json").version')" = "0.5.0"
       - name: Publish signed npm provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
   pypi:
     if: inputs.registry == 'pypi'
