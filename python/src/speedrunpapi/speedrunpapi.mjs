@@ -181,6 +181,66 @@ function analyze(gadget) {
   const t0 = performance.now();
   const { family, constraints: c, params, id } = gadget;
   const finish = (r) => withDomain(gadget, r);
+  if (family === "circom_function") {
+    const primitive = String(params.primitive ?? "");
+    const expr = primitive === "and" ? "a*b" : primitive === "mux1" ? "(b-a)*s+a" : null;
+    if (!expr || !c.equation) {
+      return finish({
+        id,
+        verdict: "Unknown",
+        time_ms: performance.now() - t0,
+        method: "circom_direct_incomplete",
+        theorem: "n/a",
+        reason: "Incomplete field assignment"
+      });
+    }
+    return finish({
+      id,
+      verdict: "Certified",
+      witness_count: 1,
+      time_ms: performance.now() - t0,
+      method: "circom_direct_arithmetic",
+      theorem: "A constrained field assignment fixes its output for each input tuple",
+      certificate: {
+        type: "functional_assignment",
+        primitive,
+        expression: expr,
+        field: "BN254",
+        input_domain: "field elements",
+        scope: "The main template contains only the declared inputs and one constrained output; every input tuple has one output."
+      }
+    });
+  }
+  if (family === "circom_comparison") {
+    const n = Number(params.n ?? 0);
+    const bits = Number(params.range_bits ?? 0);
+    if (n !== 4 || bits !== 5 || !c.equation || !c.sum_bitified || !c.carry_bitified) {
+      return finish({
+        id,
+        verdict: "Unknown",
+        time_ms: performance.now() - t0,
+        method: "circom_comparison_incomplete",
+        theorem: "n/a",
+        reason: "Missing exact bit decomposition"
+      });
+    }
+    return finish({
+      id,
+      verdict: "Certified",
+      witness_count: 1,
+      time_ms: performance.now() - t0,
+      method: "circom_bitified_comparison",
+      theorem: "Unique bit decomposition for 2^5 < p, followed by a constrained output",
+      certificate: {
+        type: "bit_decomposition",
+        n: 4,
+        range_bits: 5,
+        field: "BN254",
+        equation: "diff=a+16-b; diff=sum(bit[i]*2^i); out=1-bit[4]",
+        scope: "At most one witness for fixed field inputs when the five-bit decomposition is satisfiable; usual less-than semantics for inputs 0..15."
+      }
+    });
+  }
   if (family === "modsum") {
     const n = Number(params.n ?? 4);
     const { unique, reason } = modsumUnique(c);
@@ -577,6 +637,41 @@ function classifyCircomSource(src, id = "circuit") {
   const tpl = main2?.template ?? "";
   const args = main2?.args ?? [];
   const body = tpl && extractTemplateBody(clean, tpl) || clean;
+  if (!/\binclude\s*["']/.test(clean) && tpl && extractTemplateBody(clean, tpl)) {
+    const compact = body.replace(/\s+/g, "");
+    const direct = /* @__PURE__ */ new Map([
+      ["signalinputa;signalinputb;signaloutputout;out<==a*b;", "and"],
+      ["signalinputa;signalinputb;signalinputs;signaloutputout;out<==(b-a)*s+a;", "mux1"]
+    ]);
+    const primitive = direct.get(compact);
+    if (primitive) {
+      return {
+        id,
+        domain: "circom",
+        family: "circom_function",
+        params: { primitive },
+        constraints: defaultConstraints({ equation: true }),
+        source: "circom",
+        notes: "Single field output bound by a complete arithmetic assignment"
+      };
+    }
+    const compare4 = "signalinputa;signalinputb;signaloutputout;signaldiff;signalbit[5];diff<==a+16-b;varlc=0;vare2=1;for(vari=0;i<5;i++){bit[i]<--(diff>>i)&1;bit[i]*(bit[i]-1)===0;lc+=bit[i]*e2;e2=e2+e2;}lc===diff;out<==1-bit[4];";
+    if (compact === compare4) {
+      return {
+        id,
+        domain: "circom",
+        family: "circom_comparison",
+        params: { n: 4, range_bits: 5 },
+        constraints: defaultConstraints({
+          equation: true,
+          sum_bitified: true,
+          carry_bitified: true
+        }),
+        source: "circom",
+        notes: "Five checked bits give a unique residue and comparison output"
+      };
+    }
+  }
   if (/^ModSumCarryFree$/i.test(tpl)) {
     const n = args[0] ?? 4;
     return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: false }), source: "circom", notes: "sum Num2Bits only" };
@@ -851,6 +946,15 @@ function checkResult(r) {
     return { ok: false, kind: "unrecognized_cex" };
   }
   if (r.verdict === "Certified") {
+    if (r.method === "circom_direct_arithmetic") {
+      const c = r.certificate;
+      const expected = c?.primitive === "and" ? "a*b" : c?.primitive === "mux1" ? "(b-a)*s+a" : null;
+      return { ok: c?.type === "functional_assignment" && c.expression === expected && r.witness_count === 1, kind: "functional_assignment" };
+    }
+    if (r.method === "circom_bitified_comparison") {
+      const c = r.certificate;
+      return { ok: c?.type === "bit_decomposition" && c.n === 4 && c.range_bits === 5 && r.witness_count === 1, kind: "bit_decomposition" };
+    }
     return { ok: !!r.certificate, kind: "certificate" };
   }
   return { ok: true, kind: "unknown_skip" };
@@ -1176,7 +1280,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.0");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.1");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];

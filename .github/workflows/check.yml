@@ -13,6 +13,9 @@ jobs:
       - run: npm pack --dry-run
       - run: node bin/speedrunpapi.mjs version
       - run: node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json
+      - run: node bin/speedrunpapi.mjs scan examples/and.circom --json
+      - run: node bin/speedrunpapi.mjs scan examples/compare.circom --json
+      - run: node bin/speedrunpapi.mjs scan examples/mux.circom --json
       - name: Test reusable ᑕ. Action
         uses: ./
         with:

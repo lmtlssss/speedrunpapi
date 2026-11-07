@@ -31,7 +31,7 @@ node speedrunpapi.mjs scan circuit.circom --json
 Python 3.9+ and Node.js 20+:
 
 ```sh
-pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.0/speedrunpapi-0.3.0-py3-none-any.whl
+pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.1/speedrunpapi-0.3.1-py3-none-any.whl
 speedrunpapi scan circuit.circom --json
 ```
 
@@ -43,13 +43,15 @@ speedrunpapi scan circuit.circom --json
 
 Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns, plus bounded `carry-graph-v1` JSON for BitVM, zkVM and normalized R1CS. Raw Bitcoin Script, binary R1CS and native zkVM traces need source frontends and currently return `Unknown`. The exact mathematical graph is the certification scope until the source compiler is bound.
 
-Try `speedrunpapi scan examples/modsum-safe.circom --json` or `speedrunpapi scan examples/modsum-broken.circom --json`.
+The source-bound Circom examples also cover exact AND, Mux1 field arithmetic and a five-bit LessThan constraint: `examples/and.circom`, `examples/mux.circom` and `examples/compare.circom`. The verifier checks the complete recognized constraints and returns `Unknown` for altered or incomplete templates.
+
+Try `speedrunpapi scan examples/compare.circom --json` or `speedrunpapi scan examples/modsum-broken.circom --json`.
 
 ## GitHub Action
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.3.0
+- uses: lmtlssss/speedrunpapi@v0.3.1
   with:
     file: circuits/main.circom
 ```
@@ -66,7 +68,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.3.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.0 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.0); PyPI publication follows trusted-publisher registration.
+`speedrunpapi@0.3.1` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.1 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.1); PyPI publication follows trusted-publisher registration.
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
