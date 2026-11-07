@@ -12,7 +12,7 @@ def main() -> int:
     if not node:
         print("ᑕ. requires Node.js 20 or later on PATH.", file=sys.stderr)
         return 127
-    bundled = resources.files("colony_taa").joinpath("colony.mjs")
+    bundled = resources.files("speedrunpapi").joinpath("speedrunpapi.mjs")
     with resources.as_file(bundled) as file_path:
         return subprocess.run([node, str(file_path), *sys.argv[1:]], check=False).returncode
 

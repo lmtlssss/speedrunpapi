@@ -26,7 +26,7 @@ runs:
       shell: bash
       env:
         COLONY_SOURCE: ${{ inputs.file }}
-        COLONY_ACTION_CLI: ${{ github.action_path }}/bin/colony.mjs
+        COLONY_ACTION_CLI: ${{ github.action_path }}/bin/speedrunpapi.mjs
         COLONY_API_KEY: ${{ inputs.api_key }}
         COLONY_CERT_PUBLIC: ${{ inputs.public }}
       run: |

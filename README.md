@@ -11,8 +11,14 @@ The headline demo uses the pinned Circomlib **SHA-256 compression** source. The 
 Node.js 20 or later:
 
 ```sh
-npm install -g colony-taa
-colony scan circuit.circom --json
+npx speedrunpapi scan circuit.circom --json
+```
+
+For repeated use:
+
+```sh
+npm install -g speedrunpapi
+speedrunpapi scan circuit.circom --json
 ```
 
 Or download the same standalone bundle:
@@ -25,8 +31,8 @@ node colony.mjs scan circuit.circom --json
 Python 3.9+ and Node.js 20+:
 
 ```sh
-pip install colony-taa
-colony scan circuit.circom --json
+pip install speedrunpapi
+speedrunpapi scan circuit.circom --json
 ```
 
 ## Three verdicts
@@ -37,20 +43,20 @@ colony scan circuit.circom --json
 
 Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns, plus bounded `carry-graph-v1` JSON for BitVM, zkVM and normalized R1CS. Raw Bitcoin Script, binary R1CS and native zkVM traces need source frontends and currently return `Unknown`. The exact mathematical graph is the certification scope until the source compiler is bound.
 
-Try `colony scan examples/modsum-safe.circom --json` or `colony scan examples/modsum-broken.circom --json`.
+Try `speedrunpapi scan examples/modsum-safe.circom --json` or `speedrunpapi scan examples/modsum-broken.circom --json`.
 
 ## GitHub Action
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/colony-taa@v0.2.0
+- uses: lmtlssss/speedrunpapi@v0.3.0
   with:
     file: circuits/main.circom
 ```
 
 The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and uploads the result. Add an optional `api_key` to request a signed certificate. Source is analyzed again by the hosted API before signing.
 
-To display the scan workflow status in a repository README, save the above steps in `.github/workflows/colony.yml`, then add:
+To display the scan workflow status in a repository README, save the above steps in `.github/workflows/speedrunpapi.yml`, then add:
 
 ```markdown
 [![ᑕ. scan](https://github.com/OWNER/REPO/actions/workflows/colony.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/colony.yml)
@@ -60,8 +66,8 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`colony-taa` on [npm](https://www.npmjs.com/package/colony-taa) and [PyPI](https://pypi.org/project/colony-taa/). Source and artifacts: [v0.2.0 release](https://github.com/lmtlssss/colony-taa/releases/tag/v0.2.0).
+`speedrunpapi` on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). Source and artifacts: [v0.3.0 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.0).
 
-The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/colony-taa/releases).
+The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
 This public distribution contains the standalone client and its Action. Colony's private service infrastructure, billing, credentials and internal research remain separate.

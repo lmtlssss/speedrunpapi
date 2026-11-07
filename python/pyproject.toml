@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "colony-taa"
-version = "0.2.0"
+name = "speedrunpapi"
+version = "0.3.0"
 description = "ᑕ. exact arithmetic circuit verification; Python entry to the shared Node engine"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -15,15 +15,14 @@ classifiers = ["Programming Language :: Python :: 3", "Environment :: Console"]
 
 [project.urls]
 Homepage = "https://colony.technology"
-Source = "https://github.com/lmtlssss/colony-taa"
+Source = "https://github.com/lmtlssss/speedrunpapi"
 
 [project.scripts]
-colony = "colony_taa.cli:main"
-taa = "colony_taa.cli:main"
+speedrunpapi = "speedrunpapi.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["colony_taa"]
+packages = ["speedrunpapi"]
 
 [tool.setuptools.package-data]
-colony_taa = ["colony.mjs"]
+speedrunpapi = ["speedrunpapi.mjs"]

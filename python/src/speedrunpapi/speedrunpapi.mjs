@@ -1107,12 +1107,12 @@ function usage() {
   console.log(`\u1455. \u2014 exact arithmetic circuit verification by state contraction
 
 Usage:
-  colony scan <file> [--json] [--sarif out.sarif] [--api <url>] [--key <key>]
-  colony classify <file>
-  colony verify <result.json>
-  colony claim <order> <confirmation> <email>
-  colony usage [--key <key>]
-  colony version
+  speedrunpapi scan <file> [--json] [--sarif out.sarif] [--api <url>] [--key <key>]
+  speedrunpapi classify <file>
+  speedrunpapi verify <result.json>
+  speedrunpapi claim <order> <confirmation> <email>
+  speedrunpapi usage [--key <key>]
+  speedrunpapi version
 
 File types: .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
 Compute is local. Optional source-bound API signature uses one certificate credit.
@@ -1176,7 +1176,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. colony 0.2.0");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.0");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
