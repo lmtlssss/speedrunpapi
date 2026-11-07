@@ -1,0 +1,37 @@
+name: Paid certificate customer pilot
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  paid-source-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan exact source and request one paid certificate
+        id: carry
+        uses: lmtlssss/speedrunpapi@v0.3.2
+        with:
+          file: examples/compare.circom
+          api_key: ${{ secrets.COLONY_PILOT_API_KEY }}
+          public: 'true'
+      - name: Independently inspect the signed public receipt
+        shell: bash
+        env:
+          CERT_ID: ${{ steps.carry.outputs.certificate_id }}
+          VERDICT: ${{ steps.carry.outputs.verdict }}
+        run: |
+          set -euo pipefail
+          test "$VERDICT" = Certified
+          test -n "$CERT_ID"
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "https://api.colony.technology/v1/cert/$CERT_ID" -o colony-pilot-receipt.json
+          jq -e --arg id "$CERT_ID" '.signature_valid == true and .certificate.id == $id and .certificate.public == true and .certificate.gadget_id == "compare" and .certificate.result == "Certified" and (.certificate.scope | length > 0)' colony-pilot-receipt.json
+          printf 'Verified paid source-bound receipt: https://api.colony.technology/v1/cert/%s\n' "$CERT_ID" >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve signed pilot receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: colony-pilot-receipt
+          path: colony-pilot-receipt.json
+          if-no-files-found: warn
