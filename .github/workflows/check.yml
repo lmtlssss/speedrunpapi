@@ -68,6 +68,15 @@ jobs:
           test "$roots_status" -eq 3
           jq -e '.verdict == "Unknown"' /tmp/bad-branch.json
           jq -e '.verdict == "Unknown"' /tmp/two-roots.json
+      - name: Machine output stays clean; bibliography is opt-in
+        run: |
+          set -euo pipefail
+          node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json > /tmp/clean-cli.json
+          node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json --references > /tmp/research-cli.json
+          jq -e '.verdict == "Certified" and .certificate.theorem_ref == null and .certificate.two_stage_count == "76"' /tmp/clean-cli.json
+          jq -e '.verdict == "Certified" and (.certificate.theorem_ref | startswith("DOI "))' /tmp/research-cli.json
+          node bin/speedrunpapi.mjs verify /tmp/clean-cli.json
+          node bin/speedrunpapi.mjs verify /tmp/research-cli.json
       - name: Test reusable ᑕ. Action
         uses: ./
         with:

@@ -47,13 +47,15 @@ Binary snarkjs `.r1cs` v1 accepts triangular constant pivots and new coupled ful
 
 The source-bound Circom examples also cover exact AND, Mux1 field arithmetic and a five-bit LessThan constraint: `examples/and.circom`, `examples/mux.circom` and `examples/compare.circom`. The verifier checks the complete recognized constraints and returns `Unknown` for altered or incomplete templates.
 
+Routine `--json` output contains the verdict, method, source checksum and proof fields. Research DOI metadata is available on demand with `--references`. Both output forms can be checked with `verify`.
+
 Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan examples/rv32im_arithmetic_trace.zkvm --json` and `speedrunpapi scan examples/coupled_rank.r1cs --json`. The rank-deficient R1CS and forged RV32IM trace examples return `Unknown`. You can also run the original Circom cases: `examples/compare.circom` and `examples/modsum-broken.circom`.
 
 ## GitHub Action
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.5.0
+- uses: lmtlssss/speedrunpapi@v0.5.1
   with:
     file: circuits/main.circom
 ```
@@ -70,7 +72,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.5.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.5.0/). The matching wheel is also in the [v0.5.0 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.5.0).
+`speedrunpapi@0.5.1` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.5.1/). The matching wheel is also in the [v0.5.1 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.5.1).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

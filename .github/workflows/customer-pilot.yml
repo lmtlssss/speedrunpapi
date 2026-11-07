@@ -11,7 +11,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Scan exact source and request one paid certificate
         id: carry
-        uses: lmtlssss/speedrunpapi@v0.5.0
+        uses: lmtlssss/speedrunpapi@v0.5.1
         with:
           file: examples/rv32im_memory_branch_v2.zkvm
           api_key: ${{ secrets.COLONY_PILOT_API_KEY }}

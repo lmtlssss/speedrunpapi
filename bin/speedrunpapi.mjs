@@ -1982,7 +1982,7 @@ function usage() {
   console.log(`\u1455. \u2014 exact arithmetic circuit verification by state contraction
 
 Usage:
-  speedrunpapi scan <file> [--json] [--sarif out.sarif] [--api <url>] [--key <key>]
+  speedrunpapi scan <file> [--json] [--references] [--sarif out.sarif] [--api <url>] [--key <key>]
   speedrunpapi classify <file>
   speedrunpapi verify <result.json> [--source circuit.r1cs]
   speedrunpapi claim <order> <confirmation> <email>
@@ -1991,6 +1991,7 @@ Usage:
 
 File types: .r1cs (binary) | .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
 Compute is local. Optional source-bound API signature uses one certificate credit.
+Research DOI references appear only with --references.
 `);
 }
 function scanAny(file) {
@@ -2054,11 +2055,25 @@ function toSarif(file, result) {
     }]
   };
 }
+function cliView(value) {
+  if (Array.isArray(value)) return value.map(cliView);
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, part] of Object.entries(value)) {
+      if (key === "theorem_ref") continue;
+      out[key] = cliView(part);
+    }
+    return out;
+  }
+  if (typeof value === "string")
+    return value.replace(/\s+DOI 10\.5281\/zenodo\.\d+/g, "");
+  return value;
+}
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.5.0");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.5.1");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -2110,7 +2125,7 @@ async function main() {
           const binary = path2.extname(sourcePath).toLowerCase() === ".r1cs";
           const fresh = binary ? scanR1CSBinary(new Uint8Array(bytes), x.id) : scanPasted(bytes.toString("utf8"), { id: x.id, filename: sourcePath });
           c = {
-            ok: x.source_checksum === hash && fresh.verdict === "Certified" && fresh.method === x.method && x.witness_count === "\u22641" && JSON.stringify(fresh.certificate) === JSON.stringify(x.certificate),
+            ok: x.source_checksum === hash && fresh.verdict === "Certified" && fresh.method === x.method && x.witness_count === "\u22641" && JSON.stringify(cliView(fresh.certificate)) === JSON.stringify(cliView(x.certificate)),
             kind: "exact_source_recheck"
           };
         }
@@ -2138,11 +2153,12 @@ async function main() {
       result.signed = Boolean(reg.certificate?.signature);
       result.remaining = reg.remaining;
     }
-    if (args.includes("--json")) console.log(JSON.stringify(result, null, 2));
+    const display = args.includes("--references") ? result : cliView(result);
+    if (args.includes("--json")) console.log(JSON.stringify(display, null, 2));
     else {
       console.log(`${result.verdict}  ${result.id}`);
       console.log(`  method: ${result.method}`);
-      console.log(`  theorem: ${result.theorem}`);
+      console.log(`  theorem: ${display.theorem}`);
       console.log(`  domain: ${result.domain ?? "circom/ir"}`);
       console.log(`  time: ${result.time_ms.toFixed(3)} ms (client-side)`);
       if (result.reason) console.log(`  reason: ${result.reason}`);
