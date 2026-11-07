@@ -946,6 +946,8 @@ function checkResult(r) {
     return { ok: false, kind: "unrecognized_cex" };
   }
   if (r.verdict === "Certified") {
+    if (r.method === "r1cs_triangular_uniqueness")
+      return { ok: false, kind: "r1cs_source_recheck_required" };
     if (r.method === "circom_direct_arithmetic") {
       const c = r.certificate;
       const expected = c?.primitive === "and" ? "a*b" : c?.primitive === "mux1" ? "(b-a)*s+a" : null;
@@ -1206,6 +1208,224 @@ function scanPasted(source, options = {}) {
   };
 }
 
+// ../carrycert-core/src/adapters/r1cs-binary.ts
+var MAX_SIZE = 8 * 1024 * 1024;
+var MAX_WIRES = 65536;
+var MAX_CONSTRAINTS = 2e5;
+var MAX_TERMS = 4e5;
+var Reader = class {
+  constructor(b, start = 0, end = b.length) {
+    this.b = b;
+    this.end = end;
+    this.p = start;
+  }
+  p;
+  require(n) {
+    if (!Number.isSafeInteger(n) || n < 0 || this.p + n > this.end)
+      throw new Error("Truncated or out-of-bounds R1CS section");
+  }
+  u32() {
+    this.require(4);
+    const v = new DataView(this.b.buffer, this.b.byteOffset + this.p, 4).getUint32(0, true);
+    this.p += 4;
+    return v;
+  }
+  u64() {
+    this.require(8);
+    const v = new DataView(this.b.buffer, this.b.byteOffset + this.p, 8).getBigUint64(0, true);
+    this.p += 8;
+    return v;
+  }
+  field(n) {
+    this.require(n);
+    let v = 0n;
+    for (let i = n - 1; i >= 0; i--) v = (v << 8n) + BigInt(this.b[this.p + i]);
+    this.p += n;
+    return v;
+  }
+  done() {
+    if (this.p !== this.end) throw new Error("Trailing bytes in R1CS section");
+  }
+};
+function linear(r, nWires, fieldSize) {
+  const count = r.u32();
+  if (count > nWires || count > MAX_TERMS || count > Math.floor((r.end - r.p) / (fieldSize + 4)))
+    throw new Error("Invalid R1CS linear-combination length");
+  const result = [];
+  let prior = -1;
+  for (let i = 0; i < count; i++) {
+    const wire = r.u32();
+    const coeff = r.field(fieldSize);
+    if (wire >= nWires || wire <= prior || coeff === 0n || coeff >= BN128_PRIME)
+      throw new Error("Noncanonical R1CS term");
+    prior = wire;
+    result.push({ wire, coeff });
+  }
+  return result;
+}
+function parseR1CSBinary(bytes) {
+  if (bytes.byteLength > MAX_SIZE) throw new Error("R1CS exceeds 8 MiB parser limit");
+  const r = new Reader(bytes);
+  r.require(12);
+  if (String.fromCharCode(...bytes.subarray(0, 4)) !== "r1cs")
+    throw new Error("Invalid R1CS magic");
+  r.p = 4;
+  if (r.u32() !== 1) throw new Error("Unsupported R1CS version");
+  const count = r.u32();
+  if (count < 2 || count > 32) throw new Error("Invalid R1CS section count");
+  const sections = /* @__PURE__ */ new Map();
+  for (let i = 0; i < count; i++) {
+    const kind = r.u32(), size = r.u64();
+    if (size > BigInt(r.end - r.p)) throw new Error("Invalid R1CS section length");
+    const n = Number(size);
+    if (sections.has(kind)) throw new Error("Duplicate R1CS section");
+    sections.set(kind, new Reader(bytes, r.p, r.p + n));
+    r.p += n;
+  }
+  r.done();
+  if (sections.has(4) || sections.has(5)) throw new Error("R1CS custom gates are outside this parser scope");
+  const h = sections.get(1), d = sections.get(2), w = sections.get(3);
+  if (!h || !d || !w) throw new Error("Missing required R1CS section");
+  const fieldSize = h.u32();
+  if (fieldSize !== 32 || h.field(fieldSize) !== BN128_PRIME)
+    throw new Error("Unsupported R1CS prime field");
+  const nWires = h.u32(), nPubOut = h.u32(), nPubIn = h.u32(), nPrvIn = h.u32();
+  const labelCountBig = h.u64(), nConstraints = h.u32();
+  h.done();
+  if (!nWires || nWires > MAX_WIRES || nConstraints > MAX_CONSTRAINTS || nPubOut + nPubIn + nPrvIn + 1 > nWires || labelCountBig > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error("Invalid R1CS dimensions");
+  if (w.end - w.p !== nWires * 8) throw new Error("Invalid R1CS label map size");
+  const labels = /* @__PURE__ */ new Set();
+  for (let i = 0; i < nWires; i++) {
+    const label = w.u64();
+    if (label >= labelCountBig || labels.has(label) || i === 0 && label !== 0n)
+      throw new Error("Invalid R1CS wire-to-label map");
+    labels.add(label);
+  }
+  w.done();
+  const constraints = [];
+  let totalTerms = 0;
+  for (let i = 0; i < nConstraints; i++) {
+    const A = linear(d, nWires, fieldSize);
+    const B = linear(d, nWires, fieldSize);
+    const C = linear(d, nWires, fieldSize);
+    totalTerms += A.length + B.length + C.length;
+    if (totalTerms > MAX_TERMS) throw new Error("Too many R1CS terms");
+    constraints.push({ A, B, C });
+  }
+  d.done();
+  return {
+    prime: BN128_PRIME,
+    nWires,
+    nPubOut,
+    nPubIn,
+    nPrvIn,
+    nConstraints,
+    constraints,
+    labelCount: Number(labelCountBig)
+  };
+}
+var mod = (n) => (n % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
+function unknownTerms(lc, known) {
+  return lc.filter((t) => !known.has(t.wire));
+}
+function fixedConstant(lc) {
+  return lc.every((t) => t.wire === 0) ? mod(lc.reduce((v, t) => v + t.coeff, 0n)) : null;
+}
+function proveR1CSUniqueness(parsed) {
+  const known = /* @__PURE__ */ new Set([0]);
+  const firstInput = 1 + parsed.nPubOut;
+  const inputEnd = firstInput + parsed.nPubIn + parsed.nPrvIn;
+  for (let j = firstInput; j < inputEnd; j++) known.add(j);
+  const pivots = [];
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < parsed.constraints.length; i++) {
+      const { A, B, C } = parsed.constraints[i];
+      const a = unknownTerms(A, known), b = unknownTerms(B, known), c = unknownTerms(C, known);
+      let candidate = null;
+      if (!a.length && !b.length && c.length === 1) candidate = c[0].wire;
+      else {
+        const ca = fixedConstant(A), cb = fixedConstant(B);
+        if (ca !== null && a.length === 0 && ca !== 0n) {
+          const coeffs = /* @__PURE__ */ new Map();
+          for (const t of b) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) + ca * t.coeff));
+          for (const t of c) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) - t.coeff));
+          const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
+          if (nonzero.length === 1) candidate = nonzero[0][0];
+        } else if (cb !== null && b.length === 0 && cb !== 0n) {
+          const coeffs = /* @__PURE__ */ new Map();
+          for (const t of a) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) + cb * t.coeff));
+          for (const t of c) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) - t.coeff));
+          const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
+          if (nonzero.length === 1) candidate = nonzero[0][0];
+        }
+      }
+      if (candidate !== null && !known.has(candidate)) {
+        known.add(candidate);
+        pivots.push({ constraint: i, wire: candidate });
+        changed = true;
+      }
+    }
+  }
+  const free = Array.from({ length: parsed.nWires }, (_, i) => i).filter((i) => !known.has(i));
+  return { complete: !free.length, pivots, free };
+}
+function scanR1CSBinary(bytes, id = "binary_r1cs") {
+  const t0 = performance.now();
+  try {
+    const parsed = parseR1CSBinary(bytes);
+    const proof = proveR1CSUniqueness(parsed);
+    if (!proof.complete) return {
+      id,
+      domain: "r1cs",
+      verdict: "Unknown",
+      method: "r1cs_constraints_undecided",
+      theorem: "n/a",
+      time_ms: performance.now() - t0,
+      reason: proof.free.length + " unbound wires",
+      source_note: "R1CS parsed; remaining wire uniqueness not established",
+      check: { ok: true, kind: "unknown_skip" }
+    };
+    const certificate = {
+      type: "r1cs_triangular_uniqueness",
+      field: "BN254",
+      n_wires: parsed.nWires,
+      n_constraints: parsed.nConstraints,
+      public_inputs: parsed.nPubIn,
+      private_inputs: parsed.nPrvIn,
+      public_outputs: parsed.nPubOut,
+      pivots: proof.pivots,
+      scope: "At most one full wire assignment for each fixed public AND private input tuple; existence not asserted"
+    };
+    return {
+      id,
+      domain: "r1cs",
+      verdict: "Certified",
+      witness_count: "\u22641",
+      method: "r1cs_triangular_uniqueness",
+      theorem: "nonzero constant pivots determine all non-input wires",
+      time_ms: performance.now() - t0,
+      certificate,
+      source_note: certificate.scope,
+      check: { ok: true, kind: "r1cs_triangular_uniqueness" }
+    };
+  } catch (err) {
+    return {
+      id,
+      domain: "r1cs",
+      verdict: "Unknown",
+      method: "r1cs_parse_rejected",
+      theorem: "n/a",
+      time_ms: performance.now() - t0,
+      reason: err instanceof Error ? err.message : String(err),
+      source_note: "Binary R1CS format rejected",
+      check: { ok: true, kind: "unknown_skip" }
+    };
+  }
+}
+
 // src/cli.ts
 function usage() {
   console.log(`\u1455. \u2014 exact arithmetic circuit verification by state contraction
@@ -1213,18 +1433,20 @@ function usage() {
 Usage:
   speedrunpapi scan <file> [--json] [--sarif out.sarif] [--api <url>] [--key <key>]
   speedrunpapi classify <file>
-  speedrunpapi verify <result.json>
+  speedrunpapi verify <result.json> [--source circuit.r1cs]
   speedrunpapi claim <order> <confirmation> <email>
   speedrunpapi usage [--key <key>]
   speedrunpapi version
 
-File types: .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
+File types: .r1cs (binary) | .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
 Compute is local. Optional source-bound API signature uses one certificate credit.
 `);
 }
 function scanAny(file) {
   const abs = path2.resolve(file);
   const id = path2.basename(file).replace(/\.[^.]+$/, "");
+  if (path2.extname(file).toLowerCase() === ".r1cs")
+    return scanR1CSBinary(new Uint8Array(fs2.readFileSync(abs)), id);
   if (path2.extname(file).toLowerCase() === ".circom")
     return scanCircomFile(abs, { followIncludes: true });
   return scanPasted(fs2.readFileSync(abs, "utf8"), { id, filename: file });
@@ -1232,14 +1454,17 @@ function scanAny(file) {
 function classifyAny(file) {
   const abs = path2.resolve(file);
   const id = path2.basename(file).replace(/\.[^.]+$/, "");
+  if (path2.extname(file).toLowerCase() === ".r1cs")
+    return scanR1CSBinary(new Uint8Array(fs2.readFileSync(abs)), id);
   if (path2.extname(file).toLowerCase() === ".circom")
     return classifyCircomFile(abs, { followIncludes: true });
   return classifySource(fs2.readFileSync(abs, "utf8"), { id, filename: file });
 }
 async function maybeRegister(api, key, result, file) {
-  const source = fs2.readFileSync(path2.resolve(file), "utf8");
+  const bytes = fs2.readFileSync(path2.resolve(file));
+  const binary = path2.extname(file).toLowerCase() === ".r1cs";
   const body = {
-    source,
+    ...binary ? { source_base64: bytes.toString("base64"), format: "r1cs" } : { source: bytes.toString("utf8") },
     filename: path2.basename(file),
     result: result.verdict,
     family: result.certificate?.family || result.method || "unknown",
@@ -1280,7 +1505,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.1");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.2");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -1315,8 +1540,21 @@ async function main() {
     const arr = Array.isArray(results) ? results : [results];
     let bad = 0;
     for (const x of arr) {
-      const c = checkResult(x);
-      console.log(`${c.ok ? "PASS" : "FAIL"} ${x.id} ${x.verdict}`);
+      let c = checkResult(x);
+      if (x.method === "r1cs_triangular_uniqueness") {
+        const sourceIdx = args.indexOf("--source");
+        const sourcePath = sourceIdx >= 0 ? args[sourceIdx + 1] : void 0;
+        if (sourcePath && path2.extname(sourcePath).toLowerCase() === ".r1cs") {
+          const bytes = fs2.readFileSync(path2.resolve(sourcePath));
+          const hash = "sha256:" + createHash("sha256").update(bytes).digest("hex");
+          const fresh = scanR1CSBinary(new Uint8Array(bytes), x.id);
+          c = {
+            ok: x.source_checksum === hash && fresh.verdict === "Certified" && fresh.method === x.method && x.witness_count === "\u22641" && JSON.stringify(fresh.certificate) === JSON.stringify(x.certificate),
+            kind: "r1cs_source_recheck"
+          };
+        }
+      }
+      console.log(`${c.ok ? "PASS" : "FAIL"} ${x.id} ${x.verdict} ${c.kind}`);
       if (!c.ok) bad++;
     }
     process.exit(bad ? 1 : 0);

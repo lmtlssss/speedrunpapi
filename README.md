@@ -31,7 +31,7 @@ node speedrunpapi.mjs scan circuit.circom --json
 Python 3.9+ and Node.js 20+:
 
 ```sh
-pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.1/speedrunpapi-0.3.1-py3-none-any.whl
+pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.2/speedrunpapi-0.3.2-py3-none-any.whl
 speedrunpapi scan circuit.circom --json
 ```
 
@@ -41,7 +41,7 @@ speedrunpapi scan circuit.circom --json
 - `Broken` — a supported pattern admits distinct witnesses; the result includes a counterexample.
 - `Unknown` — the source needs a supported adapter or a complete constraint graph.
 
-Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns, plus bounded `carry-graph-v1` JSON for BitVM, zkVM and normalized R1CS. Raw Bitcoin Script, binary R1CS and native zkVM traces need source frontends and currently return `Unknown`. The exact mathematical graph is the certification scope until the source compiler is bound.
+Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns, plus bounded `carry-graph-v1` JSON for BitVM, zkVM and normalized R1CS. Raw Bitcoin Script and native zkVM traces need source frontends and currently return `Unknown`. Binary `.r1cs` v1 files are parsed directly: complete constant-pivot constraints can certify at most one extension for fixed public and private inputs. Other constraint systems return `Unknown`. Source-bound verification uses `speedrunpapi verify result.json --source circuit.r1cs`. The exact mathematical graph is the certification scope until the source compiler is bound.
 
 The source-bound Circom examples also cover exact AND, Mux1 field arithmetic and a five-bit LessThan constraint: `examples/and.circom`, `examples/mux.circom` and `examples/compare.circom`. The verifier checks the complete recognized constraints and returns `Unknown` for altered or incomplete templates.
 
@@ -51,7 +51,7 @@ Try `speedrunpapi scan examples/compare.circom --json` or `speedrunpapi scan exa
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.3.1
+- uses: lmtlssss/speedrunpapi@v0.3.2
   with:
     file: circuits/main.circom
 ```
@@ -68,7 +68,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.3.1` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.1 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.1); PyPI publication follows trusted-publisher registration.
+`speedrunpapi@0.3.2` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.2 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.2); PyPI publication follows trusted-publisher registration.
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
