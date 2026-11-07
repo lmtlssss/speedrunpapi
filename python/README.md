@@ -2,6 +2,6 @@
 
 The Python package supplies the same bundled ᑕ. analyzer as the npm and browser distributions. It requires Node.js 20 or later on `PATH` and works offline for local scans.
 
-Install the [v0.3.2 wheel](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.2) with `pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.2/speedrunpapi-0.3.2-py3-none-any.whl`, then run `speedrunpapi scan circuit.circom --json` or `speedrunpapi version`. PyPI publication follows the trusted-publisher registration. The package invokes its bundled JavaScript engine; it does not download executable code at run time.
+Install the [v0.4.0 wheel](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.4.0) with `pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.4.0/speedrunpapi-0.4.0-py3-none-any.whl`, then run `speedrunpapi scan circuit.circom --json` or `speedrunpapi version`. PyPI uses the repository's trusted publisher. The package invokes its bundled JavaScript engine; it does not download executable code at run time.
 
-Local scans are free. A paid signed certificate requires a Colony API key. Native BitVM/zkVM source and binary R1CS frontends are on the adapter roadmap; normalized carry graphs work today.
+Local scans are free. A paid signed certificate requires a Colony API key. Native Bitcoin Script assembly/bytecode and RV32IM register traces now have exact scoped adapters. BN254 R1CS v1 also checks coupled full-rank linear constraints. Use `speedrunpapi verify result.json --source input.file` for an independent source recheck. Unsupported code and rank-deficient systems return `Unknown`.

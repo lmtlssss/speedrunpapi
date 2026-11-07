@@ -41,22 +41,24 @@ speedrunpapi scan circuit.circom --json
 - `Broken` — a supported pattern admits distinct witnesses; the result includes a counterexample.
 - `Unknown` — the source needs a supported adapter or a complete constraint graph.
 
-Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns, plus bounded `carry-graph-v1` JSON for BitVM, zkVM and normalized R1CS. Raw Bitcoin Script and native zkVM traces need source frontends and currently return `Unknown`. Binary `.r1cs` v1 files are parsed directly: complete constant-pivot constraints can certify at most one extension for fixed public and private inputs. Other constraint systems return `Unknown`. Source-bound verification uses `speedrunpapi verify result.json --source circuit.r1cs`. The exact mathematical graph is the certification scope until the source compiler is bound.
+Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns; exact bounded `carry-graph-v1` JSON; native Bitcoin Script assembly and bytecode for the listed deterministic opcode subset; and RV32IM arithmetic-register guest traces for zkVM projects. Script certificates state deterministic final-stack behavior for a fixed initial stack. Guest trace certificates validate each supplied RISC-V instruction word and register write. These are scoped execution claims, separate from full BitVM or zkVM proof-system validity. Branches, memory access, signatures and unsupported opcodes return `Unknown`.
+
+Binary snarkjs `.r1cs` v1 accepts triangular constant pivots and new coupled full-column-rank linear subsystems over BN254. Its guarantee is **at most one wire assignment with fixed public and private input values**. Rank-deficient or unrecognized nonlinear systems return `Unknown`. For `.r1cs`, `.bitvm`, `.script` or `.zkvm`, use `speedrunpapi verify result.json --source source.file` to re-run the source parser and exact certificate check. Source bytes and checker scope remain part of every signed result.
 
 The source-bound Circom examples also cover exact AND, Mux1 field arithmetic and a five-bit LessThan constraint: `examples/and.circom`, `examples/mux.circom` and `examples/compare.circom`. The verifier checks the complete recognized constraints and returns `Unknown` for altered or incomplete templates.
 
-Try `speedrunpapi scan examples/compare.circom --json` or `speedrunpapi scan examples/modsum-broken.circom --json`.
+Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan examples/rv32im_arithmetic_trace.zkvm --json` and `speedrunpapi scan examples/coupled_rank.r1cs --json`. The rank-deficient R1CS and forged RV32IM trace examples return `Unknown`. You can also run the original Circom cases: `examples/compare.circom` and `examples/modsum-broken.circom`.
 
 ## GitHub Action
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.3.2
+- uses: lmtlssss/speedrunpapi@v0.4.0
   with:
     file: circuits/main.circom
 ```
 
-The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and uploads the result. Add an optional `api_key` to request a signed certificate. Source is analyzed again by the hosted API before signing.
+The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and uploads the result. Add an optional `api_key` to request a signed certificate. Source is analyzed again by the hosted API before signing. The [paid customer pilot workflow](https://github.com/lmtlssss/speedrunpapi/actions/workflows/customer-pilot.yml) uses a GitHub secret, submits a source-bound test-order certificate, verifies the public signature, and keeps the receipt as an artifact.
 
 To display the scan workflow status in a repository README, save the above steps in `.github/workflows/speedrunpapi.yml`, then add:
 
@@ -68,7 +70,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.3.2` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.3.2/). The matching wheel is also in the [v0.3.2 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.2).
+`speedrunpapi@0.4.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.4.0/). The matching wheel is also in the [v0.4.0 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.4.0).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

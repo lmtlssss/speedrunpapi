@@ -946,8 +946,8 @@ function checkResult(r) {
     return { ok: false, kind: "unrecognized_cex" };
   }
   if (r.verdict === "Certified") {
-    if (r.method === "r1cs_triangular_uniqueness")
-      return { ok: false, kind: "r1cs_source_recheck_required" };
+    if (r.method === "r1cs_triangular_uniqueness" || r.method === "r1cs_coupled_linear_rank" || r.method === "bitcoin_script_deterministic_subset" || r.method === "rv32im_execution_trace_exact")
+      return { ok: false, kind: "source_recheck_required" };
     if (r.method === "circom_direct_arithmetic") {
       const c = r.certificate;
       const expected = c?.primitive === "and" ? "a*b" : c?.primitive === "mux1" ? "(b-a)*s+a" : null;
@@ -1134,6 +1134,328 @@ function classifyCarryGraph(graph, id = "carry_graph") {
   };
 }
 
+// ../carrycert-core/src/adapters/native-bitvm.ts
+var effects = {
+  OP_0: [0, 1],
+  OP_1NEGATE: [0, 1],
+  OP_1: [0, 1],
+  OP_2: [0, 1],
+  OP_3: [0, 1],
+  OP_4: [0, 1],
+  OP_5: [0, 1],
+  OP_6: [0, 1],
+  OP_7: [0, 1],
+  OP_8: [0, 1],
+  OP_9: [0, 1],
+  OP_10: [0, 1],
+  OP_11: [0, 1],
+  OP_12: [0, 1],
+  OP_13: [0, 1],
+  OP_14: [0, 1],
+  OP_15: [0, 1],
+  OP_16: [0, 1],
+  OP_VERIFY: [1, 0],
+  OP_DUP: [1, 2],
+  OP_2DUP: [2, 4],
+  OP_DROP: [1, 0],
+  OP_SWAP: [2, 2],
+  OP_OVER: [2, 3],
+  OP_ROT: [3, 3],
+  OP_ADD: [2, 1],
+  OP_SUB: [2, 1],
+  OP_1ADD: [1, 1],
+  OP_1SUB: [1, 1],
+  OP_EQUAL: [2, 1],
+  OP_EQUALVERIFY: [2, 0],
+  OP_BOOLAND: [2, 1],
+  OP_BOOLOR: [2, 1],
+  OP_NUMEQUAL: [2, 1],
+  OP_NUMEQUALVERIFY: [2, 0],
+  OP_NOT: [1, 1],
+  OP_0NOTEQUAL: [1, 1],
+  OP_LESSTHAN: [2, 1],
+  OP_GREATERTHAN: [2, 1],
+  OP_MIN: [2, 1],
+  OP_MAX: [2, 1],
+  OP_WITHIN: [3, 1]
+};
+var opcodes = new Map([
+  [0, "OP_0"],
+  [79, "OP_1NEGATE"],
+  ...Array.from({ length: 16 }, (_, i) => [81 + i, "OP_" + (i + 1)]),
+  [105, "OP_VERIFY"],
+  [118, "OP_DUP"],
+  [110, "OP_2DUP"],
+  [117, "OP_DROP"],
+  [124, "OP_SWAP"],
+  [120, "OP_OVER"],
+  [123, "OP_ROT"],
+  [147, "OP_ADD"],
+  [148, "OP_SUB"],
+  [139, "OP_1ADD"],
+  [140, "OP_1SUB"],
+  [135, "OP_EQUAL"],
+  [136, "OP_EQUALVERIFY"],
+  [154, "OP_BOOLAND"],
+  [155, "OP_BOOLOR"],
+  [156, "OP_NUMEQUAL"],
+  [157, "OP_NUMEQUALVERIFY"],
+  [145, "OP_NOT"],
+  [146, "OP_0NOTEQUAL"],
+  [159, "OP_LESSTHAN"],
+  [160, "OP_GREATERTHAN"],
+  [163, "OP_MIN"],
+  [164, "OP_MAX"],
+  [165, "OP_WITHIN"]
+]);
+function parseAsm(source) {
+  const withoutComments = source.replace(/#.*$/gm, "").trim();
+  const tokens = withoutComments.split(/\s+/).filter(Boolean);
+  if (!tokens.length || tokens.length > 4096) throw Error("Script opcode count out of range");
+  return tokens.map((token) => {
+    const effect = effects[token];
+    if (!effect) throw Error("Opcode outside deterministic subset: " + token.slice(0, 48));
+    return { name: token, need: effect[0], give: effect[1] };
+  });
+}
+function parseHex(source) {
+  const hex = source.trim().replace(/^0x/i, "");
+  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex) || hex.length > 2e4)
+    throw Error("Invalid Bitcoin Script hex");
+  const bytes = Uint8Array.from(hex.match(/../g), (h) => Number.parseInt(h, 16));
+  const ops = [];
+  let p = 0;
+  while (p < bytes.length) {
+    const code = bytes[p++];
+    let len;
+    if (code >= 1 && code <= 75) len = code;
+    else if (code === 76) {
+      if (p >= bytes.length) throw Error("Truncated OP_PUSHDATA1");
+      len = bytes[p++];
+    } else if (code === 77) {
+      if (p + 2 > bytes.length) throw Error("Truncated OP_PUSHDATA2");
+      len = bytes[p] + 256 * bytes[p + 1];
+      p += 2;
+    }
+    if (len !== void 0) {
+      if (len > 520 || p + len > bytes.length) throw Error("Invalid Script data push");
+      p += len;
+      ops.push({ name: "PUSH", need: 0, give: 1 });
+    } else {
+      const name = opcodes.get(code);
+      if (!name) throw Error("Unsupported Script opcode 0x" + code.toString(16));
+      const effect = effects[name];
+      ops.push({ name, need: effect[0], give: effect[1] });
+    }
+    if (ops.length > 4096) throw Error("Script opcode count out of range");
+  }
+  return ops;
+}
+function scanNativeBitvm(source, id = "script") {
+  const t0 = performance.now();
+  try {
+    if (source.length > 128 * 1024) throw Error("Script source exceeds 128 KiB");
+    const hex = /^(?:0x)?(?:[0-9a-f]{2})+$/i.test(source.trim());
+    const program = hex ? parseHex(source) : parseAsm(source);
+    let required = 0, depth = 0, peak = 0;
+    const histogram = {};
+    for (const op of program) {
+      if (depth < op.need) {
+        required += op.need - depth;
+        depth = op.need;
+      }
+      depth += op.give - op.need;
+      peak = Math.max(peak, depth);
+      histogram[op.name] = (histogram[op.name] || 0) + 1;
+    }
+    const certificate = {
+      type: "bitcoin_script_deterministic_subset",
+      source_form: hex ? "bytecode" : "assembly",
+      operations: program.length,
+      minimum_initial_items: required,
+      final_stack_items_for_minimum_input: depth,
+      extra_stack_peak: peak,
+      opcodes: histogram,
+      scope: "At most one final stack for a fixed initial stack on successful execution of this supported Bitcoin Script subset. Script validity, runtime limits, BitVM dispute proof validity and existence are separate."
+    };
+    return {
+      id,
+      domain: "bitvm",
+      verdict: "Certified",
+      witness_count: "\u22641",
+      method: "bitcoin_script_deterministic_subset",
+      theorem: "Every supported opcode is a deterministic partial stack function; composition remains deterministic",
+      time_ms: performance.now() - t0,
+      certificate,
+      check: { ok: true, kind: "bitcoin_script_source_parsed" },
+      source_note: certificate.scope
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      id,
+      domain: "bitvm",
+      verdict: "Unknown",
+      method: "bitcoin_script_opcode_unsupported",
+      theorem: "n/a",
+      reason,
+      time_ms: performance.now() - t0,
+      check: { ok: true, kind: "unknown_skip" },
+      source_note: "Script not fully parsed; source undecided"
+    };
+  }
+}
+
+// ../carrycert-core/src/adapters/native-zkvm.ts
+var u32 = (x) => x >>> 0;
+var signed = (x) => x | 0;
+var signExtend = (value, bits) => value & 1 << bits - 1 ? value - (1 << bits) : value;
+function uint(value) {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295;
+}
+function instruction(word, pc, regs) {
+  const opcode = word & 127, rd = word >>> 7 & 31, f3 = word >>> 12 & 7;
+  const rs1 = word >>> 15 & 31, rs2 = word >>> 20 & 31, f7 = word >>> 25;
+  const a = regs[rs1], b = regs[rs2];
+  let value, name;
+  if (opcode === 51) {
+    if (f7 === 0 && f3 === 0) {
+      name = "ADD";
+      value = u32(a + b);
+    } else if (f7 === 32 && f3 === 0) {
+      name = "SUB";
+      value = u32(a - b);
+    } else if (f7 === 0 && f3 === 1) {
+      name = "SLL";
+      value = u32(a << (b & 31));
+    } else if (f7 === 0 && f3 === 2) {
+      name = "SLT";
+      value = Number(signed(a) < signed(b));
+    } else if (f7 === 0 && f3 === 3) {
+      name = "SLTU";
+      value = Number(a < b);
+    } else if (f7 === 0 && f3 === 4) {
+      name = "XOR";
+      value = u32(a ^ b);
+    } else if (f7 === 0 && f3 === 5) {
+      name = "SRL";
+      value = a >>> (b & 31);
+    } else if (f7 === 32 && f3 === 5) {
+      name = "SRA";
+      value = u32(signed(a) >> (b & 31));
+    } else if (f7 === 0 && f3 === 6) {
+      name = "OR";
+      value = u32(a | b);
+    } else if (f7 === 0 && f3 === 7) {
+      name = "AND";
+      value = u32(a & b);
+    } else if (f7 === 1 && f3 === 0) {
+      name = "MUL";
+      value = u32(Math.imul(a, b));
+    } else throw Error("Unsupported RV32IM register opcode");
+  } else if (opcode === 19) {
+    const imm = signExtend(word >>> 20, 12);
+    if (f3 === 0) {
+      name = "ADDI";
+      value = u32(a + imm);
+    } else if (f3 === 2) {
+      name = "SLTI";
+      value = Number(signed(a) < imm);
+    } else if (f3 === 3) {
+      name = "SLTIU";
+      value = Number(a < u32(imm));
+    } else if (f3 === 4) {
+      name = "XORI";
+      value = u32(a ^ imm);
+    } else if (f3 === 6) {
+      name = "ORI";
+      value = u32(a | imm);
+    } else if (f3 === 7) {
+      name = "ANDI";
+      value = u32(a & imm);
+    } else if (f3 === 1 && word >>> 25 === 0) {
+      name = "SLLI";
+      value = u32(a << (word >>> 20 & 31));
+    } else if (f3 === 5 && word >>> 25 === 0) {
+      name = "SRLI";
+      value = a >>> (word >>> 20 & 31);
+    } else if (f3 === 5 && word >>> 25 === 32) {
+      name = "SRAI";
+      value = u32(signed(a) >> (word >>> 20 & 31));
+    } else throw Error("Unsupported RV32IM immediate opcode");
+  } else if (opcode === 55) {
+    name = "LUI";
+    value = u32(word & 4294963200);
+  } else if (opcode === 23) {
+    name = "AUIPC";
+    value = u32(pc + (word & 4294963200));
+  } else throw Error("Unsupported RV32IM control, memory or system opcode");
+  return { rd, value: rd === 0 ? 0 : value, name };
+}
+function scanNativeZkvm(source, id = "zkvm_trace") {
+  const t0 = performance.now();
+  try {
+    if (source.length > 128 * 1024) throw Error("Trace exceeds 128 KiB");
+    const trace = JSON.parse(source);
+    if (trace?.format !== "rv32im-trace-v1" || Object.keys(trace).sort().join(",") !== "format,initial_pc,initial_registers,steps")
+      throw Error("Unsupported zkVM trace schema");
+    if (!uint(trace.initial_pc) || trace.initial_pc % 4 !== 0 || !Array.isArray(trace.initial_registers) || trace.initial_registers.length !== 32 || !trace.initial_registers.every(uint) || trace.initial_registers[0] !== 0 || !Array.isArray(trace.steps) || trace.steps.length < 1 || trace.steps.length > 4096)
+      throw Error("Invalid RV32IM initial state or step bound");
+    const regs = [...trace.initial_registers];
+    let pc = trace.initial_pc;
+    const histogram = {};
+    const written = /* @__PURE__ */ new Set();
+    for (let i = 0; i < trace.steps.length; i++) {
+      const step = trace.steps[i];
+      if (!step || typeof step !== "object" || Array.isArray(step) || Object.keys(step).sort().join(",") !== "instruction,pc,rd,value" || step.pc !== pc || !uint(step.rd) || step.rd > 31 || !uint(step.value) || typeof step.instruction !== "string" || !/^0x[0-9a-f]{8}$/i.test(step.instruction))
+        throw Error("Invalid trace record at step " + i);
+      const decoded = instruction(Number.parseInt(step.instruction.slice(2), 16), pc, regs);
+      if (step.rd !== decoded.rd || step.value !== decoded.value)
+        throw Error("Wrong register transition at step " + i);
+      regs[decoded.rd] = decoded.value;
+      regs[0] = 0;
+      written.add(decoded.rd);
+      histogram[decoded.name] = (histogram[decoded.name] || 0) + 1;
+      pc = u32(pc + 4);
+    }
+    const certificate = {
+      type: "rv32im_straight_line_trace",
+      steps: trace.steps.length,
+      initial_pc: trace.initial_pc,
+      final_pc: pc,
+      registers_written: written.size,
+      operations: histogram,
+      final_registers: regs,
+      scope: "Every recorded RV32IM arithmetic/register transition matches its instruction word and initial register state. Fixed-state straight-line execution has one trace. Memory, control flow, external input, zkVM commitments, and proof-system validity are not evaluated."
+    };
+    return {
+      id,
+      domain: "zkvm",
+      verdict: "Certified",
+      witness_count: "\u22641",
+      method: "rv32im_execution_trace_exact",
+      theorem: "Decoded deterministic register transitions match every source-bound step",
+      time_ms: performance.now() - t0,
+      certificate,
+      source_note: certificate.scope,
+      check: { ok: true, kind: "rv32im_trace_checked" }
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    return {
+      id,
+      domain: "zkvm",
+      verdict: "Unknown",
+      method: "rv32im_trace_rejected",
+      theorem: "n/a",
+      reason,
+      time_ms: performance.now() - t0,
+      check: { ok: true, kind: "unknown_skip" },
+      source_note: "Trace rejected or outside the supported RV32IM subset"
+    };
+  }
+}
+
 // ../carrycert-core/src/scan.ts
 function unknown(id, domain, detail) {
   return {
@@ -1186,7 +1508,15 @@ function classifySource(text, options = {}) {
   return unknown(id, "pasted", "No recognized source adapter");
 }
 function scanPasted(source, options = {}) {
-  const ir = classifySource(String(source || ""), options);
+  const input = String(source || "");
+  const ext = options.format || options.filename?.toLowerCase().split(".").pop();
+  const id = options.id || options.filename?.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || "pasted";
+  const trimmed = input.trimStart();
+  if (/"format"\s*:\s*"rv32im-trace-v1"/.test(trimmed))
+    return scanNativeZkvm(input, id);
+  if (!trimmed.startsWith("{") && (ext === "bitvm" || ext === "script" || /^\s*(?:OP_[A-Z0-9_]+|0x[0-9a-f]{2,})\b/i.test(input)))
+    return scanNativeBitvm(input, id);
+  const ir = classifySource(input, options);
   const result = analyze(ir);
   if (result.method === "arx_sha256_binsum_bitpath" && !options.trusted_sha256) {
     return {
@@ -1206,6 +1536,75 @@ function scanPasted(source, options = {}) {
     source_note: ir.notes || null,
     check: checkResult(result)
   };
+}
+
+// ../carrycert-core/src/adapters/r1cs-rank.ts
+var mod = (v) => (v % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
+function pow(v, e) {
+  let a = mod(v), out = 1n;
+  while (e > 0n) {
+    if (e & 1n) out = mod(out * a);
+    a = mod(a * a);
+    e >>= 1n;
+  }
+  return out;
+}
+function constant(terms) {
+  return terms.every((t) => t.wire === 0) ? mod(terms.reduce((s, t) => s + t.coeff, 0n)) : null;
+}
+function rowOf(c, known, constraint) {
+  const remaining = (terms2) => terms2.filter((t) => !known.has(t.wire));
+  const a = remaining(c.A), b = remaining(c.B), d = remaining(c.C);
+  const ca = constant(c.A), cb = constant(c.B);
+  let terms = null;
+  if (a.length === 0 && b.length === 0) terms = [[d, -1n]];
+  else if (ca !== null) terms = [[b, ca], [d, -1n]];
+  else if (cb !== null) terms = [[a, cb], [d, -1n]];
+  if (!terms) return null;
+  const coeff = /* @__PURE__ */ new Map();
+  for (const [part, factor] of terms)
+    for (const t of part) coeff.set(t.wire, mod((coeff.get(t.wire) || 0n) + factor * t.coeff));
+  for (const [wire, value] of coeff) if (value === 0n) coeff.delete(wire);
+  return coeff.size ? { constraint, coeff } : null;
+}
+function proveR1CSCoupledRank(parsed, triangular) {
+  const known = /* @__PURE__ */ new Set([0]);
+  const inputStart = 1 + parsed.nPubOut;
+  for (let i = inputStart; i < inputStart + parsed.nPubIn + parsed.nPrvIn; i++) known.add(i);
+  for (const pivot of triangular) known.add(pivot.wire);
+  const unknown2 = parsed.nWires - known.size;
+  if (unknown2 === 0) return { complete: true, rank: 0, unknown: unknown2, linearRows: 0, pivots: [] };
+  if (unknown2 > 256) return { complete: false, rank: 0, unknown: unknown2, linearRows: 0, pivots: [], limit: "256 remaining wires" };
+  const basis = /* @__PURE__ */ new Map();
+  const pivots = [];
+  let linearRows = 0, work = 0;
+  for (let i = 0; i < parsed.constraints.length; i++) {
+    const original = rowOf(parsed.constraints[i], known, i);
+    if (!original) continue;
+    linearRows++;
+    if (linearRows > 8192) return { complete: false, rank: basis.size, unknown: unknown2, linearRows, pivots, limit: "8192 linear rows" };
+    const coeff = original.coeff;
+    while (coeff.size) {
+      if (++work > 25e4) return { complete: false, rank: basis.size, unknown: unknown2, linearRows, pivots, limit: "250000 elimination steps" };
+      const lead = Math.min(...coeff.keys());
+      const existing = basis.get(lead);
+      if (!existing) {
+        const inverse = pow(coeff.get(lead), BN128_PRIME - 2n);
+        for (const [wire, val] of coeff) coeff.set(wire, mod(val * inverse));
+        basis.set(lead, coeff);
+        pivots.push({ constraint: i, wire: lead });
+        break;
+      }
+      const scale = coeff.get(lead);
+      for (const [wire, val] of existing) {
+        const next = mod((coeff.get(wire) || 0n) - scale * val);
+        if (next === 0n) coeff.delete(wire);
+        else coeff.set(wire, next);
+      }
+    }
+    if (basis.size === unknown2) break;
+  }
+  return { complete: basis.size === unknown2, rank: basis.size, unknown: unknown2, linearRows, pivots };
 }
 
 // ../carrycert-core/src/adapters/r1cs-binary.ts
@@ -1325,12 +1724,12 @@ function parseR1CSBinary(bytes) {
     labelCount: Number(labelCountBig)
   };
 }
-var mod = (n) => (n % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
+var mod2 = (n) => (n % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
 function unknownTerms(lc, known) {
   return lc.filter((t) => !known.has(t.wire));
 }
 function fixedConstant(lc) {
-  return lc.every((t) => t.wire === 0) ? mod(lc.reduce((v, t) => v + t.coeff, 0n)) : null;
+  return lc.every((t) => t.wire === 0) ? mod2(lc.reduce((v, t) => v + t.coeff, 0n)) : null;
 }
 function proveR1CSUniqueness(parsed) {
   const known = /* @__PURE__ */ new Set([0]);
@@ -1350,14 +1749,14 @@ function proveR1CSUniqueness(parsed) {
         const ca = fixedConstant(A), cb = fixedConstant(B);
         if (ca !== null && a.length === 0 && ca !== 0n) {
           const coeffs = /* @__PURE__ */ new Map();
-          for (const t of b) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) + ca * t.coeff));
-          for (const t of c) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) - t.coeff));
+          for (const t of b) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) + ca * t.coeff));
+          for (const t of c) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) - t.coeff));
           const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
           if (nonzero.length === 1) candidate = nonzero[0][0];
         } else if (cb !== null && b.length === 0 && cb !== 0n) {
           const coeffs = /* @__PURE__ */ new Map();
-          for (const t of a) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) + cb * t.coeff));
-          for (const t of c) coeffs.set(t.wire, mod((coeffs.get(t.wire) || 0n) - t.coeff));
+          for (const t of a) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) + cb * t.coeff));
+          for (const t of c) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) - t.coeff));
           const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
           if (nonzero.length === 1) candidate = nonzero[0][0];
         }
@@ -1377,19 +1776,21 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
   try {
     const parsed = parseR1CSBinary(bytes);
     const proof = proveR1CSUniqueness(parsed);
-    if (!proof.complete) return {
+    const coupled = proof.complete ? null : proveR1CSCoupledRank(parsed, proof.pivots);
+    if (!proof.complete && !coupled?.complete) return {
       id,
       domain: "r1cs",
       verdict: "Unknown",
       method: "r1cs_constraints_undecided",
       theorem: "n/a",
       time_ms: performance.now() - t0,
-      reason: proof.free.length + " unbound wires",
+      reason: proof.free.length + " unbound wires after triangular proof; linear rank " + (coupled?.rank ?? 0) + "/" + (coupled?.unknown ?? proof.free.length) + (coupled?.limit ? "; limit " + coupled.limit : ""),
       source_note: "R1CS parsed; remaining wire uniqueness not established",
       check: { ok: true, kind: "unknown_skip" }
     };
+    const rankMode = !proof.complete;
     const certificate = {
-      type: "r1cs_triangular_uniqueness",
+      type: rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness",
       field: "BN254",
       n_wires: parsed.nWires,
       n_constraints: parsed.nConstraints,
@@ -1397,19 +1798,26 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
       private_inputs: parsed.nPrvIn,
       public_outputs: parsed.nPubOut,
       pivots: proof.pivots,
+      ...rankMode ? {
+        linear_rows: coupled.linearRows,
+        remaining_unknown: coupled.unknown,
+        matrix_rank: coupled.rank,
+        rank_pivots: coupled.pivots
+      } : {},
       scope: "At most one full wire assignment for each fixed public AND private input tuple; existence not asserted"
     };
+    const method = rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness";
     return {
       id,
       domain: "r1cs",
       verdict: "Certified",
       witness_count: "\u22641",
-      method: "r1cs_triangular_uniqueness",
-      theorem: "nonzero constant pivots determine all non-input wires",
+      method,
+      theorem: rankMode ? "full-column-rank linear subsystem determines coupled wires over BN254" : "nonzero constant pivots determine all non-input wires",
       time_ms: performance.now() - t0,
       certificate,
       source_note: certificate.scope,
-      check: { ok: true, kind: "r1cs_triangular_uniqueness" }
+      check: { ok: true, kind: method }
     };
   } catch (err) {
     return {
@@ -1458,6 +1866,8 @@ function classifyAny(file) {
     return scanR1CSBinary(new Uint8Array(fs2.readFileSync(abs)), id);
   if (path2.extname(file).toLowerCase() === ".circom")
     return classifyCircomFile(abs, { followIncludes: true });
+  if ([".bitvm", ".script", ".zkvm"].includes(path2.extname(file).toLowerCase()))
+    return scanPasted(fs2.readFileSync(abs, "utf8"), { id, filename: file });
   return classifySource(fs2.readFileSync(abs, "utf8"), { id, filename: file });
 }
 async function maybeRegister(api, key, result, file) {
@@ -1505,7 +1915,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.3.2");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.4.0");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -1541,16 +1951,22 @@ async function main() {
     let bad = 0;
     for (const x of arr) {
       let c = checkResult(x);
-      if (x.method === "r1cs_triangular_uniqueness") {
+      if ([
+        "r1cs_triangular_uniqueness",
+        "r1cs_coupled_linear_rank",
+        "bitcoin_script_deterministic_subset",
+        "rv32im_execution_trace_exact"
+      ].includes(x.method)) {
         const sourceIdx = args.indexOf("--source");
         const sourcePath = sourceIdx >= 0 ? args[sourceIdx + 1] : void 0;
-        if (sourcePath && path2.extname(sourcePath).toLowerCase() === ".r1cs") {
+        if (sourcePath) {
           const bytes = fs2.readFileSync(path2.resolve(sourcePath));
           const hash = "sha256:" + createHash("sha256").update(bytes).digest("hex");
-          const fresh = scanR1CSBinary(new Uint8Array(bytes), x.id);
+          const binary = path2.extname(sourcePath).toLowerCase() === ".r1cs";
+          const fresh = binary ? scanR1CSBinary(new Uint8Array(bytes), x.id) : scanPasted(bytes.toString("utf8"), { id: x.id, filename: sourcePath });
           c = {
             ok: x.source_checksum === hash && fresh.verdict === "Certified" && fresh.method === x.method && x.witness_count === "\u22641" && JSON.stringify(fresh.certificate) === JSON.stringify(x.certificate),
-            kind: "r1cs_source_recheck"
+            kind: "exact_source_recheck"
           };
         }
       }

@@ -29,6 +29,28 @@ jobs:
           test "$status" -eq 3
           node -e 'let r=require("/tmp/free-r1cs.json");if(r.verdict!=="Unknown")process.exit(1)'
 
+      - name: Native Script, zkVM trace and coupled R1CS source verification
+        run: |
+          set -euo pipefail
+          node bin/speedrunpapi.mjs scan examples/native_add.bitvm --json > /tmp/native-script.json
+          node bin/speedrunpapi.mjs verify /tmp/native-script.json --source examples/native_add.bitvm
+          node bin/speedrunpapi.mjs scan examples/native_add_hex.script --json > /tmp/native-bytecode.json
+          node bin/speedrunpapi.mjs verify /tmp/native-bytecode.json --source examples/native_add_hex.script
+          node bin/speedrunpapi.mjs scan examples/rv32im_arithmetic_trace.zkvm --json > /tmp/native-zkvm.json
+          node bin/speedrunpapi.mjs verify /tmp/native-zkvm.json --source examples/rv32im_arithmetic_trace.zkvm
+          node bin/speedrunpapi.mjs scan examples/coupled_rank.r1cs --json > /tmp/native-r1cs.json
+          node bin/speedrunpapi.mjs verify /tmp/native-r1cs.json --source examples/coupled_rank.r1cs
+          set +e
+          node bin/speedrunpapi.mjs scan examples/rv32im_corrupt_trace.zkvm --json > /tmp/invalid-zkvm.json
+          zkvm_status=$?
+          node bin/speedrunpapi.mjs scan examples/coupled_rank_deficient.r1cs --json > /tmp/invalid-r1cs.json
+          rank_status=$?
+          set -e
+          test "$zkvm_status" -eq 3
+          test "$rank_status" -eq 3
+          jq -e '.verdict == "Unknown"' /tmp/invalid-zkvm.json
+          jq -e '.verdict == "Unknown"' /tmp/invalid-r1cs.json
+
       - name: Test reusable ᑕ. Action
         uses: ./
         with:
