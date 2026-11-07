@@ -4,7 +4,7 @@
 
 Paste source, press ᑕ., get a scoped verdict. Local scanning runs on your machine, without an account or API key.
 
-The headline demo uses the pinned Circomlib **SHA-256 compression** source. The recorded Picus run reached its 180-second timeout; the live ᑕ. browser analyzer returns a scoped compositional result in microseconds. The 21 controlled G1 comparisons, source and timings are linked from [proofs](https://colony.technology/proofs). The recorded Picus result is identified as recorded.
+The SHA-256 compression race runs both analyzers live: ᑕ. returns its scoped compositional certificate in microseconds while Picus runs through its 180-second solver budget. The 21 controlled G1 comparisons, source and timings are linked from [proofs](https://colony.technology/proofs).
 
 ## Install
 
@@ -31,7 +31,7 @@ node speedrunpapi.mjs scan circuit.circom --json
 Python 3.9+ and Node.js 20+:
 
 ```sh
-pip install speedrunpapi
+pip install https://github.com/lmtlssss/speedrunpapi/releases/download/v0.3.0/speedrunpapi-0.3.0-py3-none-any.whl
 speedrunpapi scan circuit.circom --json
 ```
 
@@ -59,14 +59,14 @@ The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and 
 To display the scan workflow status in a repository README, save the above steps in `.github/workflows/speedrunpapi.yml`, then add:
 
 ```markdown
-[![ᑕ. scan](https://github.com/OWNER/REPO/actions/workflows/colony.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/colony.yml)
+[![ᑕ. scan](https://github.com/OWNER/REPO/actions/workflows/speedrunpapi.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/speedrunpapi.yml)
 ```
 
 Replace `OWNER/REPO` with that repository. The badge shows the workflow status. An issued, source-bound Certified certificate has its own public registry URL.
 
 ## Packages
 
-`speedrunpapi` on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). Source and artifacts: [v0.3.0 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.0).
+`speedrunpapi@0.3.0` is live on [npm](https://www.npmjs.com/package/speedrunpapi). The Python wheel is in the [v0.3.0 release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.3.0); PyPI publication follows trusted-publisher registration.
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
