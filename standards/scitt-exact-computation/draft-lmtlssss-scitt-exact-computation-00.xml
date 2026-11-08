@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rfc xmlns:xi="http://www.w3.org/2001/XInclude" version="3" ipr="trust200902" docName="draft-lmtlssss-scitt-exact-computation-00" submissionType="IETF" category="info">
+  <front>
+    <title abbrev="Exact Computation SCITT Profile">Exact Computation Claim Profile for SCITT</title>
+    <author fullname="lmtlssss" initials="" surname="lmtlssss">
+      <organization>Independent Research</organization>
+    </author>
+    <date year="2026" month="11" day="8"/>
+    <area>Security</area>
+    <abstract>
+      <t>This document proposes an application profile for statements about exact computational claims. Each statement binds an artifact digest, a claim, its input domain, a verifier version, and evidence. The statement uses SCITT COSE signing and can carry a transparency receipt. A relying party checks the computational evidence separately from the issuer signature and transparency receipt.</t>
+    </abstract>
+  </front>
+  <middle>
+    <section anchor="introduction"><name>Introduction</name>
+      <t>A computational artifact can have different claims about its behavior. These claims can refer to output uniqueness, witness uniqueness, deterministic execution, or a checked counterexample. A signed claim needs an exact scope and an independent verification procedure. The SCITT architecture in <xref target="RFC9943"/> supplies a signed statement and transparency receipt framework.</t>
+      <t>This document proposes a payload profile. It does not define a new mathematics or claim that a signature proves a computation correct.</t>
+    </section>
+    <section anchor="transport"><name>Signed Statement</name>
+      <t>An issuer uses the COSE_Sign1 Signed Statement format in <xref target="RFC9943"/>. The protected header identifies the issuer and subject through COSE header parameter 15, the CWT Claims header defined by <xref target="RFC9597"/>. It also identifies the algorithm, key and payload content type. This initial proposal uses application/cbor for the payload. The payload contains the profile identifier taa.exact-computation-claim.v1.</t>
+      <t>A transparency service can register the statement and return a receipt under <xref target="RFC9942"/>. The receipt attests to registration under that service's policy. It does not attest to mathematical correctness.</t>
+    </section>
+    <section anchor="payload"><name>Claim Payload</name>
+      <t>The initial map uses integer keys. The artifact digest and evidence digest are SHA-256 values over exact byte streams. The verifier digest identifies the precise checker implementation. The claim includes a predicate identifier, domain, observation contract, verdict and assumptions.</t>
+      <sourcecode type="cddl"><![CDATA[
+exact-claim = {
+  1: "taa.exact-computation-claim.v1",
+  2: artifact,
+  3: claim,
+  4: verifier,
+  5: evidence,
+  6: tstr,                  ; issue time, UTC
+  ? 7: tstr                 ; replaces statement
+}
+artifact = {
+  1: "sha-256", 2: bstr .size 32,
+  3: tstr, ? 4: tstr
+}
+claim = {
+  1: tstr, 2: tstr,
+  3: "certified" / "broken" / "unknown",
+  4: tstr, 5: [* tstr]
+}
+verifier = {
+  1: tstr, 2: tstr,
+  3: "sha-256", 4: bstr .size 32
+}
+evidence = {
+  1: "sha-256", 2: bstr .size 32,
+  ? 3: tstr, ? 4: tstr
+}
+]]></sourcecode>
+    </section>
+    <section anchor="verdict"><name>Claim Semantics</name>
+      <t>The certified verdict states that the named checker accepted the declared predicate for the declared domain. The broken verdict identifies evidence of a counterexample. The unknown verdict states that the checker established neither. Output uniqueness requires exact output-set preservation. Witness uniqueness additionally requires witness-fiber preservation or exact witness counting.</t>
+    </section>
+    <section anchor="procedure"><name>Relying Party Procedure</name>
+      <ol>
+        <li>Parse the COSE_Sign1 envelope and check the protected headers.</li>
+        <li>Select the issuer trust anchor and verify the COSE signature.</li>
+        <li>Parse the CBOR payload and require the supported profile version.</li>
+        <li>Calculate and compare the digest of the exact artifact bytes.</li>
+        <li>Obtain the specified verifier and compare its digest.</li>
+        <li>Obtain evidence, compare its digest, and execute the independent checker.</li>
+        <li>Compare the checker outcome with the declared claim and local trust policy.</li>
+        <li>Validate SCITT receipts when the local policy requires transparency.</li>
+      </ol>
+    </section>
+    <section anchor="security"><name>Security Considerations</name>
+      <t>Issuer signatures authenticate statements and do not prove their claims. A checker can have an implementation error or omit an assumption. A relying party must bind the exact source bytes, claim, verifier version and evidence. A receipt establishes transparency service registration and does not establish computational correctness. Key compromise, issuer identity, superseded claims, private inputs and evidence availability require explicit local policy.</t>
+    </section>
+    <section anchor="iana"><name>IANA Considerations</name>
+      <t>This initial proposal requests no IANA registrations. It uses the SCITT media types in <xref target="RFC9943"/>.</t>
+    </section>
+  </middle>
+  <back>
+    <references><name>Normative References</name>
+      <reference anchor="RFC9943" target="https://www.rfc-editor.org/rfc/rfc9943">
+        <front><title>An Architecture for Trustworthy and Transparent Digital Supply Chains</title><author fullname="IETF" initials="" surname="IETF"/><date year="2026"/></front>
+        <seriesInfo name="RFC" value="9943"/>
+      </reference>
+      <reference anchor="RFC9942" target="https://www.rfc-editor.org/rfc/rfc9942">
+        <front><title>COSE Receipts</title><author fullname="IETF" initials="" surname="IETF"/><date year="2026"/></front>
+        <seriesInfo name="RFC" value="9942"/>
+      </reference>
+      <reference anchor="RFC9597" target="https://www.rfc-editor.org/rfc/rfc9597">
+        <front><title>CBOR Web Token (CWT) Claims in COSE Headers</title><author fullname="IETF" initials="" surname="IETF"/><date year="2024"/></front>
+        <seriesInfo name="RFC" value="9597"/>
+      </reference>
+    </references>
+  </back>
+</rfc>

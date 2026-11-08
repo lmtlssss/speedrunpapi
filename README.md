@@ -77,3 +77,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 
 This public distribution contains the standalone client and its Action. Colony's private service infrastructure, billing, credentials and internal research remain separate.
+
+## Portable certificate profile
+
+The [Exact Computation Claim Profile for SCITT](standards/scitt-exact-computation/) is a public individual technical proposal for independently checked computational claims in signed COSE statements. It separates the issuer signature, exact evidence check and optional transparency receipt. The [ᑕ. mathematical definition](https://github.com/lmtlssss/math/tree/main/mathematics/discrete-mathematics/exact-state-contraction) is published with a paper and exact rational verifier. The IETF draft source is public; it has not yet been submitted to Datatracker.
