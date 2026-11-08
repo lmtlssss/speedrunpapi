@@ -1,0 +1,1 @@
+{"states":["A","B","C","D"],"inputs":["zero","one"],"pi":[0,0,1,1],"next":[[1,2],[0,3],[3,0],[2,1]],"observations":[[0,1],[0,1],[1,0],[1,0]],"reduced_next":[[0,1],[1,0]],"reduced_observations":[[0,1],[1,0]]}

@@ -66,6 +66,11 @@ evidence = {
         <li>Validate SCITT receipts when the local policy requires transparency.</li>
       </ol>
     </section>
+    <section anchor="interop"><name>Interoperability Vectors and Predicate Registry</name>
+      <t>The reference suite at https://github.com/lmtlssss/speedrunpapi/tree/main/standards/scitt-exact-computation/interop includes deterministic CBOR and COSE_Sign1 test vectors. Signatures follow <xref target="RFC9052"/> and use EdDSA defined for COSE by <xref target="RFC9053"/>. The CBOR encoding follows <xref target="RFC8949"/>. Node and Python signing implementations produce matching signed bytes. Both independently verify signatures, digest binding and registered predicate evidence.</t>
+      <t>The initial registry has four finite-domain predicates. The identifiers are urn:taa:finite-trace-preservation:v1, urn:taa:affine-cost-composition:v1, urn:taa:output-uniqueness:v1, and urn:taa:witness-uniqueness:v1. The first checks exact retained-state transitions and observations over a complete finite table. The second checks affine state and state-dependent quadratic cost composition, including cross-terms and associativity. The last two count distinct outputs and witnesses in finite fibers. The witness-uniqueness vector has a broken verdict and a reproducible counterexample.</t>
+      <t>The test suite uses a published test-only issuer key, with no transparency service receipt. Its negative cases include altered signed bytes and correctly re-signed but mathematically false claims. These vectors exercise independent checking over the stated finite domains; further circuit input types require separate registered checkers.</t>
+    </section>
     <section anchor="security"><name>Security Considerations</name>
       <t>Issuer signatures authenticate statements and do not prove their claims. A checker can have an implementation error or omit an assumption. A relying party must bind the exact source bytes, claim, verifier version and evidence. A receipt establishes transparency service registration and does not establish computational correctness. Key compromise, issuer identity, superseded claims, private inputs and evidence availability require explicit local policy.</t>
     </section>
@@ -75,6 +80,15 @@ evidence = {
   </middle>
   <back>
     <references><name>Normative References</name>
+      <reference anchor="RFC8949" target="https://www.rfc-editor.org/rfc/rfc8949">
+        <front><title>Concise Binary Object Representation (CBOR)</title><author fullname="IETF" initials="" surname="IETF"/><date year="2020"/></front><seriesInfo name="RFC" value="8949"/>
+      </reference>
+      <reference anchor="RFC9052" target="https://www.rfc-editor.org/rfc/rfc9052">
+        <front><title>CBOR Object Signing and Encryption (COSE): Structures and Process</title><author fullname="IETF" initials="" surname="IETF"/><date year="2022"/></front><seriesInfo name="RFC" value="9052"/>
+      </reference>
+      <reference anchor="RFC9053" target="https://www.rfc-editor.org/rfc/rfc9053">
+        <front><title>CBOR Object Signing and Encryption (COSE): Initial Algorithms</title><author fullname="IETF" initials="" surname="IETF"/><date year="2022"/></front><seriesInfo name="RFC" value="9053"/>
+      </reference>
       <reference anchor="RFC9943" target="https://www.rfc-editor.org/rfc/rfc9943">
         <front><title>An Architecture for Trustworthy and Transparent Digital Supply Chains</title><author fullname="IETF" initials="" surname="IETF"/><date year="2026"/></front>
         <seriesInfo name="RFC" value="9943"/>

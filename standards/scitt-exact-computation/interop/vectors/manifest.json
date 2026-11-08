@@ -1,0 +1,47 @@
+{
+  "schema": "taa.scitt-interop.v1",
+  "test_only": true,
+  "issuer": "urn:taa:interop:issuer:test-only",
+  "protected_header": "COSE_Sign1 EdDSA/Ed25519; CWT iss/sub",
+  "signed_statement_media_type": "application/scitt-statement+cose",
+  "receipt_present": false,
+  "public_key_file": "../test-public-key.base64",
+  "vectors": [
+    {
+      "name": "finite-trace",
+      "predicate": "urn:taa:finite-trace-preservation:v1",
+      "verdict": "certified",
+      "cose": "finite-trace.cose",
+      "artifact": "finite-trace.artifact.json",
+      "evidence": "finite-trace.evidence.json",
+      "sha256_cose": "95ebc6e8a9364fd233910a92aa8bdb241d8b93e0373e920e0b87f303b711c621"
+    },
+    {
+      "name": "affine-cost",
+      "predicate": "urn:taa:affine-cost-composition:v1",
+      "verdict": "certified",
+      "cose": "affine-cost.cose",
+      "artifact": "affine-cost.artifact.json",
+      "evidence": "affine-cost.evidence.json",
+      "sha256_cose": "6c6d2a5d9c557a3025628bce6657ea7caeda2e4bc362e8f44195b7f967f57ae5"
+    },
+    {
+      "name": "output-unique",
+      "predicate": "urn:taa:output-uniqueness:v1",
+      "verdict": "certified",
+      "cose": "output-unique.cose",
+      "artifact": "output-unique.artifact.json",
+      "evidence": "output-unique.evidence.json",
+      "sha256_cose": "8ad4b25a926af90a6d8aa5db471d56cb78c789fbe42fbe40c1afdbee63abf7c7"
+    },
+    {
+      "name": "witness-nonunique",
+      "predicate": "urn:taa:witness-uniqueness:v1",
+      "verdict": "broken",
+      "cose": "witness-nonunique.cose",
+      "artifact": "witness-nonunique.artifact.json",
+      "evidence": "witness-nonunique.evidence.json",
+      "sha256_cose": "a7ceb91aff4e0db90587faa5c3f09d4dd1fb7c979abfcb28a956b1d62d2dd38c"
+    }
+  ]
+}

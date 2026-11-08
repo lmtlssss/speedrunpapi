@@ -1,0 +1,13 @@
+{
+  "name": "taa-scitt-interop-vectors",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "vectors": "node generate.mjs",
+    "verify": "node verify.mjs"
+  },
+  "dependencies": {
+    "cbor": "10.0.11"
+  }
+}
