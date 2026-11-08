@@ -65,10 +65,11 @@ Table of Contents
    3.  Claim Payload . . . . . . . . . . . . . . . . . . . . . . . .   2
    4.  Claim Semantics . . . . . . . . . . . . . . . . . . . . . . .   3
    5.  Relying Party Procedure . . . . . . . . . . . . . . . . . . .   3
-   6.  Security Considerations . . . . . . . . . . . . . . . . . . .   4
-   7.  IANA Considerations . . . . . . . . . . . . . . . . . . . . .   4
-   8.  Normative References  . . . . . . . . . . . . . . . . . . . .   4
-   Author's Address  . . . . . . . . . . . . . . . . . . . . . . . .   4
+   6.  Interoperability Vectors and Predicate Registry . . . . . . .   4
+   7.  Security Considerations . . . . . . . . . . . . . . . . . . .   4
+   8.  IANA Considerations . . . . . . . . . . . . . . . . . . . . .   5
+   9.  Normative References  . . . . . . . . . . . . . . . . . . . .   5
+   Author's Address  . . . . . . . . . . . . . . . . . . . . . . . .   5
 
 1.  Introduction
 
@@ -103,7 +104,6 @@ Table of Contents
    digest identifies the precise checker implementation.  The claim
    includes a predicate identifier, domain, observation contract,
    verdict and assumptions.
-
 
 
 
@@ -179,7 +179,36 @@ Internet-Draft       Exact Computation SCITT Profile       November 2026
    8.  Validate SCITT receipts when the local policy requires
        transparency.
 
-6.  Security Considerations
+6.  Interoperability Vectors and Predicate Registry
+
+   The reference suite at
+   https://github.com/lmtlssss/speedrunpapi/tree/main/standards/scitt-
+   exact-computation/interop includes deterministic CBOR and COSE_Sign1
+   test vectors.  Signatures follow [RFC9052] and use EdDSA defined for
+   COSE by [RFC9053].  The CBOR encoding follows [RFC8949].  Node and
+   Python signing implementations produce matching signed bytes.  Both
+   independently verify signatures, digest binding and registered
+   predicate evidence.
+
+   The initial registry has four finite-domain predicates.  The
+   identifiers are urn:taa:finite-trace-preservation:v1, urn:taa:affine-
+   cost-composition:v1, urn:taa:output-uniqueness:v1, and
+   urn:taa:witness-uniqueness:v1.  The first checks exact retained-state
+   transitions and observations over a complete finite table.  The
+   second checks affine state and state-dependent quadratic cost
+   composition, including cross-terms and associativity.  The last two
+   count distinct outputs and witnesses in finite fibers.  The witness-
+   uniqueness vector has a broken verdict and a reproducible
+   counterexample.
+
+   The test suite uses a published test-only issuer key, with no
+   transparency service receipt.  Its negative cases include altered
+   signed bytes and correctly re-signed but mathematically false claims.
+   These vectors exercise independent checking over the stated finite
+   domains; further circuit input types require separate registered
+   checkers.
+
+7.  Security Considerations
 
    Issuer signatures authenticate statements and do not prove their
    claims.  A checker can have an implementation error or omit an
@@ -190,12 +219,30 @@ Internet-Draft       Exact Computation SCITT Profile       November 2026
    private inputs and evidence availability require explicit local
    policy.
 
-7.  IANA Considerations
+
+
+lmtlssss                   Expires 12 May 2027                  [Page 4]
+
+Internet-Draft       Exact Computation SCITT Profile       November 2026
+
+
+8.  IANA Considerations
 
    This initial proposal requests no IANA registrations.  It uses the
    SCITT media types in [RFC9943].
 
-8.  Normative References
+9.  Normative References
+
+   [RFC8949]  IETF, "Concise Binary Object Representation (CBOR)",
+              RFC 8949, 2020, <https://www.rfc-editor.org/rfc/rfc8949>.
+
+   [RFC9052]  IETF, "CBOR Object Signing and Encryption (COSE):
+              Structures and Process", RFC 9052, 2022,
+              <https://www.rfc-editor.org/rfc/rfc9052>.
+
+   [RFC9053]  IETF, "CBOR Object Signing and Encryption (COSE): Initial
+              Algorithms", RFC 9053, 2022,
+              <https://www.rfc-editor.org/rfc/rfc9053>.
 
    [RFC9943]  IETF, "An Architecture for Trustworthy and Transparent
               Digital Supply Chains", RFC 9943, 2026,
@@ -221,4 +268,13 @@ Author's Address
 
 
 
-lmtlssss                   Expires 12 May 2027                  [Page 4]
+
+
+
+
+
+
+
+
+
+lmtlssss                   Expires 12 May 2027                  [Page 5]

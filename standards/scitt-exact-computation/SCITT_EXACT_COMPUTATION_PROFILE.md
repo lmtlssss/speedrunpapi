@@ -82,6 +82,19 @@ Different issuers can use the same payload profile. A verifier must check the na
 
 An implementation that signs a JSON certificate has a separate byte format and signature structure. This profile defines a **SCITT/COSE mapping**. An implementation claims conformance only after its COSE issuer and verifier satisfy this mapping and pass the corresponding interoperability tests.
 
+### Registered finite-domain predicates and test vectors
+
+The [executable COSE/CBOR interoperability suite](interop/) registers four finite-domain predicates:
+
+- `urn:taa:finite-trace-preservation:v1`: checks a surjective retained-state map and both identities over every state/input pair; finite-trace preservation follows.
+- `urn:taa:affine-cost-composition:v1`: checks exact affine and quadratic-cost coefficients, including state-dependent cross-terms, and both associative parenthesizations.
+- `urn:taa:output-uniqueness:v1`: checks exact output-set cardinality for each finite witness fiber.
+- `urn:taa:witness-uniqueness:v1`: checks a reproduced counterexample containing two distinct witnesses.
+
+Node and Python produce byte-identical COSE_Sign1 / deterministic CBOR statements using a published **test-only** Ed25519 key. Both verify the protected issuer signature, source/evidence/checker digests and predicate semantics. The suite rejects altered bytes and correctly re-signed false mathematical evidence. The suite deliberately omits transparency receipts, since a receipt must come from a selected transparency service. The live JSON certificate service remains separate from this profile.
+
+Other predicates require a published domain and independent checker before they join this registry. A verdict asserts exactly the registered predicate and its stated domain.
+
 ## 7. Security and privacy
 
 An issuer key can be compromised. A verifier can contain a bug. A claim can omit a necessary assumption. A revoked key or superseded statement must be resolved through the relying party's trust policy. Do not publish proprietary source in a public evidence field. Use exact digests for each artifact and each verifier version. An external URL is a retrieval hint; the digest is the binding. A receipt proves inclusion in one service's record and does not certify circuit correctness.
