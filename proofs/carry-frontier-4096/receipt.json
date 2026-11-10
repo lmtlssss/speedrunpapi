@@ -1,0 +1,66 @@
+{
+  "cash_bounty_awarded_usd": 0,
+  "customer_compute_hosted_by_colony": false,
+  "elapsed_build_seconds": 0.01264,
+  "evidence_type": "mathematical_source_bound_local",
+  "files": [
+    {
+      "bytes": 1535,
+      "digest": "sha256:3b97fece5e0041cce8e6a1ee7bfcccc44373abd85d65b03de76b10ed682730cf",
+      "name": "SUBMISSION.md"
+    },
+    {
+      "bytes": 2468,
+      "digest": "sha256:0ca40a80b58fde1d3c16ac0ce4b43edb83d8ba5f76a58dad3225c946b125aaca",
+      "name": "artifacts/proof.json"
+    },
+    {
+      "bytes": 100,
+      "digest": "sha256:6b6c517d18cc0c86371eb62ed946a8d7acbc3b1ddde179225e32fc0539f891cd",
+      "name": "source.math"
+    },
+    {
+      "bytes": 433,
+      "digest": "sha256:79ad7f10a192d3621155a6b1c2dac62cfa0bf1eab0afa373370faae8b53cd099",
+      "name": "verifier/README.md"
+    },
+    {
+      "bytes": 9727,
+      "digest": "sha256:b7975c47f0f6537ad642672d7001e26e2847c0a11dc1aafe54055bd070fb4b66",
+      "name": "verifier/independent_verify.py"
+    },
+    {
+      "bytes": 78,
+      "digest": "sha256:f751e32171e99b5877eb057b3ada26a01c1a0cd0b456a9e28f0325c07ef7be56",
+      "name": "verifier/requirements.txt"
+    },
+    {
+      "bytes": 3754,
+      "digest": "sha256:338e754cca333822e7f91106d6bf737d3dd630049a4f63dc4f9428ecb7f3e644",
+      "name": "verifier/verify.py"
+    },
+    {
+      "bytes": 1579,
+      "digest": "sha256:2859da73fd4ea3536751f0674986496d7c6ce6c3c4cf66abbdf3304fac1d3830",
+      "name": "verifier/verify_signature.mjs"
+    }
+  ],
+  "kind": "math",
+  "paid_customer_amount_usd": 0,
+  "result": {
+    "checked_kind": "bounded_mathematical_operator",
+    "claim": "For all low prefixes and all high suffixes, preserve the high (width-cut) result bits of each independent unsigned modular addition; low result bits are excluded.",
+    "independent_verifier": "engine/packages/colony-math/independent_verify.py",
+    "limit": "Only the declared observation relation; no whole-program lowering or hardware speedup claim",
+    "operator": "carry.frontier.v1",
+    "original_digest": "sha256:6b6c517d18cc0c86371eb62ed946a8d7acbc3b1ddde179225e32fc0539f891cd",
+    "proof_digest": "sha256:0ca40a80b58fde1d3c16ac0ce4b43edb83d8ba5f76a58dad3225c946b125aaca",
+    "scope": "For all low prefixes and all high suffixes, preserve the high (width-cut) result bits of each independent unsigned modular addition; low result bits are excluded.",
+    "source_name": "source.math",
+    "target_evidence": "mathematical_only",
+    "verdict": "Certified"
+  },
+  "schema": "colony.operator-packet.v1",
+  "signer_claim": "ephemeral_laboratory_only",
+  "target": null
+}

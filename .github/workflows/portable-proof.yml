@@ -1,0 +1,25 @@
+name: ᑕ. Portable exact proof
+on:
+  push:
+    paths:
+      - 'proofs/carry-frontier-4096/**'
+      - '.github/workflows/portable-proof.yml'
+  pull_request:
+    paths:
+      - 'proofs/carry-frontier-4096/**'
+      - '.github/workflows/portable-proof.yml'
+permissions:
+  contents: read
+jobs:
+  independent-replay:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Reconstruct exact carry contraction and verify Ed25519 LAB receipt
+        run: python3 proofs/carry-frontier-4096/verifier/verify.py

@@ -1,0 +1,99 @@
+{
+  "candidate": {
+    "contract": "For all low prefixes and all high suffixes, preserve the high (width-cut) result bits of each independent unsigned modular addition; low result bits are excluded.",
+    "recovery": "For each offset o and high suffix h: high_bits=(h + (o>>cut) + incoming[o]) mod 2^(width-cut).",
+    "retained_state": {
+      "cut": 12,
+      "original_prefix_count": 4096,
+      "retained_state_count": 6,
+      "states": [
+        {
+          "incoming": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "prefix_count": 1,
+          "representative_low": 0
+        },
+        {
+          "incoming": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          "prefix_count": 1024,
+          "representative_low": 1
+        },
+        {
+          "incoming": [
+            0,
+            0,
+            0,
+            0,
+            1,
+            1
+          ],
+          "prefix_count": 1024,
+          "representative_low": 1025
+        },
+        {
+          "incoming": [
+            0,
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "prefix_count": 1024,
+          "representative_low": 2049
+        },
+        {
+          "incoming": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "prefix_count": 512,
+          "representative_low": 3073
+        },
+        {
+          "incoming": [
+            0,
+            1,
+            1,
+            1,
+            1,
+            1
+          ],
+          "prefix_count": 511,
+          "representative_low": 3585
+        }
+      ],
+      "width": 20
+    },
+    "side_conditions": [
+      "0 <= x < 2^width",
+      "unsigned modular addition",
+      "0 < cut < width",
+      "offsets are fixed width-bit unsigned values"
+    ]
+  },
+  "candidate_digest": "sha256:837f4ef076d79af52e9a677d5906e263a4efdf1c08c53bcaadf1e3e1368518a0",
+  "claim_scope": "For all low prefixes and all high suffixes, preserve the high (width-cut) result bits of each independent unsigned modular addition; low result bits are excluded.",
+  "independent_verifier": "colony.math-independent.v1",
+  "operator": "carry.frontier.v1",
+  "schema": "colony.math-transform.v1",
+  "source_digest": "sha256:6b6c517d18cc0c86371eb62ed946a8d7acbc3b1ddde179225e32fc0539f891cd",
+  "verdict": "Candidate"
+}
