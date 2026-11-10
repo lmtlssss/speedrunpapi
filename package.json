@@ -1,6 +1,6 @@
 {
   "name": "speedrunpapi",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "ᑕ. exact arithmetic circuit verification by state contraction",
   "type": "module",
   "bin": {

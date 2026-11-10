@@ -1,0 +1,51 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:dd189c76f50b86db712785b2de27bc87e1802c4b5674e6f7603739b41cd8814e",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "shared-input.masked-count.v1",
+    "scope": "For width 2..16 and 1..16 shared-input offsets, count all unsigned x satisfying the declared input mask and every masked modular translated sum; return the least witness and bounded ordered carry-frontier accounting.",
+    "candidate": {
+      "width": 9,
+      "offsets": [
+        13,
+        45,
+        93,
+        157,
+        221
+      ],
+      "masks": [
+        15,
+        31,
+        7,
+        3,
+        127
+      ],
+      "targets": [
+        6,
+        22,
+        6,
+        2,
+        102
+      ],
+      "input_mask": 0,
+      "input_target": 0,
+      "count": 4,
+      "witness": 9,
+      "maximum_carry_states": 6,
+      "source_states": 27,
+      "transition_attempts": 54,
+      "accepted_live_edges": 13,
+      "final_state_counts": [
+        3,
+        0,
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "candidate_digest": "sha256:ed8cc3a6b9ddf464b1c6f021c6531f981931c47c65eb0771b529a0d51b05b778"
+  }
+}
