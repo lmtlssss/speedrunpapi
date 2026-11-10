@@ -22078,7 +22078,11 @@ var claims = {
   "carry.frontier.v1": "For every width-bit low prefix and every high suffix, preserve the high results of each unsigned modular addition; low result bits are not observed.",
   "gf2.rank-factor.v1": "For all GF(2) input bitvectors, factor the exact declared binary linear map using a rank-minimal number of intermediate bits.",
   "affine.cost-compose.v1": "For all rational initial states, preserve final affine state and chronological exact affine accumulated cost, including cross terms.",
-  "carry.gf2-projection.v1": "For every low prefix, preserve the declared GF(2) projection of the incoming carry vector; all unprojected arithmetic output bits are outside the observation contract."
+  "carry.gf2-projection.v1": "For every low prefix, preserve the declared GF(2) projection of the incoming carry vector; all unprojected arithmetic output bits are outside the observation contract.",
+  "cyclic.inverse-fibers.v1": "For the given width 4..16, rotation 2..6, mask, constant and target, enumerate every and only preimage of the cyclic Boolean-modular word map.",
+  "two-stage.addition-code.v1": "For each radix 2..20 and supplied operand triple, encode all four incoming-carry responses in one state of the exactly 5B-4 distinct complete response functions; include its exact class multiplicity.",
+  "affine.inverse-cells.v1": "For each invertible GF(2) map on width 2..12 and each D and S, return the complete disjoint affine-cell representation of L(a+D)+L(a)=S mod 2^w.",
+  "tap-span.fiber-count.v1": "For widths 4..16 with bounded tap span h<=4, count every a satisfying L(a+D)+L(a)=S modulo 2^w and provide an exact original-domain witness."
 };
 var MATH_CLAIMS = claims;
 
@@ -22238,6 +22242,178 @@ function checkComposed(args, p) {
   assert2(p.projected_state_count === expected.length, "Projected state count mismatch");
   assert2(canonicalJson(p.projected_classes) === canonicalJson(expected), "Projection differs from exhaustive original inputs");
 }
+function checkCyclicInverse(args, p) {
+  assert2(keys(args) === "constant|mask|rotation|target|width", "Cyclic inverse argument shape");
+  const width = integer2(args.width, 4, 16), rotation = integer2(args.rotation, 2, Math.min(width - 1, 6));
+  const modulus = 2 ** width, mask = integer2(args.mask, 0, modulus - 1);
+  const constant2 = integer2(args.constant, 0, modulus - 1), target = integer2(args.target, 0, modulus - 1);
+  assert2(keys(p) === "constant|local_updates|mask|preimages|rotation|seed_count|target|width", "Cyclic fiber candidate shape");
+  assert2(p.width === width && p.rotation === rotation && p.mask === mask && p.constant === constant2 && p.target === target, "Cyclic parameters changed");
+  assert2(p.seed_count === 2 ** rotation && p.local_updates === width * 2 ** rotation, "Cyclic transducer work count");
+  assert2(Array.isArray(p.preimages) && p.preimages.length <= 2 ** rotation, "Cyclic fiber bound");
+  const direct = (x) => {
+    const a = (x >>> 1 | x << width - 1) & modulus - 1;
+    const b = (x >>> rotation | x << width - rotation) & modulus - 1;
+    return ((a ^ b) + (x & mask) + constant2) % modulus;
+  };
+  const expected = [];
+  for (let x = 0; x < modulus; x++) if (direct(x) === target) expected.push(x);
+  assert2(canonicalJson(p.preimages) === canonicalJson(expected), "Cyclic full fiber differs from independent exhaustive original map");
+}
+function checkTwoStageCode(args, p) {
+  assert2(keys(args) === "C|H|S|radix", "Two-stage argument shape");
+  const B = integer2(args.radix, 2, 20), C = integer2(args.C, 0, B - 1), S = integer2(args.S, 0, B - 1), H2 = integer2(args.H, 0, B - 1);
+  assert2(keys(p) === "carrier_residue|class_count|class_size|label|operands|radix|responses", "Two-stage candidate shape");
+  assert2(p.radix === B && canonicalJson(p.operands) === canonicalJson([C, S, H2]), "Two-stage operands changed");
+  const truth = (c, s, h) => {
+    const response = [];
+    for (let a = 0; a <= 1; a++) for (let b = 0; b <= 1; b++) {
+      const first = c + s + a;
+      const second = first % B + h + b;
+      response.push([second % B, Math.floor(first / B), Math.floor(second / B)]);
+    }
+    return response;
+  };
+  const partitions = /* @__PURE__ */ new Map();
+  for (let c = 0; c < B; c++) for (let s = 0; s < B; s++) for (let h = 0; h < B; h++) {
+    const responses = truth(c, s, h), key = canonicalJson(responses);
+    const existing = partitions.get(key);
+    if (existing) existing.count++;
+    else partitions.set(key, { responses, count: 1 });
+  }
+  const order = (table) => [table[0][0], ...table.map((row) => 2 * row[1] + row[2])];
+  const classes = [...partitions.values()].sort((a, b) => {
+    const x = order(a.responses), y = order(b.responses);
+    for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] - y[i];
+    return 0;
+  });
+  assert2(classes.length === 5 * B - 4, "Two-stage class census differs from theorem");
+  const actual = truth(C, S, H2), fingerprint = canonicalJson(actual);
+  const index = classes.findIndex((group) => canonicalJson(group.responses) === fingerprint);
+  assert2(index >= 0, "Two-stage operands absent from census");
+  assert2(p.class_count === classes.length && p.label === index && p.class_size === classes[index].count, "Two-stage class identity/multiplicity mismatch");
+  assert2(p.carrier_residue === actual[0][0] && canonicalJson(p.responses) === fingerprint, "Two-stage response table differs from original arithmetic");
+}
+function checkAffineInverseCells(args, p) {
+  assert2(keys(args) === "D|S|rows|side", "Affine inverse argument fields");
+  assert2(Array.isArray(args.rows), "Affine inverse rows");
+  const w = integer2(args.rows.length, 2, 12), mod3 = 2 ** w, mask = mod3 - 1;
+  const rows = args.rows.map((x) => integer2(x, 0, mask));
+  const D = integer2(args.D, 0, mask), S = integer2(args.S, 0, mask);
+  assert2(["auto", "input", "output"].includes(args.side), "Invalid signature side");
+  assert2(
+    keys(p) === "D|S|cells|count|input_signatures|output_signatures|rows|side|signatures_examined|width",
+    "Affine cell output fields"
+  );
+  assert2(
+    p.width === w && p.D === D && p.S === S && canonicalJson(p.rows) === canonicalJson(rows),
+    "Affine cell source parameters changed"
+  );
+  const parity = (input2) => {
+    let acc = 0, v = input2;
+    while (v) {
+      acc ^= 1;
+      v &= v - 1;
+    }
+    return acc;
+  };
+  const linear2 = (x) => rows.reduce((v, r, i) => v | parity(x & r) << i, 0);
+  const images = /* @__PURE__ */ new Set();
+  for (let x = 0; x < mod3; x++) images.add(linear2(x));
+  assert2(images.size === mod3, "Affine inverse must use a bijective linear map");
+  const inputSignatures = /* @__PURE__ */ new Set(), outputSignatures = /* @__PURE__ */ new Set();
+  const expected = /* @__PURE__ */ new Set();
+  for (let x = 0; x < mod3; x++) {
+    inputSignatures.add(x ^ (x + D) % mod3);
+    const y = linear2(x), z2 = linear2((x + D) % mod3);
+    if ((y + z2) % mod3 === S) expected.add(x);
+  }
+  for (let y = 0; y < mod3; y++) outputSignatures.add(y ^ (S - y + mod3) % mod3);
+  const side = args.side === "auto" ? inputSignatures.size <= outputSignatures.size ? "input" : "output" : args.side;
+  assert2(p.side === side && p.input_signatures === inputSignatures.size && p.output_signatures === outputSignatures.size, "Signature selection or cardinality mismatch");
+  assert2(
+    p.signatures_examined === (side === "input" ? inputSignatures.size : outputSignatures.size),
+    "Incorrect signature-work count"
+  );
+  assert2(Array.isArray(p.cells) && p.cells.length <= p.signatures_examined, "Affine cell list exceeds signatures");
+  const constructed = /* @__PURE__ */ new Set();
+  let sum2 = 0;
+  for (const cell of p.cells) {
+    assert2(keys(cell) === "base|basis|count|delta|signature", "Affine cell fields");
+    const base = integer2(cell.base, 0, mask), delta = integer2(cell.delta, 0, mask), sig = integer2(cell.signature, 0, mask);
+    assert2(Array.isArray(cell.basis) && cell.basis.length <= w, "Affine cell basis");
+    const basis = cell.basis.map((x) => integer2(x, 1, mask));
+    assert2(cell.count === 2 ** basis.length, "Affine cell multiplicity");
+    const points = [base];
+    for (const vector of basis) {
+      const expanded = points.map((x) => x ^ vector);
+      for (const x of expanded) assert2(!points.includes(x), "Dependent affine cell basis");
+      points.push(...expanded);
+    }
+    assert2(points.length === cell.count, "Affine cell dimension mismatch");
+    for (const x of points) {
+      const next = (x + D) % mod3, y = linear2(x), z2 = linear2(next);
+      assert2((y + z2) % mod3 === S, "Affine cell contains an invalid witness");
+      assert2((x ^ next) === delta && (y ^ z2) === sig, "Affine cell signature differs from exact arithmetic");
+      assert2(!constructed.has(x), "Affine cells overlap");
+      constructed.add(x);
+    }
+    sum2 += points.length;
+  }
+  assert2(p.count === sum2 && sum2 === expected.size, "Exact inverse count incorrect");
+  assert2(constructed.size === expected.size, "Affine inverse lost or added members");
+  for (const point of expected) assert2(constructed.has(point), "Affine inverse missing original witness");
+}
+function checkTapSpanCount(args, p) {
+  assert2(keys(args) === "D|S|r1|r2|shift|width", "Tap-span argument shape");
+  const w = integer2(args.width, 4, 16), r1 = integer2(args.r1, 2, w - 2), r2 = integer2(args.r2, r1 + 1, w - 1), shift = integer2(args.shift, 1, r1 - 1);
+  const h = r2 - shift;
+  assert2(h <= 4, "Unsupported tap-span h");
+  const mask = 2 ** w - 1, D = integer2(args.D, 0, mask), S = integer2(args.S, 0, mask);
+  const fields = [
+    "width",
+    "taps",
+    "D",
+    "S",
+    "count",
+    "witness",
+    "states",
+    "transitions",
+    "merges",
+    "peak_per_seed",
+    "layer_states",
+    "state_bound"
+  ];
+  assert2(canonicalJson(Object.keys(p).sort()) === canonicalJson(fields.sort()), "Unexpected tap-count output field");
+  assert2(p.width === w && canonicalJson(p.taps) === canonicalJson([r1, r2, shift]) && p.D === String(D) && p.S === String(S), "Tap-count source parameters changed");
+  const rotate = (a, r) => (a >>> r | a << w - r) & mask;
+  const linear2 = (a) => rotate(a, r1) ^ rotate(a, r2) ^ a >>> shift;
+  let expected = 0;
+  const actualWitnesses = /* @__PURE__ */ new Set();
+  for (let a = 0; a <= mask; a++) {
+    if ((linear2(a + D & mask) + linear2(a) & mask) === S) {
+      expected++;
+      actualWitnesses.add(a);
+    }
+  }
+  assert2(p.count === String(expected), "Tap-count differs from full original-domain fiber");
+  if (expected === 0) assert2(p.witness === null, "Spurious witness");
+  else {
+    assert2(typeof p.witness === "string" && /^(0|[1-9]\d*)$/.test(p.witness), "Invalid witness syntax");
+    const witness = Number(p.witness);
+    assert2(actualWitnesses.has(witness), "Tap-count witness does not satisfy equation");
+  }
+  const bound = w * 2 ** (2 * h + 2);
+  assert2(p.state_bound === String(bound), "Retained-state theorem bound changed");
+  for (const name of ["states", "transitions", "merges", "peak_per_seed"])
+    assert2(Number.isSafeInteger(p[name]) && p[name] >= 0, "Invalid frontier accounting");
+  assert2(p.states <= bound, "Frontier exceeds declared bound");
+  assert2(
+    Array.isArray(p.layer_states) && p.layer_states.length === w && p.layer_states.every((x) => Number.isSafeInteger(x) && x >= 0),
+    "Invalid retained-state layer counts"
+  );
+  assert2(p.layer_states.reduce((a, b) => a + b, 0) === p.states, "State accounting differs from layer sum");
+}
 async function checkMathComputation(source, pkg) {
   try {
     const bytes = Uint8Array.from(source);
@@ -22258,6 +22434,10 @@ async function checkMathComputation(source, pkg) {
     else if (name === "gf2.rank-factor.v1") checkGF2(sourceObj.args, pkg.result.candidate);
     else if (name === "affine.cost-compose.v1") checkAffine(sourceObj.args, pkg.result.candidate);
     else if (name === "carry.gf2-projection.v1") checkComposed(sourceObj.args, pkg.result.candidate);
+    else if (name === "cyclic.inverse-fibers.v1") checkCyclicInverse(sourceObj.args, pkg.result.candidate);
+    else if (name === "two-stage.addition-code.v1") checkTwoStageCode(sourceObj.args, pkg.result.candidate);
+    else if (name === "affine.inverse-cells.v1") checkAffineInverseCells(sourceObj.args, pkg.result.candidate);
+    else if (name === "tap-span.fiber-count.v1") checkTapSpanCount(sourceObj.args, pkg.result.candidate);
     else throw Error("Unknown exact primitive");
     return { ok: true, kind: "colony_math_independent_exact_replay", certifiable: false };
   } catch {

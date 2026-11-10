@@ -1,0 +1,45 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:3acd4a6bea771a2f288a2bcf204c7503db61da45ac6a0f40eb5df5c2b4e0b0cf",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "two-stage.addition-code.v1",
+    "scope": "For each radix 2..20 and supplied operand triple, encode all four incoming-carry responses in one state of the exactly 5B-4 distinct complete response functions; include its exact class multiplicity.",
+    "candidate": {
+      "radix": 13,
+      "operands": [
+        12,
+        10,
+        9
+      ],
+      "label": 29,
+      "class_count": 61,
+      "class_size": 21,
+      "carrier_residue": 5,
+      "responses": [
+        [
+          5,
+          1,
+          1
+        ],
+        [
+          6,
+          1,
+          1
+        ],
+        [
+          6,
+          1,
+          1
+        ],
+        [
+          7,
+          1,
+          1
+        ]
+      ]
+    },
+    "candidate_digest": "sha256:41a24c862f92b6a311439b63275fea59de057c785e79753de69ef90499cc00d4"
+  }
+}
