@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
-// src/cli.ts
+// engine/packages/carrycert-cli/src/cli.ts
 import * as fs2 from "node:fs";
 import * as path2 from "node:path";
 import { createHash } from "node:crypto";
 
-// ../carrycert-core/src/math.ts
+// engine/packages/carrycert-core/src/math.ts
 var BN128_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 function arrangementNumber(k) {
   let v = 1n;
@@ -99,7 +99,7 @@ function frontierSolve(width, offsets, masks, targets) {
   return { count, attempted, maxStates };
 }
 
-// ../carrycert-core/src/analyze.ts
+// engine/packages/carrycert-core/src/analyze.ts
 function modsumUnique(c) {
   if (c.equation && c.sum_bitified && c.carry_bitified) {
     return { unique: true, reason: "joint Num2Bits-style (sum+carry bits) uniquely determines (sum,carry)" };
@@ -565,7 +565,7 @@ function analyze(gadget) {
   });
 }
 
-// ../carrycert-core/src/circom-adapter.ts
+// engine/packages/carrycert-core/src/circom-adapter.ts
 function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
@@ -891,7 +891,7 @@ function classifyCircomSource(src, id = "circuit") {
   };
 }
 
-// ../carrycert-core/src/circom-fs.ts
+// engine/packages/carrycert-core/src/circom-fs.ts
 import * as fs from "node:fs";
 import * as path from "node:path";
 function readWithIncludes(entry, depth = 0, maxDepth = 6, seen = /* @__PURE__ */ new Set()) {
@@ -920,7 +920,7 @@ function scanCircomFile(filePath, opts = {}) {
   return analyze(classifyCircomFile(filePath, opts));
 }
 
-// ../carrycert-core/src/checker.ts
+// engine/packages/carrycert-core/src/checker.ts
 function checkResult(r) {
   if (r.verdict === "Broken") {
     const cex = r.counterexample ?? {};
@@ -962,7 +962,7 @@ function checkResult(r) {
   return { ok: true, kind: "unknown_skip" };
 }
 
-// ../carrycert-core/src/adapters/verilog.ts
+// engine/packages/carrycert-core/src/adapters/verilog.ts
 function classifyVerilogSource(src, id = "hw_circuit") {
   const clean = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   const widthM = clean.match(/\[\s*(\d+)\s*:\s*0\s*\]/);
@@ -1008,7 +1008,7 @@ function classifyVerilogSource(src, id = "hw_circuit") {
   };
 }
 
-// ../carrycert-core/src/adapters/int8.ts
+// engine/packages/carrycert-core/src/adapters/int8.ts
 function classifyInt8Kernel(k) {
   const range = k.range_checked !== false;
   return {
@@ -1046,7 +1046,7 @@ function classifyInt8Source(src, id = "int8_kernel") {
   });
 }
 
-// ../carrycert-core/src/adapters/onnx.ts
+// engine/packages/carrycert-core/src/adapters/onnx.ts
 function classifyOnnxKernel(k) {
   const ir = classifyInt8Kernel({
     id: k.id,
@@ -1078,7 +1078,7 @@ function classifyOnnxSource(src, id = "onnx_kernel") {
   });
 }
 
-// ../carrycert-core/src/adapters/carry-graph.ts
+// engine/packages/carrycert-core/src/adapters/carry-graph.ts
 function unsupported(id, domain, reason) {
   return {
     id,
@@ -1134,7 +1134,7 @@ function classifyCarryGraph(graph, id = "carry_graph") {
   };
 }
 
-// ../carrycert-core/src/adapters/native-bitvm.ts
+// engine/packages/carrycert-core/src/adapters/native-bitvm.ts
 var effects = {
   OP_0: [0, 1],
   OP_1NEGATE: [0, 1],
@@ -1334,7 +1334,7 @@ function scanNativeBitvm(source, id = "script") {
   }
 }
 
-// ../carrycert-core/src/adapters/native-zkvm.ts
+// engine/packages/carrycert-core/src/adapters/native-zkvm.ts
 var u32 = (x) => x >>> 0;
 var signed = (x) => x | 0;
 var signExtend = (value, bits) => value & 1 << bits - 1 ? value - (1 << bits) : value;
@@ -1590,7 +1590,7 @@ function scanNativeZkvm(source, id = "zkvm_trace") {
   }
 }
 
-// ../carrycert-core/src/scan.ts
+// engine/packages/carrycert-core/src/scan.ts
 function unknown(id, domain, detail) {
   return {
     id,
@@ -1672,7 +1672,7 @@ function scanPasted(source, options = {}) {
   };
 }
 
-// ../carrycert-core/src/adapters/r1cs-rank.ts
+// engine/packages/carrycert-core/src/adapters/r1cs-rank.ts
 var mod = (v) => (v % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
 function pow(v, e) {
   let a = mod(v), out = 1n;
@@ -1741,7 +1741,7 @@ function proveR1CSCoupledRank(parsed, triangular) {
   return { complete: basis.size === unknown2, rank: basis.size, unknown: unknown2, linearRows, pivots };
 }
 
-// ../carrycert-core/src/adapters/r1cs-binary.ts
+// engine/packages/carrycert-core/src/adapters/r1cs-binary.ts
 var MAX_SIZE = 8 * 1024 * 1024;
 var MAX_WIRES = 65536;
 var MAX_CONSTRAINTS = 2e5;
@@ -1977,14 +1977,17 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
   }
 }
 
-// src/cli.ts
+// engine/packages/carrycert-cli/src/cli.ts
 function usage() {
   console.log(`\u1455. \u2014 exact arithmetic circuit verification by state contraction
 
 Usage:
-  speedrunpapi scan <file> [--json] [--references] [--sarif out.sarif] [--api <url>] [--key <key>]
+  speedrunpapi scan <file...> [--json] [--references] [--sarif out.sarif] [--api <url>] [--key <key>]
+  speedrunpapi scan --batch files.json [--json] [--require-signed]
+  # files.json: ["path/to/first.circom", "path/to/second.circom"]
   speedrunpapi classify <file>
   speedrunpapi verify <result.json> [--source circuit.r1cs]
+  speedrunpapi claim <order> <confirmation> <email>
   speedrunpapi usage [--key <key>]
   speedrunpapi optimize <model.onnx> [--out candidate.onnx] [--proof-dir evidence]
   speedrunpapi verify-onnx <original.onnx> <artifacts-dir>
@@ -1994,8 +1997,7 @@ Usage:
   speedrunpapi version
 
 File types: .r1cs (binary) | .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
-Scans and independent checks run locally. Jobs use the hosted API and a funded credit key.
-For verify-onnx, install Python ONNX and NumPy. Optional scan signatures use one certificate credit.
+Compute is local. Optional source-bound API signature uses one certificate credit.
 Research DOI references appear only with --references.
 `);
 }
@@ -2078,7 +2080,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.6.1");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.6.4");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -2141,56 +2143,118 @@ async function main() {
     process.exit(bad ? 1 : 0);
   }
   if (cmd === "scan") {
-    const file = args[1];
-    if (!file) return usage();
-    const result = scanAny(file);
-    result.source_checksum = "sha256:" + createHash("sha256").update(fs2.readFileSync(path2.resolve(file))).digest("hex");
-    const sarifIdx = args.indexOf("--sarif");
-    if (sarifIdx >= 0) fs2.writeFileSync(args[sarifIdx + 1], JSON.stringify(toSarif(file, result), null, 2));
-    const apiIdx = args.indexOf("--api");
-    const keyIdx = args.indexOf("--key");
-    const api = apiIdx >= 0 ? args[apiIdx + 1] : process.env.EXACTLAB_API || process.env.COLONY_API || "https://api.colony.technology";
-    const key = keyIdx >= 0 ? args[keyIdx + 1] : process.env.EXACTLAB_API_KEY || process.env.COLONY_API_KEY;
-    if (key && result.verdict !== "Unknown") {
-      const reg = await maybeRegister(api, key, result, file);
-      result.certificate_id = reg.certificate?.id || reg.id;
-      result.mark = reg.certificate?.mark;
-      result.signed = Boolean(reg.certificate?.signature);
-      result.remaining = reg.remaining;
+    const files = [];
+    let batchManifest;
+    let sarifPath;
+    let api = process.env.EXACTLAB_API || process.env.COLONY_API || "https://api.colony.technology";
+    let key = process.env.EXACTLAB_API_KEY || process.env.COLONY_API_KEY;
+    let json = false;
+    let references = false;
+    let requireSigned = false;
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === "--json") json = true;
+      else if (arg === "--references") references = true;
+      else if (arg === "--require-signed") requireSigned = true;
+      else if (["--sarif", "--api", "--key", "--batch"].includes(arg)) {
+        const value = args[++i];
+        if (!value) throw new Error("Missing value for " + arg);
+        if (arg === "--sarif") sarifPath = value;
+        else if (arg === "--api") api = value;
+        else if (arg === "--key") key = value;
+        else batchManifest = value;
+      } else if (arg.startsWith("--")) throw new Error("Unknown scan option: " + arg);
+      else files.push(arg);
     }
-    const display = args.includes("--references") ? result : cliView(result);
-    if (args.includes("--json")) console.log(JSON.stringify(display, null, 2));
-    else {
-      console.log(`${result.verdict}  ${result.id}`);
-      console.log(`  method: ${result.method}`);
-      console.log(`  theorem: ${display.theorem}`);
-      console.log(`  domain: ${result.domain ?? "circom/ir"}`);
-      console.log(`  time: ${result.time_ms.toFixed(3)} ms (client-side)`);
-      if (result.reason) console.log(`  reason: ${result.reason}`);
-      if (result.certificate_id) console.log(`  cert: ${result.certificate_id}${result.mark ? `  ${result.mark}` : ""}`);
+    if (batchManifest) {
+      const abs = path2.resolve(batchManifest);
+      const text = fs2.readFileSync(abs, "utf8");
+      let list;
+      if (text.trimStart().startsWith("[") || text.trimStart().startsWith("{")) {
+        const decoded = JSON.parse(text);
+        list = Array.isArray(decoded) ? decoded : decoded.files;
+      } else list = text.split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith("#"));
+      if (!Array.isArray(list) || !list.length || !list.every((x) => typeof x === "string" && x.length)) {
+        throw new Error("Batch manifest needs a nonempty array of file paths");
+      }
+      files.unshift(...list.map((x) => path2.isAbsolute(x) ? x : path2.resolve(path2.dirname(abs), x)));
     }
-    process.exit(result.verdict === "Broken" ? 2 : result.verdict === "Unknown" ? 3 : 0);
+    if (!files.length) throw new Error("Provide at least one source file or --batch manifest");
+    if (requireSigned && !key) throw new Error("--require-signed needs --key or COLONY_API_KEY");
+    const started = performance.now();
+    const results = [];
+    const sarifRuns = [];
+    const counts = { Certified: 0, Broken: 0, Unknown: 0 };
+    for (const file of files) {
+      const result = scanAny(file);
+      result.source_checksum = "sha256:" + createHash("sha256").update(fs2.readFileSync(path2.resolve(file))).digest("hex");
+      counts[result.verdict]++;
+      if (sarifPath) sarifRuns.push(...toSarif(file, result).runs);
+      if (key) {
+        const registered = await maybeRegister(api, key, result, file);
+        const certificate = registered.certificate;
+        result.certificate_id = certificate?.id || registered.id;
+        result.mark = certificate?.mark;
+        result.signed = Boolean(certificate?.signature && certificate.signature_algorithm === "Ed25519");
+        result.signature_algorithm = certificate?.signature_algorithm;
+        result.remaining = registered.remaining;
+      }
+      if (requireSigned && (!result.signed || !result.certificate_id)) {
+        throw new Error("Signed Ed25519 certificate required for " + file + " (" + result.verdict + ")");
+      }
+      results.push({ file, result });
+    }
+    if (sarifPath) fs2.writeFileSync(sarifPath, JSON.stringify({
+      $schema: "https://json.schemastore.org/sarif-2.1.0.json",
+      version: "2.1.0",
+      runs: sarifRuns
+    }, null, 2));
+    const display = results.map((row) => ({ file: row.file, ...references ? row.result : cliView(row.result) }));
+    const batch = files.length > 1 || Boolean(batchManifest);
+    if (json) {
+      console.log(JSON.stringify(batch ? {
+        schema: "speedrunpapi.scan-batch.v1",
+        version: "0.6.4",
+        summary: { files: results.length, ...counts, wall_ms: performance.now() - started },
+        results: display
+      } : display[0], null, 2));
+    } else {
+      for (const { file, result } of results) {
+        console.log(`${result.verdict}  ${file}  ${result.method}  ${result.time_ms.toFixed(3)}ms`);
+        if (result.reason) console.log("  reason: " + result.reason);
+        if (result.certificate_id) console.log("  cert: " + result.certificate_id);
+      }
+      console.log(`scanned ${results.length}: ${counts.Certified} Certified / ${counts.Broken} Broken / ${counts.Unknown} Unknown; ${(performance.now() - started).toFixed(3)}ms wall`);
+    }
+    process.exit(counts.Broken ? 2 : counts.Unknown ? 3 : 0);
   }
   usage();
   process.exit(1);
 }
-const hostedCommands = new Set(["run", "quote", "solve", "optimize", "status", "result", "check"]);
+var hostedCommands = /* @__PURE__ */ new Set(["run", "quote", "solve", "optimize", "status", "result", "check"]);
 if (process.argv[2] === "jobs") process.argv.splice(2, 1);
 if (process.argv[2] === "verify-onnx") {
-  const args = process.argv.slice(3);
-  if (args.length !== 2) {
+  const arguments2 = process.argv.slice(3);
+  if (arguments2.length !== 2) {
     console.error("Usage: speedrunpapi verify-onnx <source.onnx> <artifacts-dir>");
     process.exitCode = 2;
   } else {
-    Promise.all([import("node:child_process"), import("node:fs"), import("node:url")]).then(([child, fs, url]) => {
+    Promise.all([import("node:child_process"), import("node:fs"), import("node:url")]).then(([child, fileSystem, url]) => {
       const locations = ["../verifiers/onnx/independent_plan.py", "./verifiers/onnx/independent_plan.py"];
-      const verifier = locations.map((p) => url.fileURLToPath(new URL(p, import.meta.url))).find((p) => fs.existsSync(p));
+      const verifier = locations.map((p) => url.fileURLToPath(new URL(p, import.meta.url))).find((p) => fileSystem.existsSync(p));
       if (!verifier) throw new Error("Independent ONNX checker is missing from this installation");
       const python = process.env.COLONY_PYTHON || process.env.PYTHON || "python3";
-      const checked = child.spawnSync(python, [verifier, "--source", args[0], "--artifacts", args[1]], { stdio: "inherit" });
-      if (checked.error) throw new Error(`Python checker failed: ${checked.error.message}`);
+      const checked = child.spawnSync(
+        python,
+        [verifier, "--source", arguments2[0], "--artifacts", arguments2[1]],
+        { stdio: "inherit" }
+      );
+      if (checked.error) throw new Error("Python checker failed: " + checked.error.message);
       process.exitCode = checked.status === null ? 1 : checked.status;
-    }).catch((e) => { console.error(e.message); process.exitCode = 1; });
+    }).catch((e) => {
+      console.error(e.message);
+      process.exitCode = 1;
+    });
   }
 } else if (hostedCommands.has(process.argv[2])) {
   import("./colony-jobs.mjs").catch((e) => {

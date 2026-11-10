@@ -94,28 +94,40 @@ Routine `--json` output contains the verdict, method, source checksum and proof 
 
 Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan examples/rv32im_arithmetic_trace.zkvm --json` and `speedrunpapi scan examples/coupled_rank.r1cs --json`. The rank-deficient R1CS and forged RV32IM trace examples return `Unknown`. You can also run the original Circom cases: `examples/compare.circom` and `examples/modsum-broken.circom`.
 
+## Batch scan
+
+One process can scan multiple source files and keep the analyzer warm across CI inputs:
+
+```sh
+speedrunpapi scan circuits/a.circom circuits/b.circom --json
+speedrunpapi scan --batch examples/batch-sources.json --json
+```
+
+A batch manifest is a JSON array of paths (relative to the manifest directory) or a newline-separated list. JSON output includes each file, source digest, verdict, and a batch summary with measured wall time. A Broken result exits 2; an Unknown result exits 3. Single-file JSON remains compatible.
+
 ## GitHub Action
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.6.3
+- uses: lmtlssss/speedrunpapi@v0.6.4
   with:
     file: circuits/main.circom
+    api_key: ${{ secrets.COLONY_API_KEY }}
 ```
 
-The Action scans checked-out source, fails on `Broken`, warns on `Unknown`, and uploads the result. Add an optional `api_key` to request a signed certificate. Source is analyzed again by the hosted API before signing. The [paid customer pilot workflow](https://github.com/lmtlssss/speedrunpapi/actions/workflows/customer-pilot.yml) uses a GitHub secret, submits a source-bound test-order certificate, verifies the public signature, and keeps the receipt as an artifact.
+For a warm multi-file run, provide `batch_manifest: circuits/scan-files.json` instead of `file`. The Action requires a funded signing key. Every input must return Certified with its own source-bound Ed25519 certificate, which the Action checks against a pinned public key and the source file before passing. Broken, Unknown, missing key, invalid signature, revoked status, or missing certificate fails CI. Scans without signing remain free in the local CLI.
 
-To display the scan workflow status in a repository README, save the above steps in `.github/workflows/speedrunpapi.yml`, then add:
+A badge can show the certified result tied to one immutable source digest. Example from a published source-bound certificate:
 
 ```markdown
-[![ᑕ. scan](https://github.com/OWNER/REPO/actions/workflows/speedrunpapi.yml/badge.svg)](https://github.com/OWNER/REPO/actions/workflows/speedrunpapi.yml)
+[![ᑕ. Certified](https://api.colony.technology/v1/badge/sha256:56f33ca9ce168c7586f87943108cb0c382f3eb2bcb50e822996cc5460bc64faa)](https://api.colony.technology/v1/result/sha256:56f33ca9ce168c7586f87943108cb0c382f3eb2bcb50e822996cc5460bc64faa)
 ```
 
-Replace `OWNER/REPO` with that repository. The badge shows the workflow status. An issued, source-bound Certified certificate has its own public registry URL.
+Use the SHA-256 digest of your own signed source in both links. The badge is a status view; the linked Ed25519 certificate and the original source provide independent proof. Its current status includes revocation. Public certificate status: [issuance control](https://api.colony.technology/v1/certificates/status) and [revocations](https://api.colony.technology/v1/revocations).
 
 ## Packages
 
-`speedrunpapi@0.6.3` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.3).
+`speedrunpapi@0.6.4` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.4).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

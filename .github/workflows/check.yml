@@ -88,10 +88,21 @@ jobs:
           jq -e '.verdict == "Certified" and (.certificate.theorem_ref | startswith("DOI "))' /tmp/research-cli.json
           node bin/speedrunpapi.mjs verify /tmp/clean-cli.json
           node bin/speedrunpapi.mjs verify /tmp/research-cli.json
-      - name: Test reusable ᑕ. Action
+      - name: Warm four-source batch in one Node process
+        run: |
+          node bin/speedrunpapi.mjs scan --batch examples/batch-sources.json --json > /tmp/warm-batch.json
+          jq -e '.version == "0.6.4" and .summary.files == 4 and .summary.Certified == 4 and (.results | map(.source_checksum) | unique | length) == 4' /tmp/warm-batch.json
+      - name: Unsigned Action must fail
+        id: unsigned_action
+        continue-on-error: true
         uses: ./
         with:
           file: examples/modsum-safe.circom
+      - name: Enforce signed-CI policy
+        if: always()
+        env:
+          ACTION_OUTCOME: ${{ steps.unsigned_action.outcome }}
+        run: test "$ACTION_OUTCOME" = failure
       - name: Broken case returns code 2
         run: |
           set +e

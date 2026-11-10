@@ -1,0 +1,6 @@
+[
+  "native_add.bitvm",
+  "native_alt_hash.bitvm",
+  "rv32im_arithmetic_trace.zkvm",
+  "coupled_rank.r1cs"
+]
