@@ -1,0 +1,38 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:3bb086c8949362a49a82c87c4e44c56987078a8913a33daa6e9a5d7692ac8403",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "tap-span.fiber-count.v1",
+    "scope": "For widths 4..16 with bounded tap span h<=4, count every a satisfying L(a+D)+L(a)=S modulo 2^w and provide an exact original-domain witness.",
+    "candidate": {
+      "width": 8,
+      "taps": [
+        3,
+        5,
+        1
+      ],
+      "D": "19",
+      "S": "82",
+      "count": "2",
+      "witness": "23",
+      "states": 242,
+      "transitions": 340,
+      "merges": 0,
+      "peak_per_seed": 8,
+      "layer_states": [
+        32,
+        32,
+        32,
+        40,
+        54,
+        37,
+        8,
+        7
+      ],
+      "state_bound": "8192"
+    },
+    "candidate_digest": "sha256:82516b8515ea42c5288c4cba1dcc21e0ec366f8c3f5f077e3e73c47150903e47"
+  }
+}

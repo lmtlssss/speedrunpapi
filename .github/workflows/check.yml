@@ -68,6 +68,17 @@ jobs:
           test "$roots_status" -eq 3
           jq -e '.verdict == "Unknown"' /tmp/bad-branch.json
           jq -e '.verdict == "Unknown"' /tmp/two-roots.json
+      - name: Recheck actual R11 production mathematics offline
+        run: |
+          set -euo pipefail
+          for name in m02-tap-span m03-affine-inverse m04-two-stage; do
+            node bin/colony-jobs.mjs check "examples/$name.math" "examples/$name.result.json" | grep '"source_bound": true'
+          done
+          jq '.result.candidate.count = "999"' examples/m02-tap-span.result.json > /tmp/forged-math.json
+          if node bin/colony-jobs.mjs check examples/m02-tap-span.math /tmp/forged-math.json; then
+            echo "Forged mathematical result passed" >&2
+            exit 1
+          fi
       - name: Machine output stays clean; bibliography is opt-in
         run: |
           set -euo pipefail
@@ -94,6 +105,11 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install './python[onnx]'
       - run: speedrunpapi version
+      - name: Python wheel replays R11 mathematical results
+        run: |
+          for name in m02-tap-span m03-affine-inverse m04-two-stage; do
+            speedrunpapi check "examples/$name.math" "examples/$name.result.json" | grep '"source_bound": true'
+          done
       - name: Independently replay live production ONNX proof from npm and PyPI clients
         run: |
           set -euo pipefail

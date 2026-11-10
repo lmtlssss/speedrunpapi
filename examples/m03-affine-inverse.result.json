@@ -1,0 +1,79 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:dc89e97781eaccebac250479964e26c36ce6b5b4e382cf80b4abf76bf3a231b9",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "affine.inverse-cells.v1",
+    "scope": "For each invertible GF(2) map on width 2..12 and each D and S, return the complete disjoint affine-cell representation of L(a+D)+L(a)=S mod 2^w.",
+    "candidate": {
+      "width": 8,
+      "D": 30,
+      "S": 146,
+      "rows": [
+        34,
+        68,
+        134,
+        14,
+        213,
+        186,
+        122,
+        142
+      ],
+      "side": "input",
+      "input_signatures": 13,
+      "output_signatures": 26,
+      "signatures_examined": 13,
+      "count": 17,
+      "cells": [
+        {
+          "signature": 138,
+          "delta": 62,
+          "base": 209,
+          "basis": [],
+          "count": 1
+        },
+        {
+          "signature": 108,
+          "delta": 254,
+          "base": 113,
+          "basis": [
+            129
+          ],
+          "count": 2
+        },
+        {
+          "signature": 18,
+          "delta": 38,
+          "base": 140,
+          "basis": [
+            1
+          ],
+          "count": 2
+        },
+        {
+          "signature": 140,
+          "delta": 34,
+          "base": 15,
+          "basis": [
+            25,
+            205
+          ],
+          "count": 4
+        },
+        {
+          "signature": 106,
+          "delta": 226,
+          "base": 98,
+          "basis": [
+            8,
+            17,
+            132
+          ],
+          "count": 8
+        }
+      ]
+    },
+    "candidate_digest": "sha256:eddf65ae054dc39b285ccb0d8982c83bdaeb0675abd07df0a69ce699462576e4"
+  }
+}
