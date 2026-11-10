@@ -1,66 +1,74 @@
-name: 'ᑕ. Carry Contract Check'
-description: 'Scan circuit source and attach the exact verdict and optional signed certificate'
+name: 'ᑕ. Certified source check'
+description: 'Scan one or more source files and require an independently verified Ed25519 certificate for each result'
 inputs:
   file:
-    description: 'Circuit source or normalized carry-graph file in this checkout'
-    required: true
-  api_key:
-    description: 'Optional paid API key to sign the source-scanned verdict'
+    description: 'Single source path. Use batch_manifest for multiple sources.'
     required: false
+  batch_manifest:
+    description: 'JSON file array or newline-separated list of source paths. All files run in one warm process.'
+    required: false
+  api_key:
+    description: 'Funded Colony API key required to issue independently verifiable certificates'
+    required: true
   public:
-    description: 'Registry listing for signed Certified certificates'
+    description: 'Publish signed verdicts to the public registry'
     required: false
     default: 'false'
 outputs:
   verdict:
-    description: 'Certified | Broken | Unknown'
+    description: 'Certified only when every source received a valid signed certificate'
     value: ${{ steps.scan.outputs.verdict }}
   certificate_id:
-    description: 'Signed certificate ID when an API key is supplied'
+    description: 'Certificate ID for a single source, or empty for a batch'
     value: ${{ steps.scan.outputs.certificate_id }}
 runs:
   using: composite
   steps:
-    - name: Run ᑕ. locally
+    - name: Check every source and signature
       id: scan
       shell: bash
       env:
         COLONY_SOURCE: ${{ inputs.file }}
-        COLONY_ACTION_CLI: ${{ github.action_path }}/bin/speedrunpapi.mjs
+        COLONY_BATCH_MANIFEST: ${{ inputs.batch_manifest }}
+        COLONY_ACTION_PATH: ${{ github.action_path }}
         COLONY_API_KEY: ${{ inputs.api_key }}
         COLONY_CERT_PUBLIC: ${{ inputs.public }}
       run: |
         set -euo pipefail
-        set +e
-        node "$COLONY_ACTION_CLI" scan "$COLONY_SOURCE" --json > colony-analysis.json
-        status=$?
-        set -e
-        if ! jq -e '.verdict == "Certified" or .verdict == "Broken" or .verdict == "Unknown"' colony-analysis.json > /dev/null; then
-          echo "::error::No valid scan verdict"
+        if [ -z "$COLONY_API_KEY" ]; then
+          echo "::error::A funded API key is required for a signed CI verdict"
           exit 1
         fi
-        verdict=$(jq -r .verdict colony-analysis.json)
-        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
-        cert_id=$(jq -r '.certificate_id // empty' colony-analysis.json)
-        echo "certificate_id=$cert_id" >> "$GITHUB_OUTPUT"
-        if [ -n "$cert_id" ]; then
-          curl -fLsS "https://api.colony.technology/v1/cert/$cert_id" -o colony-certificate.json
-          jq -e '.signature_valid == true' colony-certificate.json > /dev/null
-        fi
-        if [ "$status" -eq 2 ] || [ "$verdict" = "Broken" ]; then
-          echo "::error::ᑕ. found multiple valid witnesses"
+        if [ -n "$COLONY_BATCH_MANIFEST" ]; then
+          node "$COLONY_ACTION_PATH/bin/speedrunpapi.mjs" scan --batch "$COLONY_BATCH_MANIFEST" --json --require-signed > colony-analysis.json
+        elif [ -n "$COLONY_SOURCE" ]; then
+          node "$COLONY_ACTION_PATH/bin/speedrunpapi.mjs" scan "$COLONY_SOURCE" --json --require-signed > colony-analysis.json
+        else
+          echo "::error::Set file or batch_manifest"
           exit 1
         fi
-        if [ "$status" -eq 3 ] || [ "$verdict" = "Unknown" ]; then
-          echo "::warning::ᑕ. did not decide this source"
+        jq -e 'if .results then all(.results[]; .verdict == "Certified" and .signed == true and .signature_algorithm == "Ed25519") else .verdict == "Certified" and .signed == true and .signature_algorithm == "Ed25519" end' colony-analysis.json > /dev/null
+        mkdir -p colony-certificates
+        jq -c 'if .results then .results[] else . end' colony-analysis.json | while IFS= read -r record; do
+          cert_id=$(jq -r '.certificate_id // empty' <<< "$record")
+          source_file=$(jq -r '.file // empty' <<< "$record")
+          if [ -z "$cert_id" ] || [ -z "$source_file" ]; then
+            echo "::error::Unsigned or unbound source result"
+            exit 1
+          fi
+          curl -fLsS "https://api.colony.technology/v1/cert/$cert_id" -o "colony-certificates/$cert_id.json"
+          node "$COLONY_ACTION_PATH/verifiers/cert/verify.mjs" "colony-certificates/$cert_id.json" "$source_file"
+        done
+        echo 'verdict=Certified' >> "$GITHUB_OUTPUT"
+        if [ -z "$COLONY_BATCH_MANIFEST" ]; then
+          echo "certificate_id=$(jq -r '.certificate_id' colony-analysis.json)" >> "$GITHUB_OUTPUT"
         fi
-        if [ "$status" -gt 3 ]; then exit "$status"; fi
-    - name: Upload scan and certificate
+    - name: Upload analysis and certificates
       if: always()
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
-        name: colony-verdict
+        name: colony-certified-evidence
         path: |
           colony-analysis.json
-          colony-certificate.json
+          colony-certificates/
         if-no-files-found: warn

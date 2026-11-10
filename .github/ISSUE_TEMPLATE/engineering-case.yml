@@ -1,6 +1,6 @@
-name: Colony verification bounty
+name: Colony engineering case
 description: Reproduce a bounded circuit result or report a soundness gap with source evidence.
-title: "[bounty] "
+title: "[engineering] "
 body:
   - type: dropdown
     id: challenge
