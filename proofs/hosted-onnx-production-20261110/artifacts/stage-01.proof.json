@@ -1,0 +1,30 @@
+{
+  "candidate_digest": "sha256:adf8cf00d9eb0286bef42db9d10c6d1069ef7b938230a98b7b64754d78b2faee",
+  "contract": "For all valid tensor values and A zero points admitted by the original ONNX MatMulInteger graph, any output with a fixed B initializer equal elementwise to its scalar B zero point is exactly the int32 zero tensor.",
+  "operator": "onnx.quantized-zero-matmul.v1",
+  "rewrites": [
+    {
+      "b_name": "quantized_weights",
+      "b_zero_point": 137,
+      "dims": [
+        128,
+        128
+      ],
+      "index": 0,
+      "op_type": "MatMulInteger",
+      "output": "logits",
+      "reason": "All centered B weights are exactly zero"
+    }
+  ],
+  "schema": "colony.inference-proof.v1",
+  "side_conditions": [
+    "ONNX standard opset 15\u201325, single closed graph, no external data or control flow",
+    "MatMulInteger has no attributes and uses fixed 2D int8/uint8 A and B",
+    "B and its optional scalar B zero point are signedness-compatible initializers",
+    "All B entries equal B zero point, so every exact integer product is zero",
+    "Original output shape is static and contains at most 16384 int32 elements",
+    "Every untouched node, model field and interface is byte-preserved"
+  ],
+  "source_digest": "sha256:589a59ecbda74775cfa4aad73e2444e3689bbb1829712aa5b3ec4da0b7aff2a5",
+  "verifier": "colony.quantized-zero-independent.v1"
+}

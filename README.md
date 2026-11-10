@@ -1,6 +1,6 @@
 # ᑕ. exact arithmetic circuit verification
 
-[Live race](https://colony.technology/demo) · [Proofs](https://colony.technology/proofs) · [Packs](https://colony.technology/packs) · [API](https://colony.technology/api)
+[Live race](https://colony.technology/demo) · [Proofs](https://colony.technology/proofs) · [API](https://colony.technology/api)
 
 Paste source, press ᑕ., get a scoped verdict. Local scanning runs on your machine, without an account or API key.
 
@@ -35,6 +35,23 @@ pip install speedrunpapi
 speedrunpapi scan circuit.circom --json
 ```
 
+## Hosted verified jobs
+
+`speedrunpapi` includes a public client for Colony's hosted optimization and proof service. Set `COLONY_API_KEY` to an active, funded customer key. The same commands work from the npm and Python packages. The source is sent to the hosted API only when you run a hosted command.
+
+```sh
+export COLONY_API_KEY="your-customer-key"
+speedrunpapi quote model.onnx
+speedrunpapi optimize model.onnx --out optimized.onnx --proof-dir evidence
+speedrunpapi verify-onnx evidence/source.onnx evidence/artifacts
+```
+
+`optimize` returns an executable ONNX model and its source-bound proof artifacts. `verify-onnx` runs the independent checker locally, without the API, the private optimizer or an API key. Install the checker dependencies with `python3 -m pip install 'onnx>=1.16,<2' 'numpy>=1.26,<3'`. For the Python distribution use `pip install 'speedrunpapi[onnx]'`. The CPU timing evidence is a measured observation on the stated host; each exact stage proof checks model behavior under its declared semantics.
+
+For other supported exact problems, use `speedrunpapi run problem.math`, `speedrunpapi solve problem.math`, `speedrunpapi status <job-id>`, `speedrunpapi result <job-id>` and `speedrunpapi check source.file result.json`. `speedrunpapi jobs <command>` and the `colony-jobs` executable expose the same hosted interface. Requests consume credits only when the service accepts and settles a funded job. The hosted API is [api.colony.technology](https://api.colony.technology).
+
+A [replayable production ONNX proof](proofs/hosted-onnx-production-20261110/) accompanies this release. The source, candidate, cost decision, transformation proof and independent checker are available to inspect. Local scans remain free and offline.
+
 ## Three verdicts
 
 - `Certified` — a supported constraint pattern has one output under its stated input and range conditions.
@@ -55,7 +72,7 @@ Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan exa
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.5.1
+- uses: lmtlssss/speedrunpapi@v0.6.0
   with:
     file: circuits/main.circom
 ```
@@ -72,7 +89,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.5.1` is live on [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/0.5.1/). The matching wheel is also in the [v0.5.1 GitHub release](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.5.1).
+`speedrunpapi@0.6.0` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.0).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

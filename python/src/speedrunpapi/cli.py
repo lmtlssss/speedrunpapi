@@ -1,6 +1,7 @@
 """Run the bundled Colony analyzer with no network install step."""
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -13,8 +14,10 @@ def main() -> int:
         print("ᑕ. requires Node.js 20 or later on PATH.", file=sys.stderr)
         return 127
     bundled = resources.files("speedrunpapi").joinpath("speedrunpapi.mjs")
+    env = os.environ.copy()
+    env.setdefault("COLONY_PYTHON", sys.executable)
     with resources.as_file(bundled) as file_path:
-        return subprocess.run([node, str(file_path), *sys.argv[1:]], check=False).returncode
+        return subprocess.run([node, str(file_path), *sys.argv[1:]], env=env, check=False).returncode
 
 
 if __name__ == "__main__":

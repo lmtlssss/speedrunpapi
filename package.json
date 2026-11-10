@@ -1,13 +1,16 @@
 {
   "name": "speedrunpapi",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "ᑕ. exact arithmetic circuit verification by state contraction",
   "type": "module",
   "bin": {
-    "speedrunpapi": "bin/speedrunpapi.mjs"
+    "speedrunpapi": "bin/speedrunpapi.mjs",
+    "colony-jobs": "bin/colony-jobs.mjs"
   },
   "files": [
     "bin/speedrunpapi.mjs",
+    "bin/colony-jobs.mjs",
+    "verifiers/onnx/",
     "examples/",
     "README.md",
     "LICENSE.md"
