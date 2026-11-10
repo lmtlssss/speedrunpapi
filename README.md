@@ -50,16 +50,17 @@ speedrunpapi verify-onnx evidence/source.onnx evidence/artifacts
 
 For other supported exact problems, use `speedrunpapi run problem.math`, `speedrunpapi solve problem.math`, `speedrunpapi status <job-id>`, `speedrunpapi result <job-id>` and `speedrunpapi check source.file result.json`. `speedrunpapi jobs <command>` and the `colony-jobs` executable expose the same hosted interface. Requests consume credits only when the service accepts and settles a funded job. The hosted API is [api.colony.technology](https://api.colony.technology).
 
-### Exact mathematical jobs (R11)
+### Exact mathematical jobs (R13)
 
-Eight bounded operators are registered. The public CLI now independently checks all eight, including the new cyclic inverse fibers, tap-span fiber counts, affine inverse cells, and two-stage addition codes. The bounded profiles state their exact input limits. They do not claim complete integration of the related research papers.
+Nine bounded operators are registered. The CLI independently replays each source-bound mathematical result. M-06 adds ordered carry-frontier counting for shared-input additions with masks. It returns the complete count and least witness for widths 2–16 and up to 16 offsets. The checker enumerates every original input and validates the sharp carry-state bound. The exact proof scope is stated for each operator.
 
-Four original input examples are in `examples/m01-cyclic-inverse.math` through `examples/m04-two-stage.math`. Three matching production result bundles accompany the M-02, M-03, and M-04 examples. Replay them offline with:
+The original input examples for M-01 through M-04 remain available. M-06 adds `examples/m06-shared-input.math`. Four matching production result bundles cover M-02, M-03, M-04 and M-06. Replay them offline with:
 
 ```sh
 speedrunpapi check examples/m02-tap-span.math examples/m02-tap-span.result.json
 speedrunpapi check examples/m03-affine-inverse.math examples/m03-affine-inverse.result.json
 speedrunpapi check examples/m04-two-stage.math examples/m04-two-stage.result.json
+speedrunpapi check examples/m06-shared-input.math examples/m06-shared-input.result.json
 ```
 
 These result bundles came from funded technical-test jobs in production. They carry original source digests and exact independent mathematical evidence. They do not represent external card payments. New hosted jobs require an API key with credits.
@@ -86,7 +87,7 @@ Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan exa
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.6.1
+- uses: lmtlssss/speedrunpapi@v0.6.2
   with:
     file: circuits/main.circom
 ```
@@ -103,7 +104,7 @@ Replace `OWNER/REPO` with that repository. The badge shows the workflow status. 
 
 ## Packages
 
-`speedrunpapi@0.6.1` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.1).
+`speedrunpapi@0.6.2` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.2).
 
 The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
 

@@ -1,0 +1,11 @@
+{
+  "operator": "shared-input.masked-count.v1",
+  "args": {
+    "width": 9,
+    "offsets": [13, 45, 93, 157, 221],
+    "masks": [15, 31, 7, 3, 127],
+    "targets": [6, 22, 6, 2, 102],
+    "input_mask": 0,
+    "input_target": 0
+  }
+}

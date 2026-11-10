@@ -22082,7 +22082,8 @@ var claims = {
   "cyclic.inverse-fibers.v1": "For the given width 4..16, rotation 2..6, mask, constant and target, enumerate every and only preimage of the cyclic Boolean-modular word map.",
   "two-stage.addition-code.v1": "For each radix 2..20 and supplied operand triple, encode all four incoming-carry responses in one state of the exactly 5B-4 distinct complete response functions; include its exact class multiplicity.",
   "affine.inverse-cells.v1": "For each invertible GF(2) map on width 2..12 and each D and S, return the complete disjoint affine-cell representation of L(a+D)+L(a)=S mod 2^w.",
-  "tap-span.fiber-count.v1": "For widths 4..16 with bounded tap span h<=4, count every a satisfying L(a+D)+L(a)=S modulo 2^w and provide an exact original-domain witness."
+  "tap-span.fiber-count.v1": "For widths 4..16 with bounded tap span h<=4, count every a satisfying L(a+D)+L(a)=S modulo 2^w and provide an exact original-domain witness.",
+  "shared-input.masked-count.v1": "For width 2..16 and 1..16 shared-input offsets, count all unsigned x satisfying the declared input mask and every masked modular translated sum; return the least witness and bounded ordered carry-frontier accounting."
 };
 var MATH_CLAIMS = claims;
 
@@ -22414,6 +22415,66 @@ function checkTapSpanCount(args, p) {
   );
   assert2(p.layer_states.reduce((a, b) => a + b, 0) === p.states, "State accounting differs from layer sum");
 }
+function checkSharedInputMaskedCount(args, p) {
+  assert2(
+    keys(args) === "input_mask|input_target|masks|offsets|targets|width",
+    "Shared-input argument shape"
+  );
+  const w = integer2(args.width, 2, 16), limit = 2 ** w;
+  assert2(
+    Array.isArray(args.offsets) && args.offsets.length >= 1 && args.offsets.length <= 16,
+    "Shared-input offset count"
+  );
+  assert2(
+    Array.isArray(args.masks) && Array.isArray(args.targets) && args.masks.length === args.offsets.length && args.targets.length === args.offsets.length,
+    "Shared-input array lengths"
+  );
+  const offsets = args.offsets.map((v) => integer2(v, 0, limit - 1));
+  const masks = args.masks.map((v) => integer2(v, 0, limit - 1));
+  const targets = args.targets.map((v) => integer2(v, 0, limit - 1));
+  const inputMask = integer2(args.input_mask, 0, limit - 1), inputTarget = integer2(args.input_target, 0, limit - 1);
+  assert2(
+    (inputTarget & ~inputMask) === 0 && targets.every((t, j) => (t & ~masks[j]) === 0),
+    "Shared-input mask/target relation"
+  );
+  assert2(
+    keys(p) === "accepted_live_edges|count|final_state_counts|input_mask|input_target|masks|maximum_carry_states|offsets|source_states|targets|transition_attempts|width|witness",
+    "Shared-input candidate shape"
+  );
+  assert2(p.width === w && p.input_mask === inputMask && p.input_target === inputTarget && canonicalJson(p.offsets) === canonicalJson(offsets) && canonicalJson(p.masks) === canonicalJson(masks) && canonicalJson(p.targets) === canonicalJson(targets), "Shared-input parameters changed");
+  let count2 = 0, witness = null;
+  const finalStates = /* @__PURE__ */ new Map();
+  for (let x = 0; x < limit; x++) {
+    const carryVector = offsets.map((a) => Math.floor((x + a) / limit));
+    const key = carryVector.join(",");
+    if (!finalStates.has(key)) finalStates.set(key, 0);
+    if ((x & inputMask) !== inputTarget) continue;
+    if (!offsets.every((a, j) => (x + a & limit - 1 & masks[j]) === targets[j]))
+      continue;
+    count2++;
+    if (witness === null) witness = x;
+    finalStates.set(key, finalStates.get(key) + 1);
+  }
+  assert2(p.count === count2 && p.witness === witness, "Shared-input fiber count or least witness incorrect");
+  const finalCounts = [...finalStates.values()];
+  assert2(
+    canonicalJson(p.final_state_counts) === canonicalJson(finalCounts),
+    "Shared-input terminal carry-class counts incorrect"
+  );
+  const frontierStates = Array.from({ length: w + 1 }, (_, i) => {
+    const span = 2 ** i;
+    return 1 + new Set(offsets.map((a) => a % span).filter((a) => a !== 0)).size;
+  });
+  const sourceStates = frontierStates.slice(0, -1).reduce((a, b) => a + b, 0);
+  const maxStates = Math.max(...frontierStates);
+  assert2(
+    p.maximum_carry_states === maxStates && p.source_states === sourceStates,
+    "Shared-input frontier state count incorrect"
+  );
+  assert2(p.transition_attempts === 2 * sourceStates, "Shared-input transition count incorrect");
+  assert2(Number.isSafeInteger(p.accepted_live_edges) && p.accepted_live_edges >= 0 && p.accepted_live_edges <= p.transition_attempts, "Shared-input live transition count");
+  assert2(maxStates <= Math.min(offsets.length + 1, limit), "Shared-input sharp carry bound exceeded");
+}
 async function checkMathComputation(source, pkg) {
   try {
     const bytes = Uint8Array.from(source);
@@ -22438,6 +22499,7 @@ async function checkMathComputation(source, pkg) {
     else if (name === "two-stage.addition-code.v1") checkTwoStageCode(sourceObj.args, pkg.result.candidate);
     else if (name === "affine.inverse-cells.v1") checkAffineInverseCells(sourceObj.args, pkg.result.candidate);
     else if (name === "tap-span.fiber-count.v1") checkTapSpanCount(sourceObj.args, pkg.result.candidate);
+    else if (name === "shared-input.masked-count.v1") checkSharedInputMaskedCount(sourceObj.args, pkg.result.candidate);
     else throw Error("Unknown exact primitive");
     return { ok: true, kind: "colony_math_independent_exact_replay", certifiable: false };
   } catch {
