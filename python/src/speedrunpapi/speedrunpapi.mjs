@@ -1985,12 +1985,17 @@ Usage:
   speedrunpapi scan <file> [--json] [--references] [--sarif out.sarif] [--api <url>] [--key <key>]
   speedrunpapi classify <file>
   speedrunpapi verify <result.json> [--source circuit.r1cs]
-  speedrunpapi claim <order> <confirmation> <email>
   speedrunpapi usage [--key <key>]
+  speedrunpapi optimize <model.onnx> [--out candidate.onnx] [--proof-dir evidence]
+  speedrunpapi verify-onnx <original.onnx> <artifacts-dir>
+  speedrunpapi solve <problem.math> | quote <source>
+  speedrunpapi run <source> [--format circom] [--cert]
+  speedrunpapi status <job-id> | result <job-id> | check <source> <result.json>
   speedrunpapi version
 
 File types: .r1cs (binary) | .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
-Compute is local. Optional source-bound API signature uses one certificate credit.
+Scans and independent checks run locally. Jobs use the hosted API and a funded credit key.
+For verify-onnx, install Python ONNX and NumPy. Optional scan signatures use one certificate credit.
 Research DOI references appear only with --references.
 `);
 }
@@ -2073,7 +2078,7 @@ async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
   if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.5.1");
+  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.6.0");
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -2169,7 +2174,32 @@ async function main() {
   usage();
   process.exit(1);
 }
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+const hostedCommands = new Set(["run", "quote", "solve", "optimize", "status", "result", "check"]);
+if (process.argv[2] === "jobs") process.argv.splice(2, 1);
+if (process.argv[2] === "verify-onnx") {
+  const args = process.argv.slice(3);
+  if (args.length !== 2) {
+    console.error("Usage: speedrunpapi verify-onnx <source.onnx> <artifacts-dir>");
+    process.exitCode = 2;
+  } else {
+    Promise.all([import("node:child_process"), import("node:fs"), import("node:url")]).then(([child, fs, url]) => {
+      const locations = ["../verifiers/onnx/independent_plan.py", "./verifiers/onnx/independent_plan.py"];
+      const verifier = locations.map((p) => url.fileURLToPath(new URL(p, import.meta.url))).find((p) => fs.existsSync(p));
+      if (!verifier) throw new Error("Independent ONNX checker is missing from this installation");
+      const python = process.env.COLONY_PYTHON || process.env.PYTHON || "python3";
+      const checked = child.spawnSync(python, [verifier, "--source", args[0], "--artifacts", args[1]], { stdio: "inherit" });
+      if (checked.error) throw new Error(`Python checker failed: ${checked.error.message}`);
+      process.exitCode = checked.status === null ? 1 : checked.status;
+    }).catch((e) => { console.error(e.message); process.exitCode = 1; });
+  }
+} else if (hostedCommands.has(process.argv[2])) {
+  import("./colony-jobs.mjs").catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
+} else {
+  main().catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  });
+}

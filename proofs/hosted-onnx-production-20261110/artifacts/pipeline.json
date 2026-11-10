@@ -1,0 +1,22 @@
+{
+  "claim": "Every admitted ONNX output remains identical under the ordered conjunction of stage observation contracts.",
+  "final_artifact": "candidate.onnx",
+  "final_digest": "sha256:adf8cf00d9eb0286bef42db9d10c6d1069ef7b938230a98b7b64754d78b2faee",
+  "independent_verifier": "colony.inference-pipeline-independent.v1",
+  "measurement": "No hardware speed claim in the mathematical proof; run a separate paired benchmark",
+  "schema": "colony.inference-pipeline.v1",
+  "source_digest": "sha256:589a59ecbda74775cfa4aad73e2444e3689bbb1829712aa5b3ec4da0b7aff2a5",
+  "stages": [
+    {
+      "artifact_name": "stage-01.onnx",
+      "independent_verifier": "colony.quantized-zero-independent.v1",
+      "index": 1,
+      "input_digest": "sha256:589a59ecbda74775cfa4aad73e2444e3689bbb1829712aa5b3ec4da0b7aff2a5",
+      "operator": "onnx.quantized-zero-matmul.v1",
+      "output_digest": "sha256:adf8cf00d9eb0286bef42db9d10c6d1069ef7b938230a98b7b64754d78b2faee",
+      "proof_name": "stage-01.proof.json",
+      "rewrites": 1
+    }
+  ],
+  "verdict": "Candidate"
+}
