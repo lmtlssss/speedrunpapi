@@ -1,0 +1,28 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:a5c9e3495828858893af29ab7d2ba41b7904b15027b50327d966d844e74cc1b4",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "affine.cycle-defects.v1",
+    "scope": "M13: scalar affine cyclic words, chronological linear costs, transported cut defects, and minimum retained defect rank.",
+    "candidate": {
+      "initial": "2/1",
+      "full_map": {
+        "a": "4/3",
+        "b": "-10/3"
+      },
+      "full_cost": {
+        "c": "35/3",
+        "d": "49/3"
+      },
+      "displacement": "-8/3",
+      "cut_defects": [
+        "-8/1",
+        "-104/3"
+      ],
+      "retained_defect_rank": 1
+    },
+    "candidate_digest": "sha256:5ca8d5625e67ecc69c6172af1a3ba3c199e0caa62860929211871442fec30e63"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:eafceb460c622c7ee30235b0c29639d1b2f6ca2697fb4b5aa1c2446a6611462a",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "lattice.phase-selection.v1",
+    "scope": "M11: exact rational common-lattice phase selection at one supplied phase, 1..8 bounded designs and all winner ties.",
+    "candidate": {
+      "spacing": "1/5",
+      "phase": "1/10",
+      "feasible": [
+        {
+          "name": "A",
+          "k": 5,
+          "amplitude": "11/10",
+          "linear_cost": "11/10"
+        },
+        {
+          "name": "B",
+          "k": 5,
+          "amplitude": "11/10",
+          "linear_cost": "209/200"
+        },
+        {
+          "name": "C",
+          "k": 6,
+          "amplitude": "13/10",
+          "linear_cost": "26/25"
+        },
+        {
+          "name": "D",
+          "k": 5,
+          "amplitude": "11/10",
+          "linear_cost": "99/100"
+        }
+      ],
+      "winners": [
+        "D"
+      ],
+      "minimum_linear_cost": "99/100"
+    },
+    "candidate_digest": "sha256:82ab4b7e9a7a762c785f4728e1beac3ce9ea6578fa748b6a9b043a0992d3528e"
+  }
+}

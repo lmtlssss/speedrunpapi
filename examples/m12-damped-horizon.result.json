@@ -1,0 +1,16 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:dacb586f6eba5339522da15185cb09bbfbfe53db5f18cc7a3cad73db41b9128c",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "recurrence.damped-horizon.v1",
+    "scope": "M12: stable conjugate-root second-order rational recurrences, exact minimal uniform observation horizon category 2, 3, or at least 4.",
+    "candidate": {
+      "q": "6/5",
+      "s": "2/5",
+      "horizon_class": "3"
+    },
+    "candidate_digest": "sha256:fb17891fa1e136a9ec78f73735b1a078fe5ea01be60b18c9109871712f6d87e9"
+  }
+}

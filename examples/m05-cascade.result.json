@@ -1,0 +1,73 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:77e34365625a12768c65b75b0c00e19beee207d573b2ff26f3b8a30cc8103aa9",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "cascade.sum-carry.v1",
+    "scope": "M05: exact complete cascaded sum/carry response, original radix 2..16 and stages 1..3; exact class count and minimum label bits.",
+    "candidate": {
+      "radix": 8,
+      "stages": 3,
+      "operands": [
+        2,
+        5,
+        7,
+        1
+      ],
+      "responses": [
+        [
+          7,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          1
+        ],
+        [
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          1,
+          1
+        ],
+        [
+          2,
+          1,
+          1,
+          0
+        ]
+      ],
+      "class_count": 113,
+      "minimum_label_bits": 7
+    },
+    "candidate_digest": "sha256:0769986dd32cb37824416f305ca79305bbba086e8f2dc72cb6ae7271eb643412"
+  }
+}

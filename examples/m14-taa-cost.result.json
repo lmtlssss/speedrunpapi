@@ -1,0 +1,24 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:d653b3cc42d7bcb918201e6d12a5b21da1fb806d0de5b61b2c65d2c4b05c82c5",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "taa.quadratic-cost.v1",
+    "scope": "M14: exact scalar affine state with chronological quadratic accumulated cost, including every cross term for all rational initial states.",
+    "candidate": {
+      "initial": "2/1",
+      "stage_count": 2,
+      "composed": {
+        "f": "6/1",
+        "c": "1/1",
+        "q": "9/1",
+        "r": "14/1",
+        "d": "10/1"
+      },
+      "final_state": "13/1",
+      "total_cost": "74/1"
+    },
+    "candidate_digest": "sha256:734bccfabb77328fe93949536e4b53fd19d7c25168fdf084c7ab91e94969e41e"
+  }
+}

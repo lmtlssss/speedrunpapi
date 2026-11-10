@@ -1,0 +1,1 @@
+{"operator":"taa.quadratic-cost.v1","args":{"initial":"2","steps":[{"f":"2","c":"1","q":"1","r":"0","d":"1"},{"f":"3","c":"-2","q":"2","r":"3","d":"4"}]}}
