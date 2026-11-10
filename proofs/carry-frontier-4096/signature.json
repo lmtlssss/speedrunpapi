@@ -1,0 +1,13 @@
+{
+  "schema": "colony.market-lab-signature.v1",
+  "signature_scope": "laboratory observation receipt",
+  "issuer": "Colony independent local lab, ephemeral key",
+  "signature_algorithm": "Ed25519",
+  "signer_key_id": "lab-sha256:99c8c73e879f43400",
+  "public_key_spki_base64": "MCowBQYDK2VwAyEAyyrfXhLuxVARYLFrCEmooIdfwrnNv1Wdtu5+bbWvCtQ=",
+  "signature_base64": "D3o0ztIAxONzkfW27Ckhx+iz6h45NKx0Qwq3Lhr6ZSq0+qIrYHfbeClxj70Ttr3enUZ+0G7r4lbaV02kmu/5Cw==",
+  "message_digest": "sha256:20a23637df331dca40bb4c7484a587bd4f016f23b7057cce3611065f47aa9dbf",
+  "signed_at": "2026-11-10T12:26:43.965Z",
+  "production_issuer": false,
+  "real_customer_settlement": false
+}
