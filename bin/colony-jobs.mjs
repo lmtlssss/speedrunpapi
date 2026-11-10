@@ -5,15 +5,15 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// src/cli.ts
+// packages/colony-sdk/src/cli.ts
 import fs from "node:fs";
 import path2 from "node:path";
 
-// src/client.ts
+// packages/colony-sdk/src/client.ts
 import { randomUUID, createPublicKey, verify as nodeVerify } from "node:crypto";
 import { basename } from "node:path";
 
-// ../colony-contracts/node_modules/zod/v4/classic/external.js
+// packages/colony-contracts/node_modules/zod/v4/classic/external.js
 var external_exports = {};
 __export(external_exports, {
   $brand: () => $brand,
@@ -276,7 +276,7 @@ __export(external_exports, {
   xor: () => xor
 });
 
-// ../colony-contracts/node_modules/zod/v4/core/index.js
+// packages/colony-contracts/node_modules/zod/v4/core/index.js
 var core_exports2 = {};
 __export(core_exports2, {
   $ZodAny: () => $ZodAny,
@@ -593,7 +593,7 @@ __export(core_exports2, {
   withParser: () => withParser
 });
 
-// ../colony-contracts/node_modules/zod/v4/core/util.js
+// packages/colony-contracts/node_modules/zod/v4/core/util.js
 var util_exports = {};
 __export(util_exports, {
   BIGINT_FORMAT_RANGES: () => BIGINT_FORMAT_RANGES,
@@ -1034,9 +1034,9 @@ function stringifyPrimitive(value) {
     return `"${value}"`;
   return `${value}`;
 }
-function optionalKeys(shape) {
-  return Object.keys(shape).filter((k) => {
-    return shape[k]._zod.optin !== void 0 && shape[k]._zod.optout === "optional";
+function optionalKeys(shape2) {
+  return Object.keys(shape2).filter((k) => {
+    return shape2[k]._zod.optin !== void 0 && shape2[k]._zod.optout === "optional";
   });
 }
 var NUMBER_FORMAT_RANGES = /* @__PURE__ */ (() => ({
@@ -1085,33 +1085,33 @@ function omit(schema, mask) {
   mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)).filter((key) => !omitted.has(key)));
   return clone(schema, mergeDefs(currDef, { shape: newShape, checks: [] }));
 }
-function extend(schema, shape) {
-  if (!isPlainObject(shape)) {
+function extend(schema, shape2) {
+  if (!isPlainObject(shape2)) {
     throw new Error("Invalid input to extend: expected a plain object");
   }
   const checks = schema._zod.def.checks;
   const hasChecks = checks && checks.length > 0;
   if (hasChecks) {
     const existingShape = sourceShape(schema);
-    for (const key of Reflect.ownKeys(shape)) {
+    for (const key of Reflect.ownKeys(shape2)) {
       if (Object.getOwnPropertyDescriptor(existingShape, key) !== void 0) {
         throw new Error("Cannot overwrite keys on object schemas containing refinements. Use `.safeExtend()` instead.");
       }
     }
   }
-  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape) }));
+  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape2) }));
 }
-function extended(schema, shape) {
+function extended(schema, shape2) {
   const newShape = {};
   mirrorShape(newShape, schema, Reflect.ownKeys(sourceShape(schema)));
-  mirrorProps(newShape, shape);
+  mirrorProps(newShape, shape2);
   return newShape;
 }
-function safeExtend(schema, shape) {
-  if (!isPlainObject(shape)) {
+function safeExtend(schema, shape2) {
+  if (!isPlainObject(shape2)) {
     throw new Error("Invalid input to safeExtend: expected a plain object");
   }
-  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape) }));
+  return clone(schema, mergeDefs(schema._zod.def, { shape: extended(schema, shape2) }));
 }
 function merge(a, b) {
   if (!b?._zod?.def) {
@@ -1449,7 +1449,7 @@ function constantCatch(value) {
   return fn;
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/core.js
+// packages/colony-contracts/node_modules/zod/v4/core/core.js
 var _a;
 var NEVER = /* @__PURE__ */ Object.freeze({
   status: "aborted"
@@ -1571,7 +1571,7 @@ function config(newConfig) {
   return globalConfig;
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/errors.js
+// packages/colony-contracts/node_modules/zod/v4/core/errors.js
 function _getMessage() {
   const internals = this._zod;
   internals.message ?? (internals.message = JSON.stringify(internals.def, jsonStringifyReplacer, 2));
@@ -1628,11 +1628,11 @@ function node(obj, key, make) {
 function flattenError(error62, mapper = (issue2) => issue2.message) {
   const fieldErrors = {};
   const formErrors = [];
-  for (const sub of error62.issues) {
-    if (sub.path.length > 0) {
-      node(fieldErrors, sub.path[0], () => []).push(mapper(sub));
+  for (const sub2 of error62.issues) {
+    if (sub2.path.length > 0) {
+      node(fieldErrors, sub2.path[0], () => []).push(mapper(sub2));
     } else {
-      formErrors.push(mapper(sub));
+      formErrors.push(mapper(sub2));
     }
   }
   return { formErrors, fieldErrors };
@@ -1763,7 +1763,7 @@ function prettifyError(error62) {
   return lines.join("\n");
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/parse.js
+// packages/colony-contracts/node_modules/zod/v4/core/parse.js
 function finalizeParams(callee, params) {
   return { callee: params?.callee ?? callee, Err: params?.Err };
 }
@@ -1871,18 +1871,18 @@ var validateAsync = async (schema, value, _ctx) => {
   return result.issues.length === 0;
 };
 var _encode = (_Err) => {
-  const parse4 = _parse(_Err);
+  const parse5 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
     const ctx = _ctx ? { ..._ctx, direction: "backward" } : { direction: "backward" };
-    return parse4(schema, value, ctx, finalizeParams(fn, _params));
+    return parse5(schema, value, ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
 var encode = /* @__PURE__ */ _encode($ZodRealError);
 var _decode = (_Err) => {
-  const parse4 = _parse(_Err);
+  const parse5 = _parse(_Err);
   const fn = (schema, value, _ctx, _params) => {
-    return parse4(schema, value, _ctx, finalizeParams(fn, _params));
+    return parse5(schema, value, _ctx, finalizeParams(fn, _params));
   };
   return fn;
 };
@@ -1923,7 +1923,7 @@ var _safeDecodeAsync = (_Err) => async (schema, value, _ctx) => {
 };
 var safeDecodeAsync = /* @__PURE__ */ _safeDecodeAsync($ZodRealError);
 
-// ../colony-contracts/node_modules/zod/v4/core/regexes.js
+// packages/colony-contracts/node_modules/zod/v4/core/regexes.js
 var regexes_exports = {};
 __export(regexes_exports, {
   anyString: () => anyString,
@@ -2095,7 +2095,7 @@ var sha512_hex = /^[0-9a-fA-F]{128}$/;
 var sha512_base64 = /* @__PURE__ */ fixedBase64(86, "==");
 var sha512_base64url = /* @__PURE__ */ fixedBase64url(86);
 
-// ../colony-contracts/node_modules/zod/v4/core/checks.js
+// packages/colony-contracts/node_modules/zod/v4/core/checks.js
 var $ZodCheck = /* @__PURE__ */ $constructor("$ZodCheck", (inst, def) => {
   var _a3;
   inst._zod ?? (inst._zod = {});
@@ -2571,7 +2571,7 @@ var $ZodCheckOverwrite = /* @__PURE__ */ $constructor("$ZodCheckOverwrite", (ins
   };
 });
 
-// ../colony-contracts/node_modules/zod/v4/core/doc.js
+// packages/colony-contracts/node_modules/zod/v4/core/doc.js
 var Doc = class {
   constructor(args = [], closed = {}) {
     this.content = [];
@@ -2612,14 +2612,14 @@ ${content.join("\n")}
   }
 };
 
-// ../colony-contracts/node_modules/zod/v4/core/versions.js
+// packages/colony-contracts/node_modules/zod/v4/core/versions.js
 var version = {
   major: 4,
   minor: 6,
   patch: 7
 };
 
-// ../colony-contracts/node_modules/zod/v4/core/schemas.js
+// packages/colony-contracts/node_modules/zod/v4/core/schemas.js
 var $ZodType = /* @__PURE__ */ $constructor("$ZodType", (inst, def) => {
   var _a3;
   inst ?? (inst = {});
@@ -3377,7 +3377,7 @@ function capSize(inst, size) {
   if (!caps.length)
     return;
   const cap = Math.min(...caps.map((c) => c[0]));
-  const parse4 = inst._zod.parse;
+  const parse5 = inst._zod.parse;
   inst._zod.parse = (payload, ctx) => {
     const n = size(payload.value);
     if (n > cap && !ctx?.skipChecks && ctx?.direction !== "backward") {
@@ -3391,7 +3391,7 @@ function capSize(inst, size) {
         }
       }
     }
-    return parse4(payload, ctx);
+    return parse5(payload, ctx);
   };
 }
 var arraySize = (input2) => Array.isArray(input2) ? input2.length : -1;
@@ -3559,10 +3559,10 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   }
   const _normalized = cached(() => normalizeDef(def));
   defineLazyInternal(inst, "propValues", (zod) => {
-    const shape = zod.def.shape;
+    const shape2 = zod.def.shape;
     const propValues = {};
-    for (const key in shape) {
-      const field = shape[key]._zod;
+    for (const key in shape2) {
+      const field = shape2[key]._zod;
       if (field.values) {
         if (!Object.prototype.hasOwnProperty.call(propValues, key)) {
           assignProp(propValues, key, /* @__PURE__ */ new Set());
@@ -3594,7 +3594,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
     }
     payload.value = memo2 ? memo2.alloc(inst, payload, {}, ctx) : {};
     const proms = [];
-    const shape = value.shape;
+    const shape2 = value.shape;
     const abortEarly = ctx?.abortEarly;
     let seen = payload.issues.length;
     for (const key of value.allKeys) {
@@ -3605,7 +3605,7 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
       }
       if (key === "__proto__")
         continue;
-      const el = shape[key];
+      const el = shape2[key];
       const optin = el._zod.optin;
       const optout = el._zod.optout;
       const r = el._zod.run({ value: input2[key], issues: [] }, ctx);
@@ -3626,10 +3626,10 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
   const superParse = inst._zod.parse;
   const _normalized = cached(() => normalizeDef(def));
   const memo2 = globalConfig.memoizer;
-  const generateFastpass = (shape) => {
+  const generateFastpass = (shape2) => {
     const normalized = _normalized.value;
     const syms = normalized.symbolKeys;
-    const doc = new Doc(["payload", "ctx"], { shape, inst, memo: memo2, syms });
+    const doc = new Doc(["payload", "ctx"], { shape: shape2, inst, memo: memo2, syms });
     const parseStr = (k) => `shape[${k}]._zod.run({ value: input[${k}], issues: [] }, ctx)`;
     const prefixStr = (id, k) => `
           let ${id}_ab = false;
@@ -3656,7 +3656,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
       const id = ids[key];
       const k = typeof key === "symbol" ? `syms[${syms.indexOf(key)}]` : esc(key);
       const isPresent = `${k} in input`;
-      const schema = shape[key];
+      const schema = shape2[key];
       const optin = schema?._zod?.optin;
       const isOptionalIn = optin !== void 0;
       const isOptionalOut = schema?._zod?.optout === "optional";
@@ -5061,7 +5061,7 @@ function handleRefineResult(result, payload, input2, inst) {
   }
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/memoizer.js
+// packages/colony-contracts/node_modules/zod/v4/core/memoizer.js
 var $ZodCyclicError = class extends Error {
   constructor() {
     super(`Cannot parse a reference cycle that closes through a transform`);
@@ -5095,7 +5095,7 @@ function isRecursive(inst, stack, resolve) {
         result = answer;
     }
   };
-  const shape = (sh, spread) => {
+  const shape2 = (sh, spread) => {
     let answer = NONE;
     for (const key of Reflect.ownKeys(sh)) {
       const desc = Object.getOwnPropertyDescriptor(sh, key);
@@ -5116,7 +5116,7 @@ function isRecursive(inst, stack, resolve) {
   switch (kind) {
     case "object": {
       const raw = rawShape(def);
-      merge2(raw ? shape(raw, true) : ASSUMED);
+      merge2(raw ? shape2(raw, true) : ASSUMED);
       check2(def.catchall);
       break;
     }
@@ -5338,7 +5338,7 @@ function isBackEdge(ctx, value) {
   return backEdges !== void 0 && isRef(value) && backEdges.has(value);
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/index.js
+// packages/colony-contracts/node_modules/zod/v4/locales/index.js
 var locales_exports = {};
 __export(locales_exports, {
   ar: () => ar_default,
@@ -5406,7 +5406,7 @@ __export(locales_exports, {
   zhTW: () => zh_TW_default
 });
 
-// ../colony-contracts/node_modules/zod/v4/locales/ar.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ar.js
 var error = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0641", verb: "\u0623\u0646 \u064A\u062D\u0648\u064A" },
@@ -5518,7 +5518,7 @@ function ar_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/az.js
+// packages/colony-contracts/node_modules/zod/v4/locales/az.js
 var error2 = () => {
   const Sizable = {
     string: { unit: "simvol", verb: "olmal\u0131d\u0131r" },
@@ -5629,8 +5629,8 @@ function az_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/be.js
-function getBelarusianPlural(count2, one, few, many) {
+// packages/colony-contracts/node_modules/zod/v4/locales/be.js
+function getBelarusianPlural(count2, one2, few, many) {
   const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
@@ -5638,7 +5638,7 @@ function getBelarusianPlural(count2, one, few, many) {
     return many;
   }
   if (lastDigit === 1) {
-    return one;
+    return one2;
   }
   if (lastDigit >= 2 && lastDigit <= 4) {
     return few;
@@ -5798,7 +5798,7 @@ function be_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/bg.js
+// packages/colony-contracts/node_modules/zod/v4/locales/bg.js
 var error4 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0430", verb: "\u0434\u0430 \u0441\u044A\u0434\u044A\u0440\u0436\u0430" },
@@ -5924,7 +5924,7 @@ function bg_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/bn.js
+// packages/colony-contracts/node_modules/zod/v4/locales/bn.js
 var error5 = () => {
   const Sizable = {
     string: { unit: "\u0985\u0995\u09CD\u09B7\u09B0", verb: "\u09A5\u09BE\u0995\u09A4\u09C7 \u09B9\u09AC\u09C7" },
@@ -6038,7 +6038,7 @@ function bn_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ca.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ca.js
 var error6 = () => {
   const Sizable = {
     string: { unit: "car\xE0cters", verb: "contenir" },
@@ -6152,7 +6152,7 @@ function ca_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ckb.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ckb.js
 var error7 = () => {
   const Sizable = {
     string: { unit: "\u067E\u06CC\u062A", verb: "\u0628\u06CE\u062A" },
@@ -6285,7 +6285,7 @@ function ckb_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/cs.js
+// packages/colony-contracts/node_modules/zod/v4/locales/cs.js
 var error8 = () => {
   const Sizable = {
     string: { unit: "znak\u016F", verb: "m\xEDt" },
@@ -6402,7 +6402,7 @@ function cs_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/da.js
+// packages/colony-contracts/node_modules/zod/v4/locales/da.js
 var error9 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "havde" },
@@ -6523,7 +6523,7 @@ function da_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/de.js
+// packages/colony-contracts/node_modules/zod/v4/locales/de.js
 var error10 = () => {
   const Sizable = {
     string: { unit: "Zeichen", verb: "zu haben" },
@@ -6637,7 +6637,7 @@ function de_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/el.js
+// packages/colony-contracts/node_modules/zod/v4/locales/el.js
 var error11 = () => {
   const Sizable = {
     string: { unit: "\u03C7\u03B1\u03C1\u03B1\u03BA\u03C4\u03AE\u03C1\u03B5\u03C2", verb: "\u03BD\u03B1 \u03AD\u03C7\u03B5\u03B9" },
@@ -6750,7 +6750,7 @@ function el_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/en.js
+// packages/colony-contracts/node_modules/zod/v4/locales/en.js
 var error12 = () => {
   const Sizable = {
     string: { unit: "characters", verb: "to have" },
@@ -6875,7 +6875,7 @@ function en_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/eo.js
+// packages/colony-contracts/node_modules/zod/v4/locales/eo.js
 var error13 = () => {
   const Sizable = {
     string: { unit: "karaktrojn", verb: "havi" },
@@ -6990,7 +6990,7 @@ function eo_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/es.js
+// packages/colony-contracts/node_modules/zod/v4/locales/es.js
 var error14 = () => {
   const Sizable = {
     string: { unit: "caracteres", verb: "tener" },
@@ -7127,7 +7127,7 @@ function es_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/fa.js
+// packages/colony-contracts/node_modules/zod/v4/locales/fa.js
 var error15 = () => {
   const Sizable = {
     string: { unit: "\u06A9\u0627\u0631\u0627\u06A9\u062A\u0631", verb: "\u062F\u0627\u0634\u062A\u0647 \u0628\u0627\u0634\u062F" },
@@ -7247,7 +7247,7 @@ function fa_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/fi.js
+// packages/colony-contracts/node_modules/zod/v4/locales/fi.js
 var error16 = () => {
   const Sizable = {
     string: { unit: "merkki\xE4", subject: "merkkijonon" },
@@ -7365,7 +7365,7 @@ function fi_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/fr.js
+// packages/colony-contracts/node_modules/zod/v4/locales/fr.js
 var error17 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
@@ -7495,7 +7495,7 @@ function fr_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/fr-CA.js
+// packages/colony-contracts/node_modules/zod/v4/locales/fr-CA.js
 var error18 = () => {
   const Sizable = {
     string: { unit: "caract\xE8res", verb: "avoir" },
@@ -7608,7 +7608,7 @@ function fr_CA_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/gu.js
+// packages/colony-contracts/node_modules/zod/v4/locales/gu.js
 var error19 = () => {
   const Sizable = {
     string: { unit: "\u0A85\u0A95\u0ACD\u0AB7\u0AB0", verb: "\u0AB9\u0ACB\u0AB5\u0ABE \u0A9C\u0ACB\u0A88\u0A8F" },
@@ -7722,7 +7722,7 @@ function gu_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/he.js
+// packages/colony-contracts/node_modules/zod/v4/locales/he.js
 var error20 = () => {
   const TypeNames = {
     string: { label: "\u05DE\u05D7\u05E8\u05D5\u05D6\u05EA", gender: "f" },
@@ -7924,7 +7924,7 @@ function he_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/hi.js
+// packages/colony-contracts/node_modules/zod/v4/locales/hi.js
 var error21 = () => {
   const Sizable = {
     string: { unit: "\u0905\u0915\u094D\u0937\u0930", verb: "\u0930\u0916\u0928\u0947 \u0915\u0947 \u0932\u093F\u090F" },
@@ -8036,7 +8036,7 @@ function hi_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/hr.js
+// packages/colony-contracts/node_modules/zod/v4/locales/hr.js
 var error22 = () => {
   const Sizable = {
     string: { unit: "znakova", verb: "imati" },
@@ -8163,7 +8163,7 @@ function hr_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/hu.js
+// packages/colony-contracts/node_modules/zod/v4/locales/hu.js
 var error23 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "legyen" },
@@ -8277,9 +8277,9 @@ function hu_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/hy.js
-function getArmenianPlural(count2, one, many) {
-  return Math.abs(count2) === 1 ? one : many;
+// packages/colony-contracts/node_modules/zod/v4/locales/hy.js
+function getArmenianPlural(count2, one2, many) {
+  return Math.abs(count2) === 1 ? one2 : many;
 }
 function withDefiniteArticle(word) {
   if (!word)
@@ -8436,7 +8436,7 @@ function hy_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/id.js
+// packages/colony-contracts/node_modules/zod/v4/locales/id.js
 var error25 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "memiliki" },
@@ -8548,7 +8548,7 @@ function id_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/is.js
+// packages/colony-contracts/node_modules/zod/v4/locales/is.js
 var error26 = () => {
   const Sizable = {
     string: { unit: "stafi", verb: "a\xF0 hafa" },
@@ -8663,7 +8663,7 @@ function is_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/it.js
+// packages/colony-contracts/node_modules/zod/v4/locales/it.js
 var error27 = () => {
   const Sizable = {
     string: { unit: "caratteri", verb: "avere" },
@@ -8777,7 +8777,7 @@ function it_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ja.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ja.js
 var error28 = () => {
   const Sizable = {
     string: { unit: "\u6587\u5B57", verb: "\u3067\u3042\u308B" },
@@ -8890,7 +8890,7 @@ function ja_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ka.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ka.js
 var error29 = () => {
   const Sizable = {
     string: { unit: "\u10E1\u10D8\u10DB\u10D1\u10DD\u10DA\u10DD", verb: "\u10E3\u10DC\u10D3\u10D0 \u10E8\u10D4\u10D8\u10EA\u10D0\u10D5\u10D3\u10D4\u10E1" },
@@ -9008,7 +9008,7 @@ function ka_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/km.js
+// packages/colony-contracts/node_modules/zod/v4/locales/km.js
 var error30 = () => {
   const Sizable = {
     string: { unit: "\u178F\u17BD\u17A2\u1780\u17D2\u179F\u179A", verb: "\u1782\u17BD\u179A\u1798\u17B6\u1793" },
@@ -9124,12 +9124,12 @@ function km_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/kh.js
+// packages/colony-contracts/node_modules/zod/v4/locales/kh.js
 function kh_default() {
   return km_default();
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/kn.js
+// packages/colony-contracts/node_modules/zod/v4/locales/kn.js
 var error31 = () => {
   const Sizable = {
     string: { unit: "\u0C85\u0C95\u0CCD\u0CB7\u0CB0\u0C97\u0CB3\u0CC1", verb: "\u0CB9\u0CCA\u0C82\u0CA6\u0CB2\u0CC1" },
@@ -9245,7 +9245,7 @@ function kn_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ko.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ko.js
 var error32 = () => {
   const Sizable = {
     string: { unit: "\uBB38\uC790", verb: "to have" },
@@ -9362,14 +9362,14 @@ function ko_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/lt.js
+// packages/colony-contracts/node_modules/zod/v4/locales/lt.js
 var capitalizeFirstCharacter = (text) => {
   return text.charAt(0).toUpperCase() + text.slice(1);
 };
 function getUnitTypeFromNumber(number4) {
-  const abs = Math.abs(number4);
-  const last = abs % 10;
-  const last2 = abs % 100;
+  const abs2 = Math.abs(number4);
+  const last = abs2 % 10;
+  const last2 = abs2 % 100;
   if (last2 >= 11 && last2 <= 19 || last === 0)
     return "many";
   if (last === 1)
@@ -9570,7 +9570,7 @@ function lt_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/mk.js
+// packages/colony-contracts/node_modules/zod/v4/locales/mk.js
 var error34 = () => {
   const Sizable = {
     string: { unit: "\u0437\u043D\u0430\u0446\u0438", verb: "\u0434\u0430 \u0438\u043C\u0430\u0430\u0442" },
@@ -9685,7 +9685,7 @@ function mk_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ms.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ms.js
 var error35 = () => {
   const Sizable = {
     string: { unit: "aksara", verb: "mempunyai" },
@@ -9798,7 +9798,7 @@ function ms_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ne.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ne.js
 var error36 = () => {
   const Sizable = {
     string: { unit: "\u0905\u0915\u094D\u0937\u0930", verb: "\u0939\u0941\u0928\u0941\u092A\u0930\u094D\u091B" },
@@ -9910,7 +9910,7 @@ function ne_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/nl.js
+// packages/colony-contracts/node_modules/zod/v4/locales/nl.js
 var error37 = () => {
   const Sizable = {
     string: { unit: "tekens", verb: "heeft" },
@@ -10026,7 +10026,7 @@ function nl_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/nn.js
+// packages/colony-contracts/node_modules/zod/v4/locales/nn.js
 var error38 = () => {
   const Sizable = {
     string: { unit: "teikn", verb: "\xE5 ha" },
@@ -10140,7 +10140,7 @@ function nn_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/no.js
+// packages/colony-contracts/node_modules/zod/v4/locales/no.js
 var error39 = () => {
   const Sizable = {
     string: { unit: "tegn", verb: "\xE5 ha" },
@@ -10254,7 +10254,7 @@ function no_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ota.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ota.js
 var error40 = () => {
   const Sizable = {
     string: { unit: "harf", verb: "olmal\u0131d\u0131r" },
@@ -10369,7 +10369,7 @@ function ota_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ps.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ps.js
 var error41 = () => {
   const Sizable = {
     string: { unit: "\u062A\u0648\u06A9\u064A", verb: "\u0648\u0644\u0631\u064A" },
@@ -10489,7 +10489,7 @@ function ps_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/pl.js
+// packages/colony-contracts/node_modules/zod/v4/locales/pl.js
 var error42 = () => {
   const Sizable = {
     string: { unit: "znak\xF3w", verb: "mie\u0107" },
@@ -10604,7 +10604,7 @@ function pl_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/pt.js
+// packages/colony-contracts/node_modules/zod/v4/locales/pt.js
 var error43 = () => {
   const Sizable = {
     string: { unit: "caracteres" },
@@ -10748,7 +10748,7 @@ function pt_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/pt-BR.js
+// packages/colony-contracts/node_modules/zod/v4/locales/pt-BR.js
 var error44 = () => {
   const Sizable = {
     string: { unit: "caracteres" },
@@ -10893,7 +10893,7 @@ function pt_BR_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ro.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ro.js
 var error45 = () => {
   const Sizable = {
     string: { unit: "caractere", verb: "s\u0103 aib\u0103" },
@@ -11016,8 +11016,8 @@ function ro_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ru.js
-function getRussianPlural(count2, one, few, many) {
+// packages/colony-contracts/node_modules/zod/v4/locales/ru.js
+function getRussianPlural(count2, one2, few, many) {
   const absCount = Math.abs(count2);
   const lastDigit = absCount % 10;
   const lastTwoDigits = absCount % 100;
@@ -11025,7 +11025,7 @@ function getRussianPlural(count2, one, few, many) {
     return many;
   }
   if (lastDigit === 1) {
-    return one;
+    return one2;
   }
   if (lastDigit >= 2 && lastDigit <= 4) {
     return few;
@@ -11185,7 +11185,7 @@ function ru_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/sk.js
+// packages/colony-contracts/node_modules/zod/v4/locales/sk.js
 var error47 = () => {
   const Sizable = {
     string: { unit: "znakov", verb: "ma\u0165" },
@@ -11302,7 +11302,7 @@ function sk_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/sl.js
+// packages/colony-contracts/node_modules/zod/v4/locales/sl.js
 var error48 = () => {
   const Sizable = {
     string: { unit: "znakov", verb: "imeti" },
@@ -11417,7 +11417,7 @@ function sl_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/sv.js
+// packages/colony-contracts/node_modules/zod/v4/locales/sv.js
 var error49 = () => {
   const Sizable = {
     string: { unit: "tecken", verb: "att ha" },
@@ -11533,7 +11533,7 @@ function sv_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ta.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ta.js
 var error50 = () => {
   const Sizable = {
     string: { unit: "\u0B8E\u0BB4\u0BC1\u0BA4\u0BCD\u0BA4\u0BC1\u0B95\u0BCD\u0B95\u0BB3\u0BCD", verb: "\u0B95\u0BCA\u0BA3\u0BCD\u0B9F\u0BBF\u0BB0\u0BC1\u0B95\u0BCD\u0B95 \u0BB5\u0BC7\u0BA3\u0BCD\u0B9F\u0BC1\u0BAE\u0BCD" },
@@ -11649,7 +11649,7 @@ function ta_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/tg.js
+// packages/colony-contracts/node_modules/zod/v4/locales/tg.js
 var error51 = () => {
   const Sizable = {
     string: { unit: "\u0430\u043B\u043E\u043C\u0430\u0442", verb: "\u0434\u043E\u0448\u0442\u0430 \u0431\u043E\u0448\u0430\u0434" },
@@ -11766,7 +11766,7 @@ function tg_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/th.js
+// packages/colony-contracts/node_modules/zod/v4/locales/th.js
 var error52 = () => {
   const Sizable = {
     string: { unit: "\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23", verb: "\u0E04\u0E27\u0E23\u0E21\u0E35" },
@@ -11882,7 +11882,7 @@ function th_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/tk.js
+// packages/colony-contracts/node_modules/zod/v4/locales/tk.js
 var error53 = () => {
   const Sizable = {
     string: { unit: "simwol", verb: "bolmaly" },
@@ -11990,7 +11990,7 @@ function tk_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/tr.js
+// packages/colony-contracts/node_modules/zod/v4/locales/tr.js
 var error54 = () => {
   const Sizable = {
     string: { unit: "karakter", verb: "olmal\u0131" },
@@ -12101,7 +12101,7 @@ function tr_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/uk.js
+// packages/colony-contracts/node_modules/zod/v4/locales/uk.js
 var error55 = () => {
   const Sizable = {
     string: { unit: "\u0441\u0438\u043C\u0432\u043E\u043B\u0456\u0432", verb: "\u043C\u0430\u0442\u0438\u043C\u0435" },
@@ -12215,12 +12215,12 @@ function uk_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ua.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ua.js
 function ua_default() {
   return uk_default();
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/ur.js
+// packages/colony-contracts/node_modules/zod/v4/locales/ur.js
 var error56 = () => {
   const Sizable = {
     string: { unit: "\u062D\u0631\u0648\u0641", verb: "\u06C1\u0648\u0646\u0627" },
@@ -12336,7 +12336,7 @@ function ur_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/uz.js
+// packages/colony-contracts/node_modules/zod/v4/locales/uz.js
 var error57 = () => {
   const Sizable = {
     string: { unit: "belgi", verb: "bo\u2018lishi kerak" },
@@ -12450,7 +12450,7 @@ function uz_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/vi.js
+// packages/colony-contracts/node_modules/zod/v4/locales/vi.js
 var error58 = () => {
   const Sizable = {
     string: { unit: "k\xFD t\u1EF1", verb: "c\xF3" },
@@ -12564,7 +12564,7 @@ function vi_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/zh-CN.js
+// packages/colony-contracts/node_modules/zod/v4/locales/zh-CN.js
 var error59 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u7B26", verb: "\u5305\u542B" },
@@ -12679,7 +12679,7 @@ function zh_CN_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/zh-TW.js
+// packages/colony-contracts/node_modules/zod/v4/locales/zh-TW.js
 var error60 = () => {
   const Sizable = {
     string: { unit: "\u5B57\u5143", verb: "\u64C1\u6709" },
@@ -12792,7 +12792,7 @@ function zh_TW_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/locales/yo.js
+// packages/colony-contracts/node_modules/zod/v4/locales/yo.js
 var error61 = () => {
   const Sizable = {
     string: { unit: "\xE0mi", verb: "n\xED" },
@@ -12905,7 +12905,7 @@ function yo_default() {
   };
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/registries.js
+// packages/colony-contracts/node_modules/zod/v4/core/registries.js
 var _a2;
 var $output = /* @__PURE__ */ Symbol("ZodOutput");
 var $input = /* @__PURE__ */ Symbol("ZodInput");
@@ -12955,7 +12955,7 @@ function registry() {
 (_a2 = globalThis).__zod_globalRegistry ?? (_a2.__zod_globalRegistry = registry());
 var globalRegistry = globalThis.__zod_globalRegistry;
 
-// ../colony-contracts/node_modules/zod/v4/core/compile.js
+// packages/colony-contracts/node_modules/zod/v4/core/compile.js
 var INVALID = Symbol.for("zod.compile.invalid");
 var FALLBACK_FLAG = Symbol.for("zod.compile.fallback");
 var ZodCompileAsyncError = class extends Error {
@@ -13327,12 +13327,12 @@ function generatePropertiesChecks(doc, ctx, def, accessor) {
     throw new ZodCompileUnsupportedError(`check with a custom "when" condition`);
   }
   doc.write(`if (${accessor} == null) return INVALID;`);
-  const shape = def.shape;
-  for (const key of Reflect.ownKeys(shape)) {
+  const shape2 = def.shape;
+  for (const key of Reflect.ownKeys(shape2)) {
     const keyExpr = typeof key === "symbol" ? addConstant(ctx, key) : esc(key);
     const inputVar = newVar(ctx);
     doc.write(`const ${inputVar} = ${accessor}[${keyExpr}];`);
-    compileChild(doc, ctx, shape[key], inputVar, false);
+    compileChild(doc, ctx, shape2[key], inputVar, false);
   }
 }
 function generatePropertyCheck(doc, ctx, def, accessor) {
@@ -13714,13 +13714,13 @@ function generateDateCheck(doc, accessor) {
 function generateObjectCheck(doc, ctx, schema, accessor, buildsValue = true) {
   const def = schema._zod.def;
   doc.write(`if (typeof ${accessor} !== "object" || ${accessor} === null || Array.isArray(${accessor})) return INVALID;`);
-  const shape = def.shape;
-  const keys2 = Object.keys(shape);
-  const symbolKeys = Object.getOwnPropertySymbols(shape);
+  const shape2 = def.shape;
+  const keys2 = Object.keys(shape2);
+  const symbolKeys = Object.getOwnPropertySymbols(shape2);
   const allKeys = symbolKeys.length ? [...keys2, ...symbolKeys] : keys2;
   const keyExpr = (k) => typeof k === "symbol" ? addConstant(ctx, k) : esc(k);
   const propKey = (k) => typeof k === "symbol" ? `[${keyExpr(k)}]` : esc(k);
-  const propShape = shape;
+  const propShape = shape2;
   if (keys2.includes("__proto__")) {
     throw new ZodCompileUnsupportedError('object shape key "__proto__"');
   }
@@ -14565,7 +14565,7 @@ function generateTransformCheck(doc, ctx, schema, accessor) {
   return accessor;
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/api.js
+// packages/colony-contracts/node_modules/zod/v4/core/api.js
 function snapshotChecks(def) {
   if (def.checks)
     def.checks = [...def.checks];
@@ -15227,10 +15227,10 @@ function _property(property, schema, params) {
   });
 }
 // @__NO_SIDE_EFFECTS__
-function _properties(shape, params) {
+function _properties(shape2, params) {
   return new $ZodCheckProperties({
     check: "properties",
-    shape,
+    shape: shape2,
     ...normalizeParams(params)
   });
 }
@@ -15624,7 +15624,7 @@ function _stringFormat(Class2, format, fnOrRegex, _params = {}) {
   return inst;
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/to-json-schema.js
+// packages/colony-contracts/node_modules/zod/v4/core/to-json-schema.js
 function assignProps(target, ...sources) {
   for (const source of sources) {
     for (const key of Reflect.ownKeys(source)) {
@@ -16154,7 +16154,7 @@ var createStandardJSONSchemaMethod = (schema, io, processors = {}) => (params) =
   return finalize(ctx, schema);
 };
 
-// ../colony-contracts/node_modules/zod/v4/core/json-schema-processors.js
+// packages/colony-contracts/node_modules/zod/v4/core/json-schema-processors.js
 var narrowMin = (agg, key, value) => {
   if (agg[key] === void 0 || value > agg[key])
     agg[key] = value;
@@ -16492,21 +16492,21 @@ function inputOptin(schema) {
 var objectProcessor = (schema, ctx, _json, params) => {
   const json2 = _json;
   const def = schema._zod.def;
-  const shape = def.shape;
-  const symbolKeys = Object.getOwnPropertySymbols(shape);
+  const shape2 = def.shape;
+  const symbolKeys = Object.getOwnPropertySymbols(shape2);
   if (symbolKeys.length && handleUnrepresentable(schema, ctx, json2, params, "Symbol keys cannot be represented in JSON Schema")) {
     return;
   }
   json2.type = "object";
   json2.properties = {};
-  for (const key in shape) {
-    assignProp(json2.properties, key, processSchema(shape[key], ctx, {
+  for (const key in shape2) {
+    assignProp(json2.properties, key, processSchema(shape2[key], ctx, {
       ...params,
       path: [...params.path, "properties", key]
     }));
   }
   const requiredKeys = [];
-  for (const key of Object.keys(shape)) {
+  for (const key of Object.keys(shape2)) {
     const field = def.shape[key];
     if (ctx.io === "input" ? inputOptin(field) === void 0 : field._zod.optout === void 0) {
       requiredKeys.push(key);
@@ -16902,7 +16902,7 @@ function toJSONSchema(input2, params) {
   return finalize(ctx, input2);
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/json-schema-generator.js
+// packages/colony-contracts/node_modules/zod/v4/core/json-schema-generator.js
 var JSONSchemaGenerator = class {
   /** @deprecated Access via ctx instead */
   get metadataRegistry() {
@@ -16980,10 +16980,10 @@ var JSONSchemaGenerator = class {
   }
 };
 
-// ../colony-contracts/node_modules/zod/v4/core/json-schema.js
+// packages/colony-contracts/node_modules/zod/v4/core/json-schema.js
 var json_schema_exports = {};
 
-// ../colony-contracts/node_modules/zod/v4/classic/schemas.js
+// packages/colony-contracts/node_modules/zod/v4/classic/schemas.js
 var schemas_exports2 = {};
 __export(schemas_exports2, {
   ZodAny: () => ZodAny,
@@ -17164,7 +17164,7 @@ __export(schemas_exports2, {
   xor: () => xor
 });
 
-// ../colony-contracts/node_modules/zod/v4/classic/checks.js
+// packages/colony-contracts/node_modules/zod/v4/classic/checks.js
 var checks_exports2 = {};
 __export(checks_exports2, {
   endsWith: () => _endsWith,
@@ -17199,7 +17199,7 @@ __export(checks_exports2, {
   uppercase: () => _uppercase
 });
 
-// ../colony-contracts/node_modules/zod/v4/classic/errors.js
+// packages/colony-contracts/node_modules/zod/v4/classic/errors.js
 var _installedErrorProtos = /* @__PURE__ */ new WeakSet([Object.prototype, Error.prototype]);
 function _lazyMethod(proto, key, make) {
   Object.defineProperty(proto, key, {
@@ -17245,7 +17245,7 @@ var ZodRealError = /* @__PURE__ */ $constructor("ZodError", initializer2, void 0
   Parent: Error
 });
 
-// ../colony-contracts/node_modules/zod/v4/classic/parse.js
+// packages/colony-contracts/node_modules/zod/v4/classic/parse.js
 var parse2 = /* @__PURE__ */ _parse(ZodRealError);
 var parseAsync2 = /* @__PURE__ */ _parseAsync(ZodRealError);
 var safeParse2 = /* @__PURE__ */ _safeParse(ZodRealError);
@@ -17259,7 +17259,7 @@ var safeDecode2 = /* @__PURE__ */ _safeDecode(ZodRealError);
 var safeEncodeAsync2 = /* @__PURE__ */ _safeEncodeAsync(ZodRealError);
 var safeDecodeAsync2 = /* @__PURE__ */ _safeDecodeAsync(ZodRealError);
 
-// ../colony-contracts/node_modules/zod/v4/classic/schemas.js
+// packages/colony-contracts/node_modules/zod/v4/classic/schemas.js
 function _ensureDefaultLocale() {
   if (!globalConfig.localeError)
     config(en_default());
@@ -18068,8 +18068,8 @@ function array(element, params) {
   return _array(ZodArray, element, params);
 }
 function keyof(schema) {
-  const shape = schema._zod.def.shape;
-  return _enum2(Object.keys(shape));
+  const shape2 = schema._zod.def.shape;
+  return _enum2(Object.keys(shape2));
 }
 var ZodObject = /* @__PURE__ */ $constructor("ZodObject", (inst, def) => {
   _ensureDefaultMemoizer();
@@ -18121,26 +18121,26 @@ var ZodObject = /* @__PURE__ */ $constructor("ZodObject", (inst, def) => {
     return util_exports.required(ZodNonOptional, this, args[0]);
   }
 });
-function object(shape, params) {
+function object(shape2, params) {
   const def = {
     type: "object",
-    shape: shape ?? {},
+    shape: shape2 ?? {},
     ...util_exports.normalizeParams(params)
   };
   return new ZodObject(def);
 }
-function strictObject(shape, params) {
+function strictObject(shape2, params) {
   return new ZodObject({
     type: "object",
-    shape,
+    shape: shape2,
     catchall: never(),
     ...util_exports.normalizeParams(params)
   });
 }
-function looseObject(shape, params) {
+function looseObject(shape2, params) {
   return new ZodObject({
     type: "object",
-    shape,
+    shape: shape2,
     catchall: unknown(),
     ...util_exports.normalizeParams(params)
   });
@@ -18679,8 +18679,8 @@ var meta2 = meta;
 var ZodInstanceOf = /* @__PURE__ */ $constructor("ZodInstanceOf", (inst, def) => {
   ZodCustom.init(inst, def);
 }, {
-  properties(shape, params) {
-    return this.check(_properties(shape, params));
+  properties(shape2, params) {
+    return this.check(_properties(shape2, params));
   }
 });
 function _instanceof(cls, params = {}) {
@@ -18724,7 +18724,7 @@ function preprocess(fn, schema) {
   });
 }
 
-// ../colony-contracts/node_modules/zod/v4/classic/compat.js
+// packages/colony-contracts/node_modules/zod/v4/classic/compat.js
 var ZodIssueCode = {
   invalid_type: "invalid_type",
   too_big: "too_big",
@@ -18750,7 +18750,7 @@ var ZodFirstPartyTypeKind;
 /* @__PURE__ */ (function(ZodFirstPartyTypeKind2) {
 })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
 
-// ../colony-contracts/node_modules/zod/v4/classic/iso.js
+// packages/colony-contracts/node_modules/zod/v4/classic/iso.js
 var iso_exports = {};
 __export(iso_exports, {
   ZodISODate: () => ZodISODate,
@@ -18775,7 +18775,7 @@ function duration2(params) {
   return _isoDuration(ZodISODuration, params);
 }
 
-// ../colony-contracts/node_modules/zod/v4/classic/from-json-schema.js
+// packages/colony-contracts/node_modules/zod/v4/classic/from-json-schema.js
 var z = {
   ...schemas_exports2,
   ...checks_exports2,
@@ -19007,12 +19007,12 @@ function containsRef(value) {
     return value.some(containsRef);
   if (typeof value.$ref === "string")
     return true;
-  return Object.entries(value).some(([key, sub]) => {
+  return Object.entries(value).some(([key, sub2]) => {
     if (SCHEMA_KEYWORDS.has(key))
-      return containsRef(sub);
-    if (!SCHEMA_MAP_KEYWORDS.has(key) || typeof sub !== "object" || sub === null)
+      return containsRef(sub2);
+    if (!SCHEMA_MAP_KEYWORDS.has(key) || typeof sub2 !== "object" || sub2 === null)
       return false;
-    return Object.values(sub).some(containsRef);
+    return Object.values(sub2).some(containsRef);
   });
 }
 function plural(n) {
@@ -19266,13 +19266,13 @@ function convertBaseSchema(schema, ctx) {
       break;
     }
     case "object": {
-      const shape = {};
+      const shape2 = {};
       const properties = schema.properties || {};
       const requiredSet = new Set(schema.required || []);
       const additionalSchema = typeof schema.additionalProperties === "object" ? convertSchema(schema.additionalProperties, ctx) : void 0;
       for (const [key, propSchema] of Object.entries(properties)) {
         const propZodSchema = convertSchema(propSchema, ctx);
-        assignProp(shape, key, requiredSet.has(key) ? propZodSchema : propZodSchema.optional());
+        assignProp(shape2, key, requiredSet.has(key) ? propZodSchema : propZodSchema.optional());
       }
       if (schema.patternProperties) {
         const patternProps = schema.patternProperties;
@@ -19284,8 +19284,8 @@ function convertBaseSchema(schema, ctx) {
           looseRecords.push(z.looseRecord(keySchema, patternValue));
         }
         const schemasToIntersect = [];
-        if (Object.keys(shape).length > 0) {
-          schemasToIntersect.push(z.object(shape).passthrough());
+        if (Object.keys(shape2).length > 0) {
+          schemasToIntersect.push(z.object(shape2).passthrough());
         }
         schemasToIntersect.push(...looseRecords);
         if (schemasToIntersect.length === 0) {
@@ -19300,7 +19300,7 @@ function convertBaseSchema(schema, ctx) {
           zodSchema = result;
         }
         if (schema.additionalProperties === false) {
-          const propertyKeys = Object.keys(shape);
+          const propertyKeys = Object.keys(shape2);
           const patterns = patternKeys.map((p) => new RegExp(p));
           const basePatternSchema = zodSchema;
           zodSchema = zodSchema.check((payload) => {
@@ -19325,7 +19325,7 @@ function convertBaseSchema(schema, ctx) {
           });
         }
       } else {
-        const objectSchema = z.object(shape);
+        const objectSchema = z.object(shape2);
         if (schema.additionalProperties === false) {
           zodSchema = objectSchema.strict();
         } else if (additionalSchema) {
@@ -19508,7 +19508,7 @@ function fromJSONSchema(schema, params) {
   return convertSchema(normalized, ctx);
 }
 
-// ../colony-contracts/node_modules/zod/v4/core/visit.js
+// packages/colony-contracts/node_modules/zod/v4/core/visit.js
 var RESOLVING = Symbol("z.visit/resolving");
 function visit(schema, fnOrHandlers) {
   const fn = typeof fnOrHandlers === "function" ? fnOrHandlers : (node2, rewritten) => {
@@ -19663,7 +19663,7 @@ function visit(schema, fnOrHandlers) {
   return run(schema);
 }
 
-// ../colony-contracts/node_modules/zod/v4/classic/deep-partial.js
+// packages/colony-contracts/node_modules/zod/v4/classic/deep-partial.js
 function deepPartial(schema) {
   return visit(schema, {
     object: (s) => s.partial(),
@@ -19675,7 +19675,7 @@ function deepPartial(schema) {
   });
 }
 
-// ../colony-contracts/node_modules/zod/v4/classic/in-out.js
+// packages/colony-contracts/node_modules/zod/v4/classic/in-out.js
 function withChecks(side, checks) {
   if (!checks?.length)
     return side;
@@ -19705,7 +19705,7 @@ function output(schema) {
   });
 }
 
-// ../colony-contracts/node_modules/zod/v4/classic/coerce.js
+// packages/colony-contracts/node_modules/zod/v4/classic/coerce.js
 var coerce_exports = {};
 __export(coerce_exports, {
   bigint: () => bigint3,
@@ -19730,7 +19730,7 @@ function date4(params) {
   return _coercedDate(ZodDate, params);
 }
 
-// ../colony-contracts/src/schemas.ts
+// packages/colony-contracts/src/schemas.ts
 var DigestSchema = external_exports.string().regex(/^sha256:[0-9a-f]{64}$/);
 var label = external_exports.string().min(1).max(256);
 var count = external_exports.number().int().min(0).max(Number.MAX_SAFE_INTEGER);
@@ -19857,7 +19857,7 @@ var BenchmarkReceiptSchema = external_exports.strictObject({
   outcome: external_exports.enum(["improved", "no_improvement", "unknown"])
 });
 
-// ../colony-contracts/src/canonical.ts
+// packages/colony-contracts/src/canonical.ts
 function canonicalJson(value) {
   const seen = /* @__PURE__ */ new Set();
   function encode3(x) {
@@ -19893,7 +19893,7 @@ function digestJson(value) {
   return digestBytes(new TextEncoder().encode(canonicalJson(value)));
 }
 
-// ../carrycert-core/src/math.ts
+// packages/carrycert-core/src/math.ts
 var BN128_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 function arrangementNumber(k) {
   let v = 1n;
@@ -19987,7 +19987,7 @@ function frontierSolve(width, offsets, masks, targets) {
   return { count: count2, attempted, maxStates };
 }
 
-// ../carrycert-core/src/analyze.ts
+// packages/carrycert-core/src/analyze.ts
 function modsumUnique(c) {
   if (c.equation && c.sum_bitified && c.carry_bitified) {
     return { unique: true, reason: "joint Num2Bits-style (sum+carry bits) uniquely determines (sum,carry)" };
@@ -20035,9 +20035,9 @@ function modInv(a, m) {
   let [old_r, r] = [a % m, m];
   let [old_s, s] = [1n, 0n];
   while (r !== 0n) {
-    const q = old_r / r;
-    [old_r, r] = [r, old_r - q * r];
-    [old_s, s] = [s, old_s - q * s];
+    const q2 = old_r / r;
+    [old_r, r] = [r, old_r - q2 * r];
+    [old_s, s] = [s, old_s - q2 * s];
   }
   return (old_s % m + m) % m;
 }
@@ -20453,7 +20453,7 @@ function analyze(gadget) {
   });
 }
 
-// ../carrycert-core/src/checker.ts
+// packages/carrycert-core/src/checker.ts
 function checkResult(r) {
   if (r.verdict === "Broken") {
     const cex = r.counterexample ?? {};
@@ -20495,7 +20495,7 @@ function checkResult(r) {
   return { ok: true, kind: "unknown_skip" };
 }
 
-// ../carrycert-core/src/circom-adapter.ts
+// packages/carrycert-core/src/circom-adapter.ts
 function stripComments(src) {
   return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
@@ -20821,7 +20821,7 @@ function classifyCircomSource(src, id = "circuit") {
   };
 }
 
-// ../carrycert-core/src/adapters/verilog.ts
+// packages/carrycert-core/src/adapters/verilog.ts
 function classifyVerilogSource(src, id = "hw_circuit") {
   const clean = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
   const widthM = clean.match(/\[\s*(\d+)\s*:\s*0\s*\]/);
@@ -20867,7 +20867,7 @@ function classifyVerilogSource(src, id = "hw_circuit") {
   };
 }
 
-// ../carrycert-core/src/adapters/int8.ts
+// packages/carrycert-core/src/adapters/int8.ts
 function classifyInt8Kernel(k) {
   const range = k.range_checked !== false;
   return {
@@ -20905,7 +20905,7 @@ function classifyInt8Source(src, id = "int8_kernel") {
   });
 }
 
-// ../carrycert-core/src/adapters/onnx.ts
+// packages/carrycert-core/src/adapters/onnx.ts
 function classifyOnnxKernel(k) {
   const ir = classifyInt8Kernel({
     id: k.id,
@@ -20937,7 +20937,7 @@ function classifyOnnxSource(src, id = "onnx_kernel") {
   });
 }
 
-// ../carrycert-core/src/adapters/carry-graph.ts
+// packages/carrycert-core/src/adapters/carry-graph.ts
 function unsupported(id, domain2, reason) {
   return {
     id,
@@ -20993,7 +20993,7 @@ function classifyCarryGraph(graph, id = "carry_graph") {
   };
 }
 
-// ../carrycert-core/src/adapters/native-bitvm.ts
+// packages/carrycert-core/src/adapters/native-bitvm.ts
 var effects = {
   OP_0: [0, 1],
   OP_1NEGATE: [0, 1],
@@ -21193,7 +21193,7 @@ function scanNativeBitvm(source, id = "script") {
   }
 }
 
-// ../carrycert-core/src/adapters/native-zkvm.ts
+// packages/carrycert-core/src/adapters/native-zkvm.ts
 var u32 = (x) => x >>> 0;
 var signed = (x) => x | 0;
 var signExtend = (value, bits) => value & 1 << bits - 1 ? value - (1 << bits) : value;
@@ -21449,7 +21449,7 @@ function scanNativeZkvm(source, id = "zkvm_trace") {
   }
 }
 
-// ../carrycert-core/src/scan.ts
+// packages/carrycert-core/src/scan.ts
 function unknown2(id, domain2, detail) {
   return {
     id,
@@ -21531,7 +21531,7 @@ function scanPasted(source, options = {}) {
   };
 }
 
-// ../carrycert-core/src/adapters/r1cs-rank.ts
+// packages/carrycert-core/src/adapters/r1cs-rank.ts
 var mod = (v) => (v % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
 function pow(v, e) {
   let a = mod(v), out = 1n;
@@ -21600,7 +21600,7 @@ function proveR1CSCoupledRank(parsed, triangular) {
   return { complete: basis.size === unknown3, rank: basis.size, unknown: unknown3, linearRows, pivots };
 }
 
-// ../carrycert-core/src/adapters/r1cs-binary.ts
+// packages/carrycert-core/src/adapters/r1cs-binary.ts
 var MAX_SIZE = 8 * 1024 * 1024;
 var MAX_WIRES = 65536;
 var MAX_CONSTRAINTS = 2e5;
@@ -21836,7 +21836,7 @@ function scanR1CSBinary(bytes, id = "binary_r1cs") {
   }
 }
 
-// ../colony-contracts/src/legacy.ts
+// packages/colony-contracts/src/legacy.ts
 var PINNED_SHA = "sha256:5c0679b06da470157cd460ca6a25fedb00eb50a1fc3baf861634e5728d0dc609";
 var legacyContract = {
   schema: "colony.observation.v1",
@@ -21956,7 +21956,7 @@ async function legacyCertificateRequest(bytes, supplied, publicResult = false, d
   };
 }
 
-// ../colony-contracts/src/verified-plan.ts
+// packages/colony-contracts/src/verified-plan.ts
 var H = external_exports.string().regex(/^sha256:[a-f0-9]{64}$/);
 var Operator = external_exports.enum([
   "onnx.static-metadata-graph.v1",
@@ -22053,7 +22053,34 @@ var VerifiedExecutionPlanSchema = external_exports.strictObject({
 });
 var parseVerifiedExecutionPlan = (value) => VerifiedExecutionPlanSchema.parse(value);
 
-// ../colony-math/src/math-edge.ts
+// packages/colony-math/src/math-papers.ts
+function abs(x) {
+  return x < 0n ? -x : x;
+}
+function gcd(a, b) {
+  a = abs(a);
+  b = abs(b);
+  while (b) {
+    const t = a % b;
+    a = b;
+    b = t;
+  }
+  return a || 1n;
+}
+function q(n, d = 1n) {
+  if (!d) throw Error("Zero denominator");
+  if (d < 0n) {
+    n = -n;
+    d = -d;
+  }
+  const t = gcd(n, d);
+  return { n: n / t, d: d / t };
+}
+var Z = q(0n);
+var O = q(1n);
+var T = q(2n);
+
+// packages/colony-math/src/math-edge.ts
 var mathContract = {
   schema: "colony.observation.v1",
   id: "colony-exact-finite-math-operators",
@@ -22083,11 +22110,429 @@ var claims = {
   "two-stage.addition-code.v1": "For each radix 2..20 and supplied operand triple, encode all four incoming-carry responses in one state of the exactly 5B-4 distinct complete response functions; include its exact class multiplicity.",
   "affine.inverse-cells.v1": "For each invertible GF(2) map on width 2..12 and each D and S, return the complete disjoint affine-cell representation of L(a+D)+L(a)=S mod 2^w.",
   "tap-span.fiber-count.v1": "For widths 4..16 with bounded tap span h<=4, count every a satisfying L(a+D)+L(a)=S modulo 2^w and provide an exact original-domain witness.",
-  "shared-input.masked-count.v1": "For width 2..16 and 1..16 shared-input offsets, count all unsigned x satisfying the declared input mask and every masked modular translated sum; return the least witness and bounded ordered carry-frontier accounting."
+  "shared-input.masked-count.v1": "For width 2..16 and 1..16 shared-input offsets, count all unsigned x satisfying the declared input mask and every masked modular translated sum; return the least witness and bounded ordered carry-frontier accounting.",
+  "cascade.sum-carry.v1": "M05: exact complete cascaded sum/carry response, original radix 2..16 and stages 1..3; exact class count and minimum label bits.",
+  "tensor.nonnegative-rank35.v1": "M07: exact twelve-state monoid product and full 35-rectangle / 35-witness nonnegative-rank certificate.",
+  "tensor.signed20-product.v1": "M08: exact 12-state integer monoid-algebra product via twenty signed factors, checked against all 1728 coefficients.",
+  "gf2.binary-operator-word.v1": "M09: A/B 32-bit binary operator word of length <=10 and exact p(B^3+A)=uv^T rank-one polynomial identity.",
+  "cyclic.occupancy-energy.v1": "M10: complete exact 3I+T+T^-1 integer occupancy minimum at period 3..7, total 0..8; includes the 210-state five-cycle source case.",
+  "lattice.phase-selection.v1": "M11: exact rational common-lattice phase selection at one supplied phase, 1..8 bounded designs and all winner ties.",
+  "recurrence.damped-horizon.v1": "M12: stable conjugate-root second-order rational recurrences, exact minimal uniform observation horizon category 2, 3, or at least 4.",
+  "affine.cycle-defects.v1": "M13: scalar affine cyclic words, chronological linear costs, transported cut defects, and minimum retained defect rank.",
+  "taa.quadratic-cost.v1": "M14: exact scalar affine state with chronological quadratic accumulated cost, including every cross term for all rational initial states."
 };
 var MATH_CLAIMS = claims;
 
-// ../colony-math/src/math-independent.ts
+// packages/colony-math/src/math-papers-independent.ts
+function test(condition, message) {
+  if (!condition) throw Error(message);
+}
+function serial(a, b, message) {
+  test(canonicalJson(a) === canonicalJson(b), message);
+}
+function valid(x, lo, hi) {
+  test(Number.isSafeInteger(x) && x >= lo && x <= hi, "Bad integer scope");
+  return x;
+}
+function shape(candidate, fields) {
+  test(candidate && typeof candidate === "object" && !Array.isArray(candidate) && Object.keys(candidate).sort().join("|") === fields, "Unexpected paper certificate field");
+}
+var Q = (a, b = 1n) => {
+  test(b !== 0n, "zero denominator");
+  if (b < 0n) {
+    a = -a;
+    b = -b;
+  }
+  let u = a < 0n ? -a : a, v = b;
+  while (v) {
+    const t = u % v;
+    u = v;
+    v = t;
+  }
+  const g = u || 1n;
+  return { a: a / g, b: b / g };
+};
+function parse3(x) {
+  test(typeof x === "string" && /^-?\d{1,16}(?:\/\d{1,16})?$/.test(x), "Rational format");
+  const [a, b] = x.split("/");
+  return Q(BigInt(a), BigInt(b || "1"));
+}
+var add = (x, y) => Q(x.a * y.b + y.a * x.b, x.b * y.b);
+var sub = (x, y) => Q(x.a * y.b - y.a * x.b, x.b * y.b);
+var mul = (x, y) => Q(x.a * y.a, x.b * y.b);
+var div = (x, y) => Q(x.a * y.b, x.b * y.a);
+var cmp = (x, y) => x.a * y.b < y.a * x.b ? -1 : x.a * y.b > y.a * x.b ? 1 : 0;
+var display = (x) => x.a + "/" + x.b;
+var zero = Q(0n);
+var one = Q(1n);
+function exactString(x, r) {
+  test(x === display(r), "Wrong rational");
+}
+function checkCascade(a, c) {
+  shape(c, "class_count|minimum_label_bits|operands|radix|responses|stages");
+  const B = valid(a.radix, 2, 16), op = a.operands;
+  test(Array.isArray(op) && op.length >= 2 && op.length <= 4, "M05 stage bound");
+  const values = op.map((x) => valid(x, 0, B - 1)), k = values.length - 1;
+  test(c.radix === B && c.stages === k, "M05 parameters");
+  serial(c.operands, values, "M05 operands");
+  const evaluate = (args) => {
+    const outputs = [];
+    for (let assignment = 0; assignment < 1 << k; assignment++) {
+      let state = args[0], ret = [];
+      for (let stage = 1; stage <= k; stage++) {
+        const n = state + args[stage] + (assignment >> stage - 1) % 2;
+        ret.push(n >= B ? 1 : 0);
+        state = n >= B ? n - B : n;
+      }
+      outputs.push([state, ...ret]);
+    }
+    return outputs;
+  };
+  serial(c.responses, evaluate(values), "M05 complete carry response");
+  const classes = /* @__PURE__ */ new Set();
+  const tuple2 = Array(k + 1).fill(0);
+  function visit2(i) {
+    if (i === tuple2.length) {
+      classes.add(JSON.stringify(evaluate(tuple2)));
+      return;
+    }
+    for (let v = 0; v < B; v++) {
+      tuple2[i] = v;
+      visit2(i + 1);
+    }
+  }
+  visit2(0);
+  test(c.class_count === classes.size, "M05 count against all original tuples");
+  const bits = classes.size <= 1 ? 0 : Math.ceil(Math.log2(classes.size));
+  test(c.minimum_label_bits === bits, "M05 minimum fixed label");
+}
+var maps = [
+  [0, 0, 0, 0],
+  [0, 0, 0, 1],
+  [0, 1, 1, 1],
+  [0, 1, 2, 2],
+  [0, 1, 2, 3],
+  [1, 1, 1, 1],
+  [1, 1, 2, 2],
+  [1, 1, 2, 3],
+  [2, 2, 2, 2],
+  [2, 2, 2, 3],
+  [2, 3, 3, 3],
+  [3, 3, 3, 3]
+];
+function multiplication() {
+  return maps.map((a) => maps.map((b) => {
+    const composition = Array.from({ length: 4 }, (_, k) => b[a[k]]);
+    const index = maps.findIndex((row) => row.every((value, i) => value === composition[i]));
+    test(index >= 0, "M07 closure");
+    return index;
+  }));
+}
+function minorDet(input2) {
+  const n = input2.length;
+  if (n === 0) return 1n;
+  const m = input2.map((x) => x.map(BigInt));
+  let s = 1n, prev = 1n;
+  for (let i = 0; i < n - 1; i++) {
+    let row = i;
+    while (row < n && m[row][i] === 0n) row++;
+    if (row === n) return 0n;
+    if (row !== i) {
+      [m[row], m[i]] = [m[i], m[row]];
+      s = -s;
+    }
+    const pivot = m[i][i];
+    for (let a = i + 1; a < n; a++) for (let b = i + 1; b < n; b++) {
+      const v = m[a][b] * pivot - m[a][i] * m[i][b];
+      test(v % prev === 0n, "Nonintegral Bareiss step");
+      m[a][b] = v / prev;
+    }
+    for (let a = i + 1; a < n; a++) m[a][i] = 0n;
+    prev = pivot;
+  }
+  return s * m[n - 1][n - 1];
+}
+function checkRank35(a, c) {
+  shape(c, "left|maps|multiplication_table|nonnegative_rank|product_index|rectangles|right|slice_ranks|witnesses");
+  const i = valid(a.left, 0, 11), j = valid(a.right, 0, 11), table = multiplication();
+  serial(c.maps, maps, "M07 source maps");
+  serial(c.multiplication_table, table, "M07 composition table");
+  test(c.left === i && c.right === j && c.product_index === table[i][j], "M07 product");
+  test(c.nonnegative_rank === 35, "M07 rank assertion");
+  const counts = Array.from({ length: 12 }, () => Array.from({ length: 12 }, () => Array(12).fill(0)));
+  const ranks = Array(12).fill(0);
+  test(Array.isArray(c.rectangles) && c.rectangles.length === 35, "M07 35 upper terms");
+  for (const r of c.rectangles) {
+    const k = valid(r.output, 0, 11);
+    ranks[k]++;
+    test(Array.isArray(r.left) && Array.isArray(r.right) && r.left.length > 0 && r.right.length > 0, "M07 rectangle");
+    test(new Set(r.left).size === r.left.length && new Set(r.right).size === r.right.length, "M07 rectangle distinct");
+    for (const x of r.left) for (const y of r.right) {
+      valid(x, 0, 11);
+      valid(y, 0, 11);
+      test(table[x][y] === k, "M07 false rectangle");
+      counts[x][y][k]++;
+    }
+  }
+  for (let x = 0; x < 12; x++) for (let y = 0; y < 12; y++) for (let k = 0; k < 12; k++)
+    test(counts[x][y][k] === Number(table[x][y] === k), "M07 all 1728 coefficients");
+  serial(c.slice_ranks, ranks, "M07 slice ranks");
+  test(Array.isArray(c.witnesses) && c.witnesses.length === 12, "M07 lower witnesses");
+  let lower = 0;
+  for (let k = 0; k < 12; k++) {
+    const w = c.witnesses[k];
+    test(Array.isArray(w) && w.length === ranks[k], "M07 witness ranks");
+    lower += w.length;
+    const rr = [], cc = [];
+    for (const pair of w) {
+      test(Array.isArray(pair) && pair.length === 2, "M07 witness pair");
+      const x = valid(pair[0], 0, 11), y = valid(pair[1], 0, 11);
+      rr.push(x);
+      cc.push(y);
+      test(table[x][y] === k, "M07 witness membership");
+    }
+    test(new Set(rr).size === w.length && new Set(cc).size === w.length, "M07 distinct witness coordinates");
+    for (let a2 = 0; a2 < w.length; a2++) for (let b = a2 + 1; b < w.length; b++)
+      test(table[rr[a2]][cc[b]] !== k || table[rr[b]][cc[a2]] !== k, "M07 fooling pair");
+    const witnessMinor = rr.map((x) => cc.map((y) => Number(table[x][y] === k)));
+    test(minorDet(witnessMinor) === 1n, "M07 exact witness determinant");
+  }
+  test(lower === 35, "M07 35 lower witnesses");
+}
+function checkSigned20(a, c) {
+  shape(c, "left|output|products|right|term_count|terms");
+  test(Array.isArray(a.left) && Array.isArray(a.right) && a.left.length === 12 && a.right.length === 12, "M08 vectors");
+  const x = a.left.map((v) => valid(v, -10, 10)), y = a.right.map((v) => valid(v, -10, 10));
+  serial(c.left, x, "M08 left"), serial(c.right, y, "M08 right");
+  test(c.term_count === 20 && Array.isArray(c.terms) && c.terms.length === 20, "M08 term count");
+  const products = [];
+  for (const term of c.terms) {
+    for (const field of ["alpha", "beta", "gamma"]) {
+      test(Array.isArray(term[field]) && term[field].length === 12, "M08 term vector");
+      for (const v of term[field]) valid(v, -2, 2);
+    }
+    products.push(term.alpha.reduce((s, v, i) => s + v * x[i], 0) * term.beta.reduce((s, v, i) => s + v * y[i], 0));
+  }
+  serial(c.products, products, "M08 exact 20 evaluated products");
+  const table = multiplication();
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) for (let k = 0; k < 12; k++) {
+    const actual = c.terms.reduce((sum2, t) => sum2 + t.alpha[i] * t.beta[j] * t.gamma[k], 0);
+    test(actual === Number(table[i][j] === k), "M08 full signed tensor identity");
+  }
+  const expected = Array(12).fill(0);
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) expected[table[i][j]] += x[i] * y[j];
+  serial(c.output, expected, "M08 direct 144 term convolution");
+}
+function rotation(x, k) {
+  const lower = x >>> k, upper = x * Math.pow(2, 32 - k);
+  return (lower | upper) >>> 0;
+}
+function fA(x) {
+  return (rotation(x, 7) ^ rotation(x, 18) ^ x >>> 3) >>> 0;
+}
+function fB(x) {
+  return (rotation(x, 17) ^ rotation(x, 19) ^ x >>> 10) >>> 0;
+}
+function evalColumns(matrix, vector) {
+  let s = 0;
+  for (let j = 0; j < 32; j++) if (Math.floor(vector / 2 ** j) % 2) s ^= matrix[j];
+  return s >>> 0;
+}
+function productOfMatrices(first, second) {
+  return second.map((col) => evalColumns(first, col));
+}
+function checkBinaryWord(a, c) {
+  shape(c, "input|outer_u|outer_v|output|rank_one_columns|word");
+  const x = valid(a.input, 0, 4294967295), word = a.word;
+  test(typeof word === "string" && word.length <= 10 && /^[AB]*$/.test(word), "M09 word");
+  let v = x;
+  for (const w of word) v = w === "A" ? fA(v) : fB(v);
+  test(c.input === x && c.word === word && c.output === v, "M09 original word output");
+  const aM = Array.from({ length: 32 }, (_, i) => fA(2 ** i)), bM = Array.from({ length: 32 }, (_, i) => fB(2 ** i));
+  const cube = productOfMatrices(bM, productOfMatrices(bM, bM));
+  const dM = aM.map((col, i) => col ^ cube[i]), exponents = [31, 29, 27, 25, 19, 11, 9, 1];
+  const power = [];
+  power[0] = Array.from({ length: 32 }, (_, i) => 2 ** i >>> 0);
+  for (let degree = 1; degree <= 31; degree++) power[degree] = productOfMatrices(dM, power[degree - 1]);
+  const polynomial = Array.from({ length: 32 }, (_, j) => exponents.reduce((z2, degree) => z2 ^ power[degree][j], 0) >>> 0);
+  const u = 2931105211, vv = 3719867765;
+  const outer = Array.from({ length: 32 }, (_, j) => vv >>> j & 1 ? u : 0);
+  test(c.outer_u === u && c.outer_v === vv, "M09 named rank-one identity");
+  serial(polynomial, outer, "M09 polynomial equals outer product");
+  serial(c.rank_one_columns, outer, "M09 candidate rank-one matrix");
+}
+function checkCyclicOccupancy(a, c) {
+  shape(c, "minimum_energy|occupancy_states|period|total|winners");
+  const p = valid(a.period, 3, 7), total = valid(a.total, 0, 8);
+  let min = Infinity, count2 = 0;
+  const winners = [];
+  const numCompositions = (n, k) => {
+    let product2 = 1;
+    for (let j = 1; j <= k; j++) product2 = product2 * (n + j) / j;
+    return Math.round(product2);
+  };
+  const max = numCompositions(total, p - 1);
+  const occupations = Array(p).fill(0);
+  function enumerate(position, used) {
+    if (position === p - 1) {
+      occupations[p - 1] = total - used;
+      let e = 0;
+      for (let row = 0; row < p; row++) for (let col = 0; col < p; col++) {
+        const coeff = row === col ? 3 : col === (row + 1) % p || col === (row - 1 + p) % p ? 1 : 0;
+        e += occupations[row] * coeff * occupations[col];
+      }
+      count2++;
+      if (e < min) {
+        min = e;
+        winners.length = 0;
+        winners.push([...occupations]);
+      } else if (e === min) winners.push([...occupations]);
+      return;
+    }
+    for (let n = 0; n <= total - used; n++) {
+      occupations[position] = n;
+      enumerate(position + 1, used + n);
+    }
+  }
+  enumerate(0, 0);
+  test(count2 === max, "M10 composition count");
+  test(c.period === p && c.total === total && c.occupancy_states === count2 && c.minimum_energy === min, "M10 energy");
+  serial(c.winners, winners, "M10 complete minimizers");
+  if (p === 5 && total === 6) test(min === 38 && winners.length === 5, "M10 paper 210-state certificate");
+}
+function checkLattice(a, c) {
+  shape(c, "feasible|minimum_linear_cost|phase|spacing|winners");
+  test(Array.isArray(a.designs) && a.designs.length >= 1 && a.designs.length <= 8, "M11 input designs");
+  const spacing = parse3(a.spacing), theta = parse3(a.phase);
+  test(cmp(spacing, zero) > 0 && cmp(spacing, Q(2n)) <= 0 && cmp(theta, zero) >= 0 && cmp(theta, spacing) < 0, "M11 phase scope");
+  const expected = [], names = /* @__PURE__ */ new Set();
+  for (const design of a.designs) {
+    test(design && Object.keys(design).sort().join("|") === "alpha|lower|name|upper", "M11 design fields");
+    test(typeof design.name === "string" && /^[A-Za-z0-9_-]{1,16}$/.test(design.name) && !names.has(design.name), "M11 name");
+    names.add(design.name);
+    const l = parse3(design.lower), u = parse3(design.upper), alpha = parse3(design.alpha);
+    test(cmp(l, zero) >= 0 && cmp(u, l) >= 0 && cmp(u, Q(50n)) <= 0 && cmp(alpha, zero) > 0, "M11 bounds");
+    let winner = null;
+    for (let k = 0; k <= 1e4; k++) {
+      const amp = add(theta, mul(Q(BigInt(k)), spacing));
+      if (cmp(amp, u) > 0) break;
+      if (cmp(amp, l) >= 0 && cmp(amp, zero) > 0) {
+        winner = { k, amplitude: amp };
+        break;
+      }
+    }
+    if (winner) expected.push({ name: design.name, k: winner.k, amplitude: display(winner.amplitude), linear_cost: display(mul(alpha, winner.amplitude)) });
+  }
+  serial(c.feasible, expected, "M11 original grid enumeration");
+  let min = null;
+  for (const item of expected) {
+    const v = parse3(item.linear_cost);
+    if (min === null || cmp(v, min) < 0) min = v;
+  }
+  const winners = expected.filter((v) => min !== null && cmp(parse3(v.linear_cost), min) === 0).map((v) => v.name);
+  test(c.spacing === display(spacing) && c.phase === display(theta), "M11 canonical phase");
+  serial(c.winners, winners, "M11 exact winner ties");
+  test(c.minimum_linear_cost === (min === null ? null : display(min)), "M11 exact least cost");
+}
+function cross(o, a, b) {
+  return sub(mul(sub(a[0], o[0]), sub(b[1], o[1])), mul(sub(a[1], o[1]), sub(b[0], o[0])));
+}
+function inSymmetricHull(vertices, target) {
+  for (let i = 0; i < vertices.length; i++) for (let j = 0; j < vertices.length; j++) if (i !== j) {
+    const a = vertices[i], b = vertices[j];
+    let sign = 0;
+    for (const other of vertices) {
+      const s = cmp(cross(a, b, other), zero);
+      if (s !== 0) {
+        if (sign && sign !== s) {
+          sign = 2;
+          break;
+        }
+        sign = s;
+      }
+    }
+    if (sign !== 2 && sign !== 0 && cmp(cross(a, b, target), zero) * sign < 0) return false;
+  }
+  return true;
+}
+function checkDamped(a, c) {
+  shape(c, "horizon_class|q|s");
+  const q2 = parse3(a.q), s = parse3(a.s);
+  test(cmp(q2, zero) >= 0 && cmp(q2, Q(2n)) <= 0 && cmp(s, zero) > 0 && cmp(s, one) < 0 && cmp(mul(q2, q2), mul(Q(4n), s)) < 0, "M12 stable complex roots");
+  const rows = [[one, zero], [zero, one]];
+  for (let k = 2; k <= 3; k++) rows.push([sub(mul(q2, rows[k - 1][0]), mul(s, rows[k - 2][0])), sub(mul(q2, rows[k - 1][1]), mul(s, rows[k - 2][1]))]);
+  const polygon = (n) => rows.slice(0, n).flatMap((row) => [row, [sub(zero, row[0]), sub(zero, row[1])]]);
+  const N2 = inSymmetricHull(polygon(2), rows[2]);
+  const N3 = !N2 && inSymmetricHull(polygon(3), rows[3]);
+  test(c.q === display(q2) && c.s === display(s), "M12 coefficients");
+  test(c.horizon_class === (N2 ? "2" : N3 ? "3" : "at_least_4"), "M12 independent hexagonal observation classification");
+}
+function simulate(word, x) {
+  let state = x, cost = zero;
+  for (const s of word) {
+    cost = add(cost, add(mul(s.c, state), s.d));
+    state = add(mul(s.a, state), s.b);
+  }
+  return { state, cost };
+}
+function checkAffineCycles(a, c) {
+  shape(c, "cut_defects|displacement|full_cost|full_map|initial|retained_defect_rank");
+  test(Array.isArray(a.steps) && a.steps.length >= 2 && a.steps.length <= 12, "M13 bounded steps");
+  const word = a.steps.map((s) => {
+    test(s && Object.keys(s).sort().join("|") === "a|b|c|d", "M13 step fields");
+    return { a: parse3(s.a), b: parse3(s.b), c: parse3(s.c), d: parse3(s.d) };
+  });
+  const x = parse3(a.initial), zeroRun = simulate(word, zero), oneRun = simulate(word, one);
+  const M = sub(oneRun.state, zeroRun.state), b = zeroRun.state;
+  const r = sub(oneRun.cost, zeroRun.cost), d = zeroRun.cost;
+  const F = simulate(word, x).state, defect = sub(F, x);
+  exactString(c.initial, x);
+  serial(c.full_map, { a: display(M), b: display(b) }, "M13 full affine map");
+  serial(c.full_cost, { c: display(r), d: display(d) }, "M13 exact chronological cost");
+  exactString(c.displacement, defect);
+  const defects = [];
+  let summaryRank = 0;
+  for (let cut = 1; cut < word.length; cut++) {
+    const prefix = word.slice(0, cut), suffix = word.slice(cut);
+    const preState = simulate(prefix, x).state;
+    const original = simulate(word, x).cost;
+    const rotated = simulate([...suffix, ...prefix], preState).cost;
+    defects.push(display(sub(rotated, original)));
+    const before = simulate(prefix, zero).cost, after = simulate(prefix, one).cost;
+    if (cmp(mul(sub(after, before), sub(M, one)), zero) !== 0) summaryRank = 1;
+  }
+  serial(c.cut_defects, defects, "M13 independently transported cut totals");
+  test(c.retained_defect_rank === summaryRank, "M13 minimal scalar retained defect dimension");
+}
+function runQuadratic(steps, initial) {
+  let x = initial, cost = zero;
+  for (const s of steps) {
+    cost = add(cost, add(add(mul(s.q, mul(x, x)), mul(s.r, x)), s.d));
+    x = add(mul(s.f, x), s.c);
+  }
+  return { x, cost };
+}
+function checkTaaCost(a, c) {
+  shape(c, "composed|final_state|initial|stage_count|total_cost");
+  test(Array.isArray(a.steps) && a.steps.length >= 1 && a.steps.length <= 32, "M14 steps");
+  const stages = a.steps.map((s) => {
+    test(s && Object.keys(s).sort().join("|") === "c|d|f|q|r", "M14 fields");
+    return { f: parse3(s.f), c: parse3(s.c), q: parse3(s.q), r: parse3(s.r), d: parse3(s.d) };
+  });
+  const initial = parse3(a.initial), z2 = runQuadratic(stages, zero), pos = runQuadratic(stages, one), neg = runQuadratic(stages, Q(-1n));
+  const f = sub(pos.x, z2.x), shift = z2.x;
+  const quadratic = div(sub(add(pos.cost, neg.cost), mul(Q(2n), z2.cost)), Q(2n));
+  const linear2 = div(sub(pos.cost, neg.cost), Q(2n));
+  const coefficients = { f: display(f), c: display(shift), q: display(quadratic), r: display(linear2), d: display(z2.cost) };
+  serial(c.composed, coefficients, "M14 independent interpolation for all original states");
+  const actual = runQuadratic(stages, initial);
+  exactString(c.initial, initial);
+  test(c.stage_count === stages.length, "M14 stage count");
+  exactString(c.final_state, actual.x);
+  exactString(c.total_cost, actual.cost);
+}
+
+// packages/colony-math/src/math-independent.ts
 function integer2(x, lo, hi) {
   if (typeof x !== "number" || !Number.isSafeInteger(x) || x < lo || x > hi) throw Error("Invalid bound");
   return x;
@@ -22171,7 +22616,7 @@ function checkGF2(args, p) {
   }
   assert2(rank(basis) === p.rank, "Independent basis is not minimal");
 }
-function gcd(a, b) {
+function gcd2(a, b) {
   a = a < 0n ? -a : a;
   b = b < 0n ? -b : b;
   while (b) {
@@ -22185,13 +22630,13 @@ function rat(n, d = 1n) {
     n = -n;
     d = -d;
   }
-  const g = gcd(n, d);
+  const g = gcd2(n, d);
   return { n: n / g, d: d / g };
 }
-function parse3(x) {
+function parse4(x) {
   assert2(typeof x === "string" && /^-?\d{1,18}(?:\/\d{1,18})?$/.test(x), "Rational syntax");
-  const [p, q] = x.split("/");
-  return rat(BigInt(p), BigInt(q || "1"));
+  const [p, q2] = x.split("/");
+  return rat(BigInt(p), BigInt(q2 || "1"));
 }
 function sum(a, b) {
   return rat(a.n * b.d + b.n * a.d, a.d * b.d);
@@ -22210,7 +22655,7 @@ function checkAffine(args, p) {
   for (let i = 0; i < args.steps.length; i++) {
     const stage = args.steps[i];
     assert2(keys(stage) === "a|b|c|d", "Exact affine stage");
-    const A = parse3(stage.a), B = parse3(stage.b), C = parse3(stage.c), D = parse3(stage.d);
+    const A = parse4(stage.a), B = parse4(stage.b), C = parse4(stage.c), D = parse4(stage.d);
     assert2(p.stage_cross_terms[i] === show(product(C, state.b)), "Missing chronological cross-term");
     const next = { m: product(A, state.m), b: sum(product(A, state.b), B) };
     cost = { m: sum(cost.m, product(C, state.m)), b: sum(sum(cost.b, product(C, state.b)), D) };
@@ -22245,16 +22690,16 @@ function checkComposed(args, p) {
 }
 function checkCyclicInverse(args, p) {
   assert2(keys(args) === "constant|mask|rotation|target|width", "Cyclic inverse argument shape");
-  const width = integer2(args.width, 4, 16), rotation = integer2(args.rotation, 2, Math.min(width - 1, 6));
+  const width = integer2(args.width, 4, 16), rotation2 = integer2(args.rotation, 2, Math.min(width - 1, 6));
   const modulus = 2 ** width, mask = integer2(args.mask, 0, modulus - 1);
   const constant2 = integer2(args.constant, 0, modulus - 1), target = integer2(args.target, 0, modulus - 1);
   assert2(keys(p) === "constant|local_updates|mask|preimages|rotation|seed_count|target|width", "Cyclic fiber candidate shape");
-  assert2(p.width === width && p.rotation === rotation && p.mask === mask && p.constant === constant2 && p.target === target, "Cyclic parameters changed");
-  assert2(p.seed_count === 2 ** rotation && p.local_updates === width * 2 ** rotation, "Cyclic transducer work count");
-  assert2(Array.isArray(p.preimages) && p.preimages.length <= 2 ** rotation, "Cyclic fiber bound");
+  assert2(p.width === width && p.rotation === rotation2 && p.mask === mask && p.constant === constant2 && p.target === target, "Cyclic parameters changed");
+  assert2(p.seed_count === 2 ** rotation2 && p.local_updates === width * 2 ** rotation2, "Cyclic transducer work count");
+  assert2(Array.isArray(p.preimages) && p.preimages.length <= 2 ** rotation2, "Cyclic fiber bound");
   const direct = (x) => {
     const a = (x >>> 1 | x << width - 1) & modulus - 1;
-    const b = (x >>> rotation | x << width - rotation) & modulus - 1;
+    const b = (x >>> rotation2 | x << width - rotation2) & modulus - 1;
     return ((a ^ b) + (x & mask) + constant2) % modulus;
   };
   const expected = [];
@@ -22500,6 +22945,15 @@ async function checkMathComputation(source, pkg) {
     else if (name === "affine.inverse-cells.v1") checkAffineInverseCells(sourceObj.args, pkg.result.candidate);
     else if (name === "tap-span.fiber-count.v1") checkTapSpanCount(sourceObj.args, pkg.result.candidate);
     else if (name === "shared-input.masked-count.v1") checkSharedInputMaskedCount(sourceObj.args, pkg.result.candidate);
+    else if (name === "cascade.sum-carry.v1") checkCascade(sourceObj.args, pkg.result.candidate);
+    else if (name === "tensor.nonnegative-rank35.v1") checkRank35(sourceObj.args, pkg.result.candidate);
+    else if (name === "tensor.signed20-product.v1") checkSigned20(sourceObj.args, pkg.result.candidate);
+    else if (name === "gf2.binary-operator-word.v1") checkBinaryWord(sourceObj.args, pkg.result.candidate);
+    else if (name === "cyclic.occupancy-energy.v1") checkCyclicOccupancy(sourceObj.args, pkg.result.candidate);
+    else if (name === "lattice.phase-selection.v1") checkLattice(sourceObj.args, pkg.result.candidate);
+    else if (name === "recurrence.damped-horizon.v1") checkDamped(sourceObj.args, pkg.result.candidate);
+    else if (name === "affine.cycle-defects.v1") checkAffineCycles(sourceObj.args, pkg.result.candidate);
+    else if (name === "taa.quadratic-cost.v1") checkTaaCost(sourceObj.args, pkg.result.candidate);
     else throw Error("Unknown exact primitive");
     return { ok: true, kind: "colony_math_independent_exact_replay", certifiable: false };
   } catch {
@@ -22507,7 +22961,7 @@ async function checkMathComputation(source, pkg) {
   }
 }
 
-// ../colony-contracts/src/onnx-contract.ts
+// packages/colony-contracts/src/onnx-contract.ts
 var onnxContract = {
   schema: "colony.observation.v1",
   id: "onnx-inference-pipeline-v1",
@@ -22523,7 +22977,7 @@ var onnxContract = {
   checker: { id: "colony.inference-pipeline-independent.v1", version: "1" }
 };
 
-// src/client.ts
+// packages/colony-sdk/src/client.ts
 var ColonyApiError = class extends Error {
   constructor(status, detail) {
     super("Colony API " + status + ": " + detail.slice(0, 240));
@@ -22859,7 +23313,7 @@ function createColonyClient(options) {
   };
 }
 
-// src/cli.ts
+// packages/colony-sdk/src/cli.ts
 function syntax() {
   console.log("\u1455. Colony universal jobs\n  colony-jobs run <source> [--format circom] [--cert] [--public]\n  colony-jobs quote <source> [--format circom|onnx|math]\n  colony-jobs solve <source.math>\n  colony-jobs optimize <source.onnx> --out candidate.onnx --proof-dir proof\n  colony-jobs status <job-id>\n  colony-jobs result <job-id> [--out result.json]\n  colony-jobs check <source> <result.json>\n  colony-jobs usage\nSet COLONY_API_KEY. Optional COLONY_API defaults to https://api.colony.technology.\nExisting speedrunpapi scan/verify/claim behavior is unchanged.");
 }

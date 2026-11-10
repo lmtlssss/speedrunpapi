@@ -71,7 +71,7 @@ jobs:
       - name: Recheck actual R11 production mathematics offline
         run: |
           set -euo pipefail
-          for name in m02-tap-span m03-affine-inverse m04-two-stage; do
+          for name in m02-tap-span m03-affine-inverse m04-two-stage m05-cascade m06-shared-input m07-rank35 m08-signed20 m09-binary-word m10-cyclic-energy m11-lattice-phase m12-damped-horizon m13-affine-cycle m14-taa-cost; do
             node bin/colony-jobs.mjs check "examples/$name.math" "examples/$name.result.json" | grep '"source_bound": true'
           done
           jq '.result.candidate.count = "999"' examples/m02-tap-span.result.json > /tmp/forged-math.json
@@ -107,7 +107,7 @@ jobs:
       - run: speedrunpapi version
       - name: Python wheel replays R11 mathematical results
         run: |
-          for name in m02-tap-span m03-affine-inverse m04-two-stage; do
+          for name in m02-tap-span m03-affine-inverse m04-two-stage m05-cascade m06-shared-input m07-rank35 m08-signed20 m09-binary-word m10-cyclic-energy m11-lattice-phase m12-damped-horizon m13-affine-cycle m14-taa-cost; do
             speedrunpapi check "examples/$name.math" "examples/$name.result.json" | grep '"source_bound": true'
           done
       - name: Independently replay live production ONNX proof from npm and PyPI clients

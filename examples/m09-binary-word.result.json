@@ -1,0 +1,52 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:54db55754f10df690a6aa49f74be43340eecc77b82aa45e34fc872911be086b3",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "gf2.binary-operator-word.v1",
+    "scope": "M09: A/B 32-bit binary operator word of length <=10 and exact p(B^3+A)=uv^T rank-one polynomial identity.",
+    "candidate": {
+      "input": 321456789,
+      "word": "ABABA",
+      "output": 1315207617,
+      "rank_one_columns": [
+        2931105211,
+        0,
+        2931105211,
+        0,
+        2931105211,
+        2931105211,
+        2931105211,
+        0,
+        2931105211,
+        0,
+        2931105211,
+        2931105211,
+        0,
+        2931105211,
+        0,
+        2931105211,
+        0,
+        0,
+        0,
+        2931105211,
+        2931105211,
+        2931105211,
+        0,
+        2931105211,
+        2931105211,
+        0,
+        2931105211,
+        2931105211,
+        2931105211,
+        0,
+        2931105211,
+        2931105211
+      ],
+      "outer_u": 2931105211,
+      "outer_v": 3719867765
+    },
+    "candidate_digest": "sha256:82ab1822eb5336e42a9ac47c53fe73155dde1501faa29df8f54a4ce3c34a9d44"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "schema": "colony.math-result.v1",
+  "source_digest": "sha256:d05ba40fd0ec13ef3c045f60bbc38f3720c8d2171c975b08aa2432fa1b8c2719",
+  "contract_digest": "sha256:f299a06d9c2913075acf767fa63a75526711b22b64faf49c0c5eb4aec005d257",
+  "result": {
+    "verdict": "Certified",
+    "operator": "cyclic.occupancy-energy.v1",
+    "scope": "M10: complete exact 3I+T+T^-1 integer occupancy minimum at period 3..7, total 0..8; includes the 210-state five-cycle source case.",
+    "candidate": {
+      "period": 5,
+      "total": 6,
+      "occupancy_states": 210,
+      "minimum_energy": 38,
+      "winners": [
+        [
+          1,
+          1,
+          1,
+          1,
+          2
+        ],
+        [
+          1,
+          1,
+          1,
+          2,
+          1
+        ],
+        [
+          1,
+          1,
+          2,
+          1,
+          1
+        ],
+        [
+          1,
+          2,
+          1,
+          1,
+          1
+        ],
+        [
+          2,
+          1,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    "candidate_digest": "sha256:84a28bc99f849338c2f061c2b2c8351b0548bc5b9a288199505ce2eb8788d0ea"
+  }
+}
