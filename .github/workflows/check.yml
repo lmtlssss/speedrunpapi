@@ -28,7 +28,7 @@ jobs:
           set -uo pipefail
           expect() {
             want="$1"; code="$2"; shift 2
-            node bin/speedrunpapi.mjs scan "$@" --json > /tmp/result.json; got=$?
+            got=0; node bin/speedrunpapi.mjs scan "$@" --json > /tmp/result.json || got=$?
             verdict=$(jq -r .verdict /tmp/result.json)
             if [ "$verdict" != "$want" ] || [ "$got" != "$code" ]; then
               echo "::error::$* gave $verdict (exit $got), expected $want (exit $code)"; head -c 2000 /tmp/result.json; exit 1
