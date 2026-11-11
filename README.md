@@ -1,148 +1,192 @@
-# ᑕ. exact arithmetic circuit verification
+# speedrunpapi
 
-[Live race](https://colony.technology/demo) · [Proofs](https://colony.technology/proofs) · [API](https://colony.technology/api)
+Output-determinism analysis for Circom circuits and R1CS, by [Colony Technology](https://colony.technology).
 
-Paste source, press ᑕ., get a scoped verdict. Local scanning runs on your machine, without an account or API key.
+An under-constrained circuit accepts more than one output for the same input, so the prover decides the result instead of the circuit. `speedrunpapi` checks that property on the constraint system the compiler emits and returns one of three verdicts. Each is backed by something you can re-check without trusting this tool.
 
-The SHA-256 compression race runs both analyzers live: ᑕ. returns its scoped compositional certificate in microseconds while Picus runs through its 180-second solver budget. The 21 controlled G1 comparisons, source and timings are linked from [proofs](https://colony.technology/proofs).
+| Verdict | Meaning | Backed by |
+| --- | --- | --- |
+| `Certified` | Every satisfying witness with the same inputs has the same outputs. | A derivation, replayed by a checker that shares no rule logic with the prover |
+| `Broken` | Two satisfying witnesses share every input and differ on an output. | Both witnesses, re-evaluated against every constraint |
+| `Unknown` | Neither was established. | The signals that are still open, and why |
 
-## Install
+The tool does not guess. A circuit it cannot decide is `Unknown`.
 
-Node.js 20 or later:
+## Quick start
+
+Requires Node.js 20+ and the [circom](https://docs.circom.io/getting-started/installation/) compiler 2.x for `.circom` input.
 
 ```sh
-npx speedrunpapi scan circuit.circom --json
+npx speedrunpapi scan circuit.circom
 ```
 
-For repeated use:
+```text
+Broken  examples/division.circom
+  claim    Two satisfying witnesses share every input signal and differ on an output signal.
+  system   circom 2.2.3 --O0 · 1 constraints · 4 wires · 1 outputs · 2 inputs
+  inputs   main.a = 0, main.b = 0
+  differs  main.q: 0 vs 1
+  checked  both witnesses satisfy all 1 constraints
+```
 
 ```sh
-npm install -g speedrunpapi
+npm install -g speedrunpapi      # or: pip install speedrunpapi  (same bundle; still needs Node.js)
+speedrunpapi scan examples/iszero.circom examples/decoder.circom examples/modsum-safe.circom
+```
+
+Exit status is `0` when every file is `Certified`, `2` if any is `Broken`, `3` if any is `Unknown`, `1` on error. Analysis runs on your machine; nothing is uploaded unless you supply an API key for a signed certificate.
+
+## Usage
+
+```sh
+# A circuit with a main component
+speedrunpapi scan circuits/withdraw.circom -l node_modules
+
+# A library template: instantiate it as main
+speedrunpapi scan node_modules/circomlib/circuits/comparators.circom --main "LessThan(64)" -l node_modules/circomlib/circuits
+
+# A template that expects bits: state the precondition, and it becomes part of the claim
+speedrunpapi scan pedersen.circom --main "Pedersen(248)" --assume-binary in
+
+# An R1CS you already compiled (a sibling .sym supplies signal names)
+speedrunpapi scan build/withdraw.r1cs
+
+# Machine-readable result, and the full report for independent checking
 speedrunpapi scan circuit.circom --json
+speedrunpapi scan circuit.circom --report out/circuit.report.json
+speedrunpapi verify out/circuit.report.json --source out/circuit.r1cs
 ```
 
-Or download the same standalone bundle:
+| Option | Effect |
+| --- | --- |
+| `--main "T(args)"` | Instantiate a template as the main component (for library files) |
+| `-l, --include <dir>` | circom library directory, repeatable |
+| `--assume-binary <pattern>` | Treat matching input signals as bits: `in`, `"sel[*]"`, `"*"` |
+| `--strict` | Require every signal, not only outputs, to be fixed by the inputs |
+| `--opt O0\|O1\|O2` | Force one circom simplification level (see below) |
+| `--report <path>` | Write the full report: derivation or witnesses, plus what it is bound to |
+| `--json`, `--full` | JSON summary; `--full` adds the derivation or witnesses |
+| `--sarif <file>` | `Broken` results as SARIF for code-scanning dashboards |
+| `--timeout`, `--cex-timeout` | Seconds for proof search (600) and counterexample search (15) |
+| `--circom <bin>`, `--prime <name>` | Compiler binary and field (`bn128`, `bls12381`, `goldilocks`, ...) |
+
+## What is claimed, exactly
+
+`Certified` states output determinism of one constraint system: for any two assignments that satisfy every constraint and agree on all input signals, the output signals agree. With `--strict` the same is stated for every signal.
+
+It does not state that a witness exists, that the circuit computes what you intended, that inputs are range-checked, or anything about a proving system. A deterministic circuit can still compute the wrong function.
+
+A circuit with no output signals is never `Certified`: the property says nothing about it. The report then lists the internal signals that are not fixed by the inputs, which is where hint-related bugs live in assert-only circuits.
+
+`--assume-binary` adds the constraint `x * (x - 1) = 0` for each matched input. The verdict then holds for callers that respect the assumption and says nothing about callers that do not. The assumptions are written into the report and the certificate.
+
+### Compiler levels
+
+A verdict about a `.circom` file is a verdict about the R1CS that circom emits for it, under the recorded compiler version and flags.
+
+circom `--O0` applies no simplification, so that system describes the circuit exactly. From `--O1` (circom's default) the compiler merges signals, and an input that equals another signal loses its wire without the `.sym` file recording it; at `--O2` inputs can be substituted by linear combinations. A proof of determinism carries over to every level. A counterexample does not, unless every declared input still has a wire.
+
+`scan` therefore analyses the `--O0` system first and accepts its proof or counterexample. If that is `Unknown` it tries `--O1`, and accepts a counterexample there only when all declared inputs are wired. When you scan an `.r1cs` directly and some declared inputs have no wire, the tool can still certify but will not report `Broken`; pass `--r1cs-level O0` if you compiled with `--O0`.
+
+## How it decides
+
+The prover works on the difference of two satisfying assignments that agree on the inputs and shows, wire by wire, that the difference is zero. Rules:
+
+- **lin**: a constraint reduces to a linear equation with constant coefficients in which one wire is not yet determined.
+- **fix**: a constraint that mentions a single wire and has a single root.
+- **bits**: a linear equation whose undetermined wires are all two-valued, with weights for which the subset-sum map is injective below the modulus. This is the bit-decomposition argument, and it is why `Num2Bits(254)` over BN254 is not certified.
+- **gauss**: a linear combination of such equations isolates a wire.
+- **onehot**: a selector family. Constraints `s_i * (L - c_i) = C_i` share one determined form `L` and have pairwise distinct constants `c_i`, and a linear equation ties exactly those `s_i` together. At most one factor is zero; every other `s_i` is fixed by its own constraint and the equation fixes the last. This settles `Decoder`-style selectors in one step.
+- **split**: case analysis on a determined linear form being zero or nonzero. Both assignments fall in the same case; a wire determined in both cases, or in one while the other is contradictory, is determined. This covers `IsZero` and guarded divisions.
+
+Every rule application is a step in the derivation. The checker re-reads each cited constraint from the R1CS and accepts a step only if its conclusion follows.
+
+For `Broken`, the tool fixes concrete inputs, solves the system by propagation, and looks for a second solution with different outputs, steering inputs toward the degenerate cases the prover could not rule out (a divisor being zero, for example). A pair is reported only after both assignments pass a full evaluation of every constraint.
+
+## Measured
+
+circomlib templates compiled with circom 2.2.3 at `--O0`, analysed on an Apple M1 with Node.js 26. Times are single runs in milliseconds.
+
+| Circuit | Verdict | Constraints | Derivation steps | Prove | Replay |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `Sha256compression()` | Certified | 202,784 | 192,312 | 228 | 155 |
+| `Sha256(64)` | Certified | 204,576 | 194,104 | 252 | 160 |
+| `Poseidon(5)` | Certified | 1,347 | 1,347 | 1.9 | 1.1 |
+| `MiMCSponge(2, 220, 1)` | Certified | 1,767 | 1,767 | 2.1 | 2.7 |
+| Poseidon Merkle root, depth 4 | Certified | 3,102 | 3,098 | 2 | 2 |
+| `LessThan(252)` | Certified | 256 | 3 | 0.8 | 0.6 |
+| `Multiplexer(2, 4)` | Certified | 36 | 31 | 0.3 | 0.1 |
+| `IsZero()` | Certified | 2 | 4 | 0.2 | 0.1 |
+| `Num2Bits(254)` | Broken | 255 | | | |
+| `Decoder(4)` | Broken | 6 | | | |
+| `MontgomeryAdd()` | Broken | 3 | | | |
+| `Edwards2Montgomery()` | Broken | 2 | | | |
+| `Pedersen(8)`, inputs unrestricted | Broken | 95 (`--O1`) | | | |
+| `BabyAdd()` | Unknown | 6 | | | |
+| `BabyPbk()` | Unknown | 10,114 | | | |
+| `Num2Bits_strict()` | Unknown | 1,285 | | | |
+
+The `Broken` rows are properties of those templates taken alone, with unrestricted inputs. circomlib uses several of them only where the caller rules the degenerate inputs out (`Multiplexer` forces `Decoder`'s `success` to one; Pedersen callers pass bits). The verdict tells you which preconditions your circuit must enforce.
+
+The corpus has 71 circom-compiled cases with known answers. The engine currently decides 61 of them and reports `Unknown` for 10; none of its verdicts contradicts the known answer. A separate fuzzer compares the engine against brute-force enumeration on random systems over small fields (150,000 systems in the release run, no wrong `Certified` or `Broken`).
+
+## What returns Unknown today
+
+- Elliptic-curve arithmetic whose uniqueness depends on a number-theoretic fact, such as the completeness of the Baby Jubjub addition law.
+- Big-integer arithmetic whose uniqueness depends on range bounds across limbs.
+- Alias checks (`Num2Bits_strict`, `AliasCheck`) that compare a bit string against the modulus.
+- Circuits with no outputs.
+- R1CS with custom gates (PLONK custom templates).
+
+For these the report lists each open signal with the condition under which a constraint would fix it, for example `main.xout: fixed by constraint 4 only where (1 + 168696*main.tau) != 0`. Each line is an obligation to discharge by review.
+
+## Checking a result yourself
+
+A report is self-contained: the derivation or the two witnesses, the R1CS digest, the compiler and flags, and any assumptions.
 
 ```sh
-curl -fsSL https://colony.technology/speedrunpapi.mjs -o speedrunpapi.mjs
-node speedrunpapi.mjs scan circuit.circom --json
+speedrunpapi scan circuit.circom --report circuit.report.json     # also writes circuit.r1cs
+speedrunpapi verify circuit.report.json --source circuit.r1cs
+python3 verifiers/determinism/determinism_check.py circuit.r1cs circuit.report.json
 ```
 
-Python 3.9+ and Node.js 20+:
+`verify` uses the JavaScript checker. `determinism_check.py` is a second implementation in Python with no dependencies beyond the standard library and its own R1CS parser. To tie the R1CS back to your source, recompile with the recorded compiler version and flags and compare digests.
 
-```sh
-pip install speedrunpapi
-speedrunpapi scan circuit.circom --json
-```
-
-## Hosted verified jobs
-
-`speedrunpapi` includes a public client for Colony's hosted optimization and proof service. Set `COLONY_API_KEY` to an active, funded customer key. The same commands work from the npm and Python packages. The source is sent to the hosted API only when you run a hosted command.
-
-```sh
-export COLONY_API_KEY="your-customer-key"
-speedrunpapi quote model.onnx
-speedrunpapi optimize model.onnx --out optimized.onnx --proof-dir evidence
-speedrunpapi verify-onnx evidence/source.onnx evidence/artifacts
-```
-
-`optimize` returns an executable ONNX model and its source-bound proof artifacts. `verify-onnx` runs the independent checker locally, without the API, the private optimizer or an API key. Install the checker dependencies with `python3 -m pip install 'onnx>=1.16,<2' 'numpy>=1.26,<3'`. For the Python distribution use `pip install 'speedrunpapi[onnx]'`. The CPU timing evidence is a measured observation on the stated host; each exact stage proof checks model behavior under its declared semantics.
-
-For other supported exact problems, use `speedrunpapi run problem.math`, `speedrunpapi solve problem.math`, `speedrunpapi status <job-id>`, `speedrunpapi result <job-id>` and `speedrunpapi check source.file result.json`. `speedrunpapi jobs <command>` and the `colony-jobs` executable expose the same hosted interface. Requests consume credits only when the service accepts and settles a funded job. The hosted API is [api.colony.technology](https://api.colony.technology).
-
-### Exact mathematical jobs (R15)
-
-Eighteen bounded exact operators are registered. They implement source-specific operators from the M-01 through M-14 mathematical papers, plus four foundational contracts. Each `.math` source names the exact operator and its input domain. The separate CLI checker reconstructs the original mathematics and rejects modified evidence even when its digest is recalculated. Unsupported parameters return `Unknown`.
-
-M-05 adds complete cascaded sum/carry responses. M-07 and M-08 supply the 35-rectangle nonnegative tensor certificate and a 20-term signed tensor algorithm. M-09 checks the sparse GF(2) operators. M-10 determines the cyclic occupancy energy minimum. M-11 selects exact rational lattice phases. M-12 classifies recurrence horizons. M-13 computes transported affine-cycle defects. M-14 composes exact quadratic costs under the ᑕ. observation contract. Each implementation states its bounded inputs in the returned scope; the full research theorems are cited separately.
-
-The production result examples for M-02, M-03, M-04, M-05 and M-06 through M-14 can be independently replayed offline with:
-
-```sh
-speedrunpapi check examples/m02-tap-span.math examples/m02-tap-span.result.json
-speedrunpapi check examples/m03-affine-inverse.math examples/m03-affine-inverse.result.json
-speedrunpapi check examples/m04-two-stage.math examples/m04-two-stage.result.json
-speedrunpapi check examples/m06-shared-input.math examples/m06-shared-input.result.json
-speedrunpapi check examples/m05-cascade.math examples/m05-cascade.result.json
-speedrunpapi check examples/m07-rank35.math examples/m07-rank35.result.json
-speedrunpapi check examples/m08-signed20.math examples/m08-signed20.result.json
-speedrunpapi check examples/m09-binary-word.math examples/m09-binary-word.result.json
-speedrunpapi check examples/m10-cyclic-energy.math examples/m10-cyclic-energy.result.json
-speedrunpapi check examples/m11-lattice-phase.math examples/m11-lattice-phase.result.json
-speedrunpapi check examples/m12-damped-horizon.math examples/m12-damped-horizon.result.json
-speedrunpapi check examples/m13-affine-cycle.math examples/m13-affine-cycle.result.json
-speedrunpapi check examples/m14-taa-cost.math examples/m14-taa-cost.result.json
-```
-
-These result bundles came from funded technical-test jobs in production. They carry original source digests and exact independent mathematical evidence. They do not represent external card payments. New hosted jobs require an API key with credits.
-
-A [replayable production ONNX proof](proofs/hosted-onnx-production-20261110/) accompanies this release. The source, candidate, cost decision, transformation proof and independent checker are available to inspect. Local scans remain free and offline.
-
-## Three verdicts
-
-- `Certified` — a supported constraint pattern has one output under its stated input and range conditions.
-- `Broken` — a supported pattern admits distinct witnesses; the result includes a counterexample.
-- `Unknown` — the source needs a supported adapter or a complete constraint graph.
-
-Supported inputs include recognized Circom, Verilog, int8 and ONNX source patterns; exact bounded `carry-graph-v1` JSON; native Bitcoin Script assembly and bytecode for the listed deterministic opcode subset; and RV32IM arithmetic-register guest traces for zkVM projects. Script certificates state deterministic final-stack behavior for a fixed initial stack. Guest trace certificates validate each supplied RISC-V instruction word and register write. These are scoped execution claims, separate from full BitVM or zkVM proof-system validity. The v2 RV32IM format checks conditional branches, jumps, aligned LW/SW word memory, and arithmetic transitions. Bitcoin Script supports alternate-stack transfer and hash opcodes. Host syscalls, signatures and unsupported operations return `Unknown`.
-
-Binary snarkjs `.r1cs` v1 accepts triangular constant pivots and new coupled full-column-rank linear subsystems over BN254. Its guarantee is **at most one wire assignment with fixed public and private input values**. Rank-deficient or unrecognized nonlinear systems return `Unknown`. For `.r1cs`, `.bitvm`, `.script` or `.zkvm`, use `speedrunpapi verify result.json --source source.file` to re-run the source parser and exact certificate check. Source bytes and checker scope remain part of every signed result.
-
-The source-bound Circom examples also cover exact AND, Mux1 field arithmetic and a five-bit LessThan constraint: `examples/and.circom`, `examples/mux.circom` and `examples/compare.circom`. The verifier checks the complete recognized constraints and returns `Unknown` for altered or incomplete templates.
-
-Routine `--json` output contains the verdict, method, source checksum and proof fields. Research DOI metadata is available on demand with `--references`. Both output forms can be checked with `verify`.
-
-Try `speedrunpapi scan examples/native_add.bitvm --json`, `speedrunpapi scan examples/rv32im_arithmetic_trace.zkvm --json` and `speedrunpapi scan examples/coupled_rank.r1cs --json`. The rank-deficient R1CS and forged RV32IM trace examples return `Unknown`. You can also run the original Circom cases: `examples/compare.circom` and `examples/modsum-broken.circom`.
-
-## Batch scan
-
-One process can scan multiple source files and keep the analyzer warm across CI inputs:
-
-```sh
-speedrunpapi scan circuits/a.circom circuits/b.circom --json
-speedrunpapi scan --batch examples/batch-sources.json --json
-```
-
-A batch manifest is a JSON array of paths (relative to the manifest directory) or a newline-separated list. JSON output includes each file, source digest, verdict, and a batch summary with measured wall time. A Broken result exits 2; an Unknown result exits 3. Single-file JSON remains compatible.
-
-## GitHub Action
+## CI
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.6.4
+- uses: lmtlssss/speedrunpapi@v0.7.0
   with:
     file: circuits/main.circom
-    api_key: ${{ secrets.COLONY_API_KEY }}
+    include: node_modules/circomlib/circuits
 ```
 
-For a warm multi-file run, provide `batch_manifest: circuits/scan-files.json` instead of `file`. The Action requires a funded signing key. Every input must return Certified with its own source-bound Ed25519 certificate, which the Action checks against a pinned public key and the source file before passing. Broken, Unknown, missing key, invalid signature, revoked status, or missing certificate fails CI. Scans without signing remain free in the local CLI.
+The Action installs the pinned circom compiler, scans, uploads the report, and fails on `Broken`. Set `fail_on_unknown: true` to require `Certified`. Supplying `api_key` additionally requests a signed certificate.
 
-A badge can show the certified result tied to one immutable source digest. Example from a published source-bound certificate:
+## Signed certificates
 
-```markdown
-[![ᑕ. Certified](https://api.colony.technology/v1/badge/sha256:56f33ca9ce168c7586f87943108cb0c382f3eb2bcb50e822996cc5460bc64faa)](https://api.colony.technology/v1/result/sha256:56f33ca9ce168c7586f87943108cb0c382f3eb2bcb50e822996cc5460bc64faa)
+Local analysis is free. A paid API key adds an Ed25519-signed statement from Colony Technology that its service replayed your derivation, or re-evaluated your witness pair, against the R1CS you submitted:
+
+```sh
+export COLONY_API_KEY=...
+speedrunpapi scan circuit.circom --require-signed
 ```
 
-Use the SHA-256 digest of your own signed source in both links. The badge is a status view; the linked Ed25519 certificate and the original source provide independent proof. Its current status includes revocation. Public certificate status: [issuance control](https://api.colony.technology/v1/certificates/status) and [revocations](https://api.colony.technology/v1/revocations).
+The service signs only `Certified` and `Broken` results that it has itself re-verified. It does not sign `Unknown`, and it does not sign a verdict it was merely told. The certificate names the R1CS digest, the derivation digest and any assumptions; the source file name and compiler are recorded as client-declared, because the service cannot run your compiler. Uploads are limited to 8 MiB of R1CS; larger circuits are checked locally with `verify` and the Python checker. Certificate status and revocations are public at `api.colony.technology/v1/certificates/status` and `/v1/revocations`.
 
-## Packages
+To check a certificate offline, `node verifiers/cert/verify.mjs certificate.json circuit.r1cs` verifies the Ed25519 signature against the pinned public key and that the certificate names the digest of your file. A signature authenticates the issuer's statement; the report is what lets you re-check the claim itself. Credit packs: [colony.technology/packs](https://colony.technology/packs).
 
-`speedrunpapi@0.6.4` ships the local scanner, hosted universal-job client, and portable ONNX independent checker through [npm](https://www.npmjs.com/package/speedrunpapi) and [PyPI](https://pypi.org/project/speedrunpapi/). The sources and release record are available on [GitHub](https://github.com/lmtlssss/speedrunpapi/releases/tag/v0.6.4).
+## Changes in 0.7.0
 
-The free analyzer is bundled here. The paid API and signing service run at [api.colony.technology](https://api.colony.technology). [Terms](https://colony.technology/terms) · [Source release notes](https://github.com/lmtlssss/speedrunpapi/releases).
+Versions before 0.7.0 classified Circom, Verilog and INT8 sources by template name and keyword. They could report `Certified` for a circuit whose outputs were unconstrained, and the hosted service would sign that verdict. Those results were not proofs.
 
-This public distribution contains the standalone client and its Action. Colony's private service infrastructure, billing, credentials and internal research remain separate.
+0.7.0 replaces that analyzer with the one described above, which reasons about the compiled constraint system. If you relied on a `Certified` result from an earlier version, scan again. Certificates issued before 0.7.0 have been revoked.
 
-## Portable ᑕ. proof demonstration
+The Verilog, INT8, ONNX-text and carry-graph classifiers are removed and those inputs return `Unknown`. So are the Bitcoin Script and RV32IM trace adapters: an audit found that the first executed nothing (it accepted scripts that can never complete) and the second only replayed a trace against instruction words the trace itself supplied.
 
-[Exact carry-state contraction, 4,096 → 6 retained states](proofs/carry-frontier-4096/) is a complete portable evidence packet. It preserves the declared high-result observations of six modular additions for **all admissible lower-prefix inputs and every high suffix**. The 682.7× factor describes the reduction in retained states, not a CPU speedup.
+## Also in this package
 
-The original source, mathematical candidate, separate verifier source, exact input/claim digests and Ed25519 laboratory receipt travel together. A reviewer can run the independent checker with Python 3.11 and Node 20+:
+The hosted-job client (`run`, `solve`, `quote`, `optimize`, `status`, `result`, `check`) and the offline ONNX checker (`verify-onnx`) are unchanged in this release. See [docs/hosted-jobs.md](docs/hosted-jobs.md). The [SCITT claim profile](standards/scitt-exact-computation/) is an individual technical proposal and has not been submitted to the IETF Datatracker.
 
-`python3 proofs/carry-frontier-4096/verifier/verify.py`
-
-This mathematical reproduction requires no Colony account, private optimizer, or network access. Its ephemeral Ed25519 signature is a laboratory attestation; commercial certificates and third-party challenge acceptance have separate issuance and review requirements. The [proof workflow](.github/workflows/portable-proof.yml) replays it on GitHub Actions. Additional source-bound operator evidence can be published beside this example when accepted externally.
-
-## Portable certificate profile
-
-The [Exact Computation Claim Profile for SCITT](standards/scitt-exact-computation/) is a public individual technical proposal for independently checked computational claims in signed COSE statements. It separates the issuer signature, exact evidence check and optional transparency receipt. The [ᑕ. mathematical definition](https://github.com/lmtlssss/math/tree/main/mathematics/discrete-mathematics/exact-state-contraction) is published with a paper and exact rational verifier. The IETF draft source is public; it has not yet been submitted to Datatracker.
+[Terms](https://colony.technology/terms) · [Releases](https://github.com/lmtlssss/speedrunpapi/releases)

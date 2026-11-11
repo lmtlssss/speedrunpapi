@@ -1,2038 +1,2793 @@
 #!/usr/bin/env node
 
-// engine/packages/carrycert-cli/src/cli.ts
-import * as fs2 from "node:fs";
-import * as path2 from "node:path";
-import { createHash } from "node:crypto";
+// src/cli.ts
+import * as fs3 from "node:fs";
+import * as path3 from "node:path";
+import { createHash as createHash2 } from "node:crypto";
 
-// engine/packages/carrycert-core/src/math.ts
-var BN128_PRIME = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
-function arrangementNumber(k) {
-  let v = 1n;
-  for (let i = 1; i <= k; i++) v = BigInt(i) * v + 1n;
-  return v;
-}
-function cascadeFunctionCount(radix, stages) {
-  if (radix < 2n || stages < 0) throw new Error("radix>=2, stages>=0");
-  const t = Math.min(stages, Number(radix - 1n) > 1e9 ? stages : Number(radix - 1n));
-  const tt = Math.min(stages, Number(radix > 10n ** 9n ? 10n ** 9n : radix - 1n));
-  const tEff = stages;
-  const A = arrangementNumber(tEff);
-  return (radix - 1n) * A + 1n;
-}
-function cascadeMinBits(radix, stages) {
-  const n = cascadeFunctionCount(radix, stages);
-  return n === 0n ? 0 : n.toString(2).length;
-}
-function twoStageCount(radix) {
-  return 5n * radix - 4n;
-}
-function frontierBound(m) {
-  return m + 1;
-}
-function frontierSolve(width, offsets, masks, targets) {
-  const m = offsets.length;
-  const limit = 1 << width;
-  const mm = masks ?? Array(m).fill(0);
-  const tt = targets ?? Array(m).fill(0);
-  let thresholds = Array(m).fill(1);
-  let order = [...Array(m).keys()];
-  let boundaries = [0, 1];
-  let switches = Array(m).fill(0);
-  let counts = [1n];
-  let attempted = 0;
-  let maxStates = 1;
-  const layer = (w, th, ord) => {
-    const lim = 1 << w;
-    const b = [0];
-    const sw = Array(th.length).fill(0);
-    for (const j of ord) {
-      const t = th[j];
-      if (t < lim && t !== b[b.length - 1]) b.push(t);
-      sw[j] = t < lim ? b.length - 1 : -1;
-    }
-    for (let j = 0; j < th.length; j++) if (th[j] === lim) sw[j] = b.length;
-    b.push(lim);
-    return { boundaries: b, switches: sw, states: b.length - 1 };
-  };
-  let current = layer(0, thresholds, order);
-  for (let i = 0; i < width; i++) {
-    const span = 1 << i;
-    const bits = offsets.map((a) => a >> i & 1);
-    order = [...order.filter((j) => bits[j]), ...order.filter((j) => !bits[j])];
-    thresholds = thresholds.map((t, j) => t + (1 - bits[j]) * span);
-    const following = layer(i + 1, thresholds, order);
-    const nextCounts = Array(following.states).fill(0n);
-    maxStates = Math.max(maxStates, current.states, following.states);
-    const successors = (bit) => {
-      const target = [];
-      let r = 0;
-      const shift = bit << current.boundaries.length;
-      const sh = bit << i;
-      for (let idx = 0; idx < current.states; idx++) {
-        const v = current.boundaries[idx] + sh;
-        while (r + 1 < following.states && following.boundaries[r + 1] <= v) r++;
-        target.push(r);
-      }
-      return target;
-    };
-    for (const b of [0, 1]) {
-      const dest = successors(b);
-      let lo = 0, hi = current.states - 1;
-      for (let j = 0; j < m; j++) {
-        if (mm[j] >> i & 1) {
-          const required = b ^ bits[j] ^ tt[j] >> i & 1;
-          if (required) lo = Math.max(lo, current.switches[j]);
-          else hi = Math.min(hi, current.switches[j] - 1);
-        }
-      }
-      for (let r = 0; r < current.states; r++) {
-        attempted++;
-        if (!counts[r] || r < lo || r > hi) continue;
-        nextCounts[dest[r]] += counts[r];
-      }
-    }
-    counts = nextCounts;
-    current = following;
-  }
-  const count = counts.reduce((a, b) => a + b, 0n);
-  return { count, attempted, maxStates };
-}
-
-// engine/packages/carrycert-core/src/analyze.ts
-function modsumUnique(c) {
-  if (c.equation && c.sum_bitified && c.carry_bitified) {
-    return { unique: true, reason: "joint Num2Bits-style (sum+carry bits) uniquely determines (sum,carry)" };
-  }
-  if (c.equation && c.sum_bitified && !c.carry_bitified) {
-    return { unique: false, reason: "sum bits without carry bit: field alias carry=(a+b)*inv(2^n)" };
-  }
-  if (c.equation && !c.sum_bitified) {
-    return { unique: false, reason: "equation alone leaves free rank-1 variable over F_p" };
-  }
-  return { unique: false, reason: "insufficient constraints" };
-}
-function modsumCex(n, a = 3, b = 5) {
-  const MOD = 1 << n;
-  const sum0 = (a + b) % MOD;
-  const carry0 = Math.floor((a + b) / MOD);
-  const sum1 = ((BigInt(sum0) - BigInt(MOD) + BN128_PRIME) % BN128_PRIME).toString();
-  const carry1 = ((BigInt(carry0) + 1n) % BN128_PRIME).toString();
+// ../carrycert-core/src/scan.ts
+function unknown(id, domain, method, reason) {
   return {
-    inputs: { a, b, n },
-    witness_a: { sum: sum0, carry: carry0 },
-    witness_b: { sum: sum1, carry: carry1 },
-    equation: "a+b = sum + carry*2^n (mod p)",
-    prime: BN128_PRIME.toString()
-  };
-}
-function sumBitsCarryFreeCex(n, a = 0, b = 1) {
-  const MOD = 1 << n;
-  const inv = (() => {
-    return BigInt(MOD) === 0n ? 0n : modInv(BigInt(MOD), BN128_PRIME);
-  })();
-  const sum0 = (a + b) % MOD;
-  const carry0 = Math.floor((a + b) / MOD);
-  const sum1 = 0;
-  const carry1 = BigInt(a + b) % BN128_PRIME * inv % BN128_PRIME;
-  return {
-    inputs: { a, b, n },
-    witness_a: { sum: sum0, carry: carry0 },
-    witness_b: { sum: sum1, carry: carry1.toString() },
-    equation: "a+b = sum + carry*2^n (mod p), sum in [0,2^n)",
-    prime: BN128_PRIME.toString()
-  };
-}
-function modInv(a, m) {
-  let [old_r, r] = [a % m, m];
-  let [old_s, s] = [1n, 0n];
-  while (r !== 0n) {
-    const q = old_r / r;
-    [old_r, r] = [r, old_r - q * r];
-    [old_s, s] = [s, old_s - q * s];
-  }
-  return (old_s % m + m) % m;
-}
-function limbCex(n, k) {
-  const MOD = 1 << n;
-  const a = Array(k).fill(0);
-  const b = Array(k).fill(0);
-  const out = Array(k + 1).fill(0);
-  const carries = Array(k).fill(0);
-  out[0] = MOD;
-  carries[0] = Number(BN128_PRIME - 1n);
-  for (let i = 1; i < k; i++) {
-    carries[i] = 0;
-    out[i] = carries[i - 1];
-  }
-  out[k] = carries[k - 1];
-  return {
-    inputs: { a, b, n, k },
-    witness_a: { out: Array(k + 1).fill(0), carry: Array(k).fill(0) },
-    witness_b: { out, carry: carries },
-    prime: BN128_PRIME.toString()
-  };
-}
-function withDomain(gadget, r) {
-  if (!r.domain && gadget.domain) r.domain = gadget.domain;
-  return r;
-}
-function analyze(gadget) {
-  const t0 = performance.now();
-  const { family, constraints: c, params, id } = gadget;
-  const finish = (r) => withDomain(gadget, r);
-  if (family === "circom_function") {
-    const primitive = String(params.primitive ?? "");
-    const expr = primitive === "and" ? "a*b" : primitive === "mux1" ? "(b-a)*s+a" : null;
-    if (!expr || !c.equation) {
-      return finish({
-        id,
-        verdict: "Unknown",
-        time_ms: performance.now() - t0,
-        method: "circom_direct_incomplete",
-        theorem: "n/a",
-        reason: "Incomplete field assignment"
-      });
-    }
-    return finish({
-      id,
-      verdict: "Certified",
-      witness_count: 1,
-      time_ms: performance.now() - t0,
-      method: "circom_direct_arithmetic",
-      theorem: "A constrained field assignment fixes its output for each input tuple",
-      certificate: {
-        type: "functional_assignment",
-        primitive,
-        expression: expr,
-        field: "BN254",
-        input_domain: "field elements",
-        scope: "The main template contains only the declared inputs and one constrained output; every input tuple has one output."
-      }
-    });
-  }
-  if (family === "circom_comparison") {
-    const n = Number(params.n ?? 0);
-    const bits = Number(params.range_bits ?? 0);
-    if (n !== 4 || bits !== 5 || !c.equation || !c.sum_bitified || !c.carry_bitified) {
-      return finish({
-        id,
-        verdict: "Unknown",
-        time_ms: performance.now() - t0,
-        method: "circom_comparison_incomplete",
-        theorem: "n/a",
-        reason: "Missing exact bit decomposition"
-      });
-    }
-    return finish({
-      id,
-      verdict: "Certified",
-      witness_count: 1,
-      time_ms: performance.now() - t0,
-      method: "circom_bitified_comparison",
-      theorem: "Unique bit decomposition for 2^5 < p, followed by a constrained output",
-      certificate: {
-        type: "bit_decomposition",
-        n: 4,
-        range_bits: 5,
-        field: "BN254",
-        equation: "diff=a+16-b; diff=sum(bit[i]*2^i); out=1-bit[4]",
-        scope: "At most one witness for fixed field inputs when the five-bit decomposition is satisfiable; usual less-than semantics for inputs 0..15."
-      }
-    });
-  }
-  if (family === "modsum") {
-    const n = Number(params.n ?? 4);
-    const { unique, reason } = modsumUnique(c);
-    const dt = performance.now() - t0;
-    if (unique) {
-      const B = 1n << BigInt(n);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "modsum_uniqueness_lemma",
-        theorem: "two-stage-addition + Num2Bits soundness",
-        certificate: {
-          type: "uniqueness_lemma",
-          family: "modsum",
-          n,
-          lemma: reason,
-          two_stage_count: twoStageCount(B).toString(),
-          theorem_ref: "DOI 10.5281/zenodo.23698617"
-        }
-      });
-    }
-    const cex = c.sum_bitified && !c.carry_bitified ? sumBitsCarryFreeCex(n) : modsumCex(n);
-    return finish({
-      id,
-      verdict: "Broken",
-      time_ms: dt,
-      method: c.sum_bitified ? "modsum_sum_bits_carry_free" : "modsum_equation_rank",
-      theorem: "field alias / free variable over F_p",
-      counterexample: cex,
-      reason
-    });
-  }
-  if (family === "modsum3" || family === "full_adder") {
-    const dt = performance.now() - t0;
-    const ok = c.sum_bitified && c.carry_bitified && (family === "full_adder" || c.incoming_bitified || true);
-    if (family === "full_adder" && c.sum_bitified && c.carry_bitified) {
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "full_adder_num2bits",
-        theorem: "two-stage-addition",
-        certificate: { type: "uniqueness_lemma", family, safety: c.input_bitified ? "strong" : "weak" }
-      });
-    }
-    if (family === "modsum3" && c.sum_bitified && c.carry_bitified) {
-      const n = Number(params.n ?? 4);
-      const B = 1n << BigInt(n);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "modsum3_bitified",
-        theorem: "cascaded-sum-carry",
-        certificate: { cascade_count: cascadeFunctionCount(B, 2).toString(), theorem_ref: "DOI 10.5281/zenodo.23700193" }
-      });
-    }
-    return finish({ id, verdict: "Broken", time_ms: dt, method: "open", theorem: "n/a", counterexample: modsumCex(Number(params.n ?? 1)), reason: "missing bitification" });
-  }
-  if (family === "limb_add" || family === "binsum") {
-    const n = Number(params.n ?? 4);
-    const k = Number(params.k ?? params.ops ?? 2);
-    const dt = performance.now() - t0;
-    if (c.equation && c.sum_bitified && c.carry_bitified) {
-      const B = 1n << BigInt(n);
-      const stages = Math.max(1, k - 1);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "limb_add_bitified",
-        theorem: "cascaded-sum-carry + two-stage-addition",
-        certificate: {
-          n,
-          k,
-          two_stage_count: twoStageCount(B).toString(),
-          cascade_count: cascadeFunctionCount(B, stages).toString(),
-          cascade_bits: cascadeMinBits(B, stages),
-          theorem_ref: ["DOI 10.5281/zenodo.23698617", "DOI 10.5281/zenodo.23700193"]
-        }
-      });
-    }
-    return finish({
-      id,
-      verdict: "Broken",
-      time_ms: dt,
-      method: "limb_add_equation_only",
-      theorem: "cascaded-sum-carry (negative)",
-      counterexample: limbCex(n, k),
-      reason: "equation-only limb chain"
-    });
-  }
-  if (family === "shared_input") {
-    const width = Number(params.width ?? 8);
-    const offsets = params.offsets ?? [13, 45, 93];
-    const sample = frontierSolve(width, offsets);
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.carry_bitified && c.input_bitified) {
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "shared_input_frontier",
-        theorem: "shared-input-carry-frontiers DOI 10.5281/zenodo.23702847",
-        certificate: {
-          frontier_bound: frontierBound(offsets.length),
-          sample_count: sample.count.toString(),
-          max_states: sample.maxStates,
-          offsets
-        }
-      });
-    }
-    const MOD = 1 << width;
-    return finish({
-      id,
-      verdict: "Broken",
-      time_ms: dt,
-      method: "shared_input_equation_only",
-      theorem: "shared-input-carry-frontiers (negative)",
-      counterexample: {
-        inputs: { x: 0, offsets, width },
-        witness_a: { y: offsets.map((o) => o % MOD), c: offsets.map((o) => Math.floor(o / MOD)) },
-        witness_b: {
-          y: [(offsets[0] + MOD) % Number(BN128_PRIME > BigInt(Number.MAX_SAFE_INTEGER) ? MOD * 2 : Number(BN128_PRIME)), ...offsets.slice(1).map((o) => o % MOD)],
-          c: [Number(BN128_PRIME - 1n), ...offsets.slice(1).map((o) => Math.floor(o / MOD))]
-        },
-        frontier_bound: frontierBound(offsets.length)
-      }
-    });
-  }
-  if (family === "cascade") {
-    const n = Number(params.n ?? 4);
-    const stages = Number(params.stages ?? 3);
-    const B = 1n << BigInt(n);
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.carry_bitified && c.incoming_bitified) {
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "cascade_bitified",
-        theorem: "cascaded-sum-carry",
-        certificate: {
-          exact_function_count: cascadeFunctionCount(B, stages).toString(),
-          minimum_label_bits: cascadeMinBits(B, stages),
-          theorem_ref: "DOI 10.5281/zenodo.23700193"
-        }
-      });
-    }
-    return finish({
-      id,
-      verdict: "Broken",
-      time_ms: dt,
-      method: "cascade_equation_only",
-      theorem: "cascaded-sum-carry (negative)",
-      counterexample: limbCex(n, stages)
-    });
-  }
-  if (family === "bigint_mod") {
-    const n = Number(params.n ?? 3);
-    const k = Number(params.k ?? 2);
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.carry_bitified) {
-      const B = 1n << BigInt(n);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "bigint_mod_range_checked",
-        theorem: "limb range checks + reconstruction (circom-bigint BigMod pattern)",
-        certificate: {
-          n,
-          k,
-          note: "Certifies uniqueness under the standard BigMod constraint pattern: Num2Bits on div/mod limbs, BigMult/BigAdd reconstruction equality, and mod < b. Subgadget carry structure uses two-stage/cascade counts.",
-          two_stage_count: twoStageCount(B).toString(),
-          cascade_count: cascadeFunctionCount(B, Math.max(1, k)).toString(),
-          theorem_ref: ["DOI 10.5281/zenodo.23698617", "DOI 10.5281/zenodo.23700193"],
-          scope: "weak_safety_outputs_unique_given_public_inputs_under_stated_pattern"
-        }
-      });
-    }
-    return finish({
-      id,
-      verdict: "Unknown",
-      time_ms: dt,
-      method: "bigint_mod_incomplete",
-      theorem: "n/a",
-      reason: "BigMod without detected limb range checks; refusing to guess"
-    });
-  }
-  if (family === "arx_sha256") {
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.input_bitified) {
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        method: "arx_sha256_binsum_bitpath",
-        theorem: "circomlib Sha256compression uses bit signals + BinSum; shared-input/cascade bounds apply to add layers",
-        certificate: {
-          type: "compositional",
-          subgadgets: ["BinSum(32,2)", "BinSum(32,5)", "SigmaPlus", "T1", "T2"],
-          frontier_note: "T1 adds the same derived word into multiple running states \u2014 shared-input frontier DOI 10.5281/zenodo.23702847",
-          theorem_ref: [
-            "DOI 10.5281/zenodo.23702847",
-            "DOI 10.5281/zenodo.23697726",
-            "DOI 10.5281/zenodo.23697063"
-          ],
-          scope: "Certified for circomlib-style bit-level SHA-256 compression where all wires are bits and sums use BinSum. Not a general ARX soundness proof for arbitrary encodings.",
-          honesty: "Full differential/fiber analysis via affine-carry-inversion is available for \u03C3-shaped maps but not yet auto-composed for every custom SHA circuit."
-        }
-      });
-    }
-    return finish({
-      id,
-      verdict: "Unknown",
-      time_ms: dt,
-      method: "arx_sha256_unclassified",
-      theorem: "affine-carry-inversion / tap-span available but pattern incomplete",
-      reason: "SHA-256-like circuit without detected bit-level BinSum pattern"
-    });
-  }
-  if (family === "fixed_mac") {
-    const bits = Number(params.bits ?? 8);
-    const accBits = Number(params.acc_bits ?? 32);
-    const mode = String(params.overflow ?? "wrap");
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.carry_bitified) {
-      const B = 1n << BigInt(accBits);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        domain: gadget.domain,
-        method: "fixed_mac_range_checked",
-        theorem: "cascaded-sum-carry / two-stage-addition applied to fixed-point accumulator",
-        certificate: {
-          bits,
-          acc_bits: accBits,
-          overflow: mode,
-          two_stage_count: twoStageCount(1n << BigInt(Math.min(accBits, 32))).toString(),
-          theorem_ref: ["DOI 10.5281/zenodo.23698617", "DOI 10.5281/zenodo.23700193"],
-          scope: "Unique accumulator update given inputs when product and acc residue are range-checked (or jointly bitified)."
-        }
-      });
-    }
-    const n = Math.min(bits, 16);
-    return finish({
-      id,
-      verdict: "Broken",
-      time_ms: dt,
-      domain: gadget.domain,
-      method: "fixed_mac_equation_only",
-      theorem: "field/int alias of accumulator residue",
-      counterexample: modsumCex(n, 3, 5),
-      reason: "accumulator equation without range checks admits multiple (residue, overflow) pairs"
-    });
-  }
-  if (family === "hw_adder") {
-    const width = Number(params.width ?? 8);
-    const style = String(params.style ?? "ripple");
-    const dt = performance.now() - t0;
-    if (c.sum_bitified && c.carry_bitified && c.input_bitified) {
-      const B = 1n << BigInt(width);
-      return finish({
-        id,
-        verdict: "Certified",
-        witness_count: 1,
-        time_ms: dt,
-        domain: gadget.domain,
-        method: "hw_adder_bit_carry_chain",
-        theorem: "cascaded-sum-carry exact state; ripple/CLA with bit I/O is unique",
-        certificate: {
-          width,
-          style,
-          cascade_count: cascadeFunctionCount(2n, width).toString(),
-          cascade_bits: cascadeMinBits(2n, width),
-          theorem_ref: "DOI 10.5281/zenodo.23700193",
-          scope: "Bit-level adder netlist with full carry chain: (sum, cout) unique given (a,b,cin)."
-        }
-      });
-    }
-    if (c.equation && !c.carry_bitified) {
-      return finish({
-        id,
-        verdict: "Broken",
-        time_ms: dt,
-        domain: gadget.domain,
-        method: "hw_adder_missing_carry_bits",
-        theorem: "carry frontier incomplete",
-        counterexample: modsumCex(Math.min(width, 8), 1, 1),
-        reason: "adder equation without bit-constrained carries"
-      });
-    }
-    return finish({
-      id,
-      verdict: "Unknown",
-      time_ms: dt,
-      domain: gadget.domain,
-      method: "hw_adder_partial",
-      theorem: "n/a",
-      reason: "hardware adder pattern incomplete (need bit I/O + carry chain flags)"
-    });
-  }
-  return finish({
     id,
+    domain,
     verdict: "Unknown",
-    time_ms: performance.now() - t0,
-    method: "no_analyzer",
-    theorem: "n/a",
-    reason: `unsupported family ${family}`
-  });
-}
-
-// engine/packages/carrycert-core/src/circom-adapter.ts
-function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-}
-function detectMain(src) {
-  const m = src.match(/component\s+main(?:\s*\{[^}]*\})?\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:\(([^)]*)\))?\s*;/);
-  if (!m) return null;
-  const args = (m[2] ?? "").split(",").map((s) => s.trim()).filter(Boolean).map((s) => Number(s)).filter((n) => !Number.isNaN(n));
-  return { template: m[1], args };
-}
-function extractTemplateBody(src, name) {
-  const re = new RegExp(String.raw`template\s+${name}\s*(?:\([^)]*\))?\s*\{`);
-  const m = re.exec(src);
-  if (!m) return null;
-  let i = m.index + m[0].length;
-  let depth = 1;
-  const start = i;
-  while (i < src.length && depth > 0) {
-    if (src[i] === "{") depth++;
-    else if (src[i] === "}") depth--;
-    i++;
-  }
-  return src.slice(start, i - 1);
-}
-function num2BitsOnSumOnly(body) {
-  const sumBits = /Num2Bits\s*\([^)]*\)[\s\S]{0,120}?\.in\s*<==\s*sum\b/.test(body) || /n2b\.in\s*<==\s*sum\b/.test(body);
-  const carryFromBits = /carry\s*<==\s*[^;]*n2b\.out/.test(body) || /carry\s*<==\s*[^;]*\.out\[/.test(body);
-  const carryFree = /carry\s*<--/.test(body);
-  return sumBits && (carryFree || !carryFromBits);
-}
-function jointNum2BitsOnSum(body) {
-  return /Num2Bits\s*\(\s*n\s*\+\s*[12]\s*\)/.test(body) && /\.in\s*<==\s*a\s*\+\s*b/.test(body) && /carry\s*<==/.test(body);
-}
-function hasNum2Bits(src) {
-  return /Num2Bits\s*\(/.test(src);
-}
-function hasBitConstraint(src) {
-  return /\*\s*\(\s*[A-Za-z0-9_\.]+\s*-\s*1\s*\)\s*===\s*0/.test(src) || /Num2Bits\s*\(\s*1\s*\)/.test(src);
-}
-function hasEquationAssign(src) {
-  return /<--|===/.test(src);
-}
-function usesBinSum(src) {
-  return /BinSum\s*\(/.test(src);
-}
-function usesModSum(src) {
-  return /ModSum(?:Three|Four)?\s*\(/.test(src) || /template\s+ModSum/.test(src);
-}
-function usesBigAdd(src) {
-  return /BigAdd\s*\(/.test(src) || /template\s+BigAdd/.test(src);
-}
-function usesBigMod(src) {
-  return /BigMod\s*\(/.test(src) || /template\s+BigMod/.test(src);
-}
-function looksSha256(src) {
-  return /Sha256compression|SigmaPlus|BigSigma|SmallSigma|template\s+T1\b/.test(src);
-}
-function defaultConstraints(partial) {
-  return {
-    equation: partial.equation ?? true,
-    sum_bitified: partial.sum_bitified ?? false,
-    carry_bitified: partial.carry_bitified ?? false,
-    input_bitified: partial.input_bitified ?? false,
-    incoming_bitified: partial.incoming_bitified ?? false
+    method,
+    theorem: "No claim.",
+    time_ms: 0,
+    reason,
+    source_note: null,
+    check: { ok: true, kind: "unknown_skip" }
   };
 }
-function classifyCircomSource(src, id = "circuit") {
-  const clean = stripComments(src);
-  const main2 = detectMain(clean);
-  const tpl = main2?.template ?? "";
-  const args = main2?.args ?? [];
-  const body = tpl && extractTemplateBody(clean, tpl) || clean;
-  if (!/\binclude\s*["']/.test(clean) && tpl && extractTemplateBody(clean, tpl)) {
-    const compact = body.replace(/\s+/g, "");
-    const direct = /* @__PURE__ */ new Map([
-      ["signalinputa;signalinputb;signaloutputout;out<==a*b;", "and"],
-      ["signalinputa;signalinputb;signalinputs;signaloutputout;out<==(b-a)*s+a;", "mux1"]
-    ]);
-    const primitive = direct.get(compact);
-    if (primitive) {
-      return {
-        id,
-        domain: "circom",
-        family: "circom_function",
-        params: { primitive },
-        constraints: defaultConstraints({ equation: true }),
-        source: "circom",
-        notes: "Single field output bound by a complete arithmetic assignment"
-      };
-    }
-    const compare4 = "signalinputa;signalinputb;signaloutputout;signaldiff;signalbit[5];diff<==a+16-b;varlc=0;vare2=1;for(vari=0;i<5;i++){bit[i]<--(diff>>i)&1;bit[i]*(bit[i]-1)===0;lc+=bit[i]*e2;e2=e2+e2;}lc===diff;out<==1-bit[4];";
-    if (compact === compare4) {
-      return {
-        id,
-        domain: "circom",
-        family: "circom_comparison",
-        params: { n: 4, range_bits: 5 },
-        constraints: defaultConstraints({
-          equation: true,
-          sum_bitified: true,
-          carry_bitified: true
-        }),
-        source: "circom",
-        notes: "Five checked bits give a unique residue and comparison output"
-      };
-    }
-  }
-  if (/^ModSumCarryFree$/i.test(tpl)) {
-    const n = args[0] ?? 4;
-    return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: false }), source: "circom", notes: "sum Num2Bits only" };
-  }
-  if (/^ModSumBuggy$/i.test(tpl)) {
-    const n = args[0] ?? 4;
-    return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true }), source: "circom", notes: "equation-only" };
-  }
-  if (/^ModSumThreeSafe$/i.test(tpl) || /^ModSumThree$/i.test(tpl)) {
-    const n = args[0] ?? 4;
-    return { id, family: "modsum3", params: { n }, constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, incoming_bitified: true }), source: "circom" };
-  }
-  if (/^ModSum$/i.test(tpl) || /^ModSumSafe$/i.test(tpl)) {
-    const n = args[0] ?? 4;
-    if (num2BitsOnSumOnly(body)) {
-      return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: false }), source: "circom" };
-    }
-    if (/sum\s*<--/.test(body) && !/Num2Bits\s*\(/.test(body)) {
-      return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true }), source: "circom", notes: "equation-only ModSum" };
-    }
-    const joint = jointNum2BitsOnSum(body) || /Num2Bits\s*\(\s*n\s*\+\s*1\s*\)/.test(body);
-    return { id, family: "modsum", params: { n }, constraints: defaultConstraints({ equation: true, sum_bitified: joint, carry_bitified: joint }), source: "circom" };
-  }
-  if (/^FullAdder$/i.test(tpl)) {
-    return {
-      id,
-      family: "full_adder",
-      params: { n: 1 },
-      constraints: defaultConstraints({
-        equation: true,
-        sum_bitified: hasNum2Bits(clean),
-        carry_bitified: hasNum2Bits(clean),
-        input_bitified: hasBitConstraint(clean),
-        incoming_bitified: hasBitConstraint(clean)
-      }),
-      source: "circom"
-    };
-  }
-  if (/FullAdderLoose/i.test(tpl)) {
-    return {
-      id,
-      family: "full_adder",
-      params: { n: 1 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, input_bitified: false }),
-      source: "circom"
-    };
-  }
-  if (/BinSum/i.test(tpl)) {
-    return {
-      id,
-      family: "binsum",
-      params: { n: args[0] ?? 2, ops: args[1] ?? 2 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, input_bitified: true }),
-      source: "circom"
-    };
-  }
-  if (/BigAdd/i.test(tpl)) {
-    return {
-      id,
-      family: "limb_add",
-      params: { n: args[0] ?? 1, k: args[1] ?? 2 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true }),
-      source: "circom",
-      notes: "BigAdd via ModSum/ModSumThree"
-    };
-  }
-  if (/BigMod/i.test(tpl)) {
-    return {
-      id,
-      family: "bigint_mod",
-      params: { n: args[0] ?? 3, k: args[1] ?? 2 },
-      constraints: defaultConstraints({
-        equation: true,
-        sum_bitified: hasNum2Bits(clean),
-        carry_bitified: hasNum2Bits(clean)
-      }),
-      source: "circom",
-      notes: "BigMod with Num2Bits range checks + reconstruction"
-    };
-  }
-  if (/Sha256compression|Sha256/i.test(tpl) || looksSha256(clean)) {
-    return {
-      id,
-      family: "arx_sha256",
-      params: { rounds: 64 },
-      constraints: defaultConstraints({
-        equation: true,
-        sum_bitified: usesBinSum(clean) || hasNum2Bits(clean),
-        carry_bitified: usesBinSum(clean),
-        input_bitified: true
-        // circomlib uses bit wires
-      }),
-      source: "circom",
-      notes: "SHA-256 compression / ARX"
-    };
-  }
-  if (/U4AddSafe|LimbAddSafe/i.test(tpl)) {
-    const n = /U4/.test(tpl) ? 4 : args[0] ?? 4;
-    const k = /U4AddSafe/.test(tpl) ? args[0] ?? 8 : args[1] ?? args[0] ?? 2;
-    return {
-      id,
-      family: "limb_add",
-      params: { n, k },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true }),
-      source: "circom"
-    };
-  }
-  if (/U4AddBuggy|LimbAddBuggy/i.test(tpl)) {
-    const n = /U4/.test(tpl) ? 4 : args[0] ?? 4;
-    const k = /U4AddBuggy/.test(tpl) ? args[0] ?? 8 : args[1] ?? 2;
-    return {
-      id,
-      family: "limb_add",
-      params: { n, k },
-      constraints: defaultConstraints({ equation: true, sum_bitified: false, carry_bitified: false }),
-      source: "circom"
-    };
-  }
-  if (/SharedInputParallel/i.test(tpl)) {
-    return {
-      id,
-      family: "shared_input",
-      params: { width: args[0] ?? 8, offsets: [13, 45, 93] },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, input_bitified: true }),
-      source: "circom"
-    };
-  }
-  if (/SharedInputBuggy/i.test(tpl)) {
-    return {
-      id,
-      family: "shared_input",
-      params: { width: args[0] ?? 8, offsets: [13, 45, 93] },
-      constraints: defaultConstraints({ equation: true }),
-      source: "circom"
-    };
-  }
-  if (/^Cascade3$/i.test(tpl)) {
-    return {
-      id,
-      family: "cascade",
-      params: { n: args[0] ?? 4, stages: 3 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, incoming_bitified: true }),
-      source: "circom"
-    };
-  }
-  if (/Cascade3Buggy/i.test(tpl)) {
-    return {
-      id,
-      family: "cascade",
-      params: { n: args[0] ?? 4, stages: 3 },
-      constraints: defaultConstraints({ equation: true }),
-      source: "circom"
-    };
-  }
-  if (usesBigMod(clean)) {
-    return {
-      id,
-      family: "bigint_mod",
-      params: { n: args[0] ?? 3, k: args[1] ?? 2 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: hasNum2Bits(clean), carry_bitified: hasNum2Bits(clean) }),
-      source: "circom"
-    };
-  }
-  if (looksSha256(clean)) {
-    return {
-      id,
-      family: "arx_sha256",
-      params: { rounds: 64 },
-      constraints: defaultConstraints({
-        equation: true,
-        sum_bitified: usesBinSum(clean),
-        carry_bitified: usesBinSum(clean),
-        input_bitified: true
-      }),
-      source: "circom"
-    };
-  }
-  if (usesBigAdd(clean) || usesModSum(clean)) {
-    return {
-      id,
-      family: "limb_add",
-      params: { n: args[0] ?? 4, k: args[1] ?? 2 },
-      constraints: defaultConstraints({
-        equation: true,
-        sum_bitified: hasNum2Bits(clean),
-        carry_bitified: hasNum2Bits(clean)
-      }),
-      source: "circom"
-    };
-  }
-  if (usesBinSum(clean)) {
-    return {
-      id,
-      family: "binsum",
-      params: { n: args[0] ?? 32, ops: args[1] ?? 2 },
-      constraints: defaultConstraints({ equation: true, sum_bitified: true, carry_bitified: true, input_bitified: true }),
-      source: "circom"
-    };
-  }
-  if (/<--/.test(clean) && !hasNum2Bits(clean) && /\+\s*.*===/.test(clean)) {
-    return {
-      id,
-      family: "modsum",
-      params: { n: 4 },
-      constraints: defaultConstraints({ equation: true }),
-      source: "circom",
-      notes: "heuristic: assignments without Num2Bits"
-    };
-  }
-  return {
-    id,
-    family: "unknown",
-    params: {},
-    constraints: defaultConstraints({ equation: hasEquationAssign(clean) }),
-    source: "circom",
-    notes: `unclassified template=${tpl || "(none)"}`
-  };
-}
-
-// engine/packages/carrycert-core/src/circom-fs.ts
-import * as fs from "node:fs";
-import * as path from "node:path";
-function readWithIncludes(entry, depth = 0, maxDepth = 6, seen = /* @__PURE__ */ new Set()) {
-  const abs = path.resolve(entry);
-  if (seen.has(abs) || depth > maxDepth) return "";
-  seen.add(abs);
-  if (!fs.existsSync(abs)) return "";
-  let text = fs.readFileSync(abs, "utf8");
-  const dir = path.dirname(abs);
-  const includeRe = /include\s+"([^"]+)"\s*;/g;
-  let m;
-  const parts = [text];
-  while (m = includeRe.exec(text)) {
-    const inc = path.resolve(dir, m[1]);
-    parts.push(readWithIncludes(inc, depth + 1, maxDepth, seen));
-  }
-  return parts.join("\n");
-}
-function classifyCircomFile(filePath, opts = {}) {
-  const follow = opts.followIncludes !== false;
-  const src = follow ? readWithIncludes(filePath, 0, opts.maxIncludeDepth ?? 8) : fs.readFileSync(filePath, "utf8");
-  const id = opts.id ?? path.basename(filePath, path.extname(filePath));
-  return classifyCircomSource(src, id);
-}
-function scanCircomFile(filePath, opts = {}) {
-  return analyze(classifyCircomFile(filePath, opts));
-}
-
-// engine/packages/carrycert-core/src/checker.ts
-function checkResult(r) {
-  if (r.verdict === "Broken") {
-    const cex = r.counterexample ?? {};
-    const wa = cex.witness_a;
-    const wb = cex.witness_b;
-    if (wa?.sum !== void 0 && wb?.sum !== void 0) {
-      const n = cex.inputs.n;
-      const MOD = 1n << BigInt(n);
-      const a = BigInt(cex.inputs.a);
-      const b = BigInt(cex.inputs.b);
-      const lhs = (a + b) % BN128_PRIME;
-      const okA = (BigInt(String(wa.sum)) + BigInt(String(wa.carry)) * MOD) % BN128_PRIME === lhs;
-      const okB = (BigInt(String(wb.sum)) + BigInt(String(wb.carry)) * MOD) % BN128_PRIME === lhs;
-      const differ = !(String(wa.sum) === String(wb.sum) && String(wa.carry) === String(wb.carry));
-      return { ok: okA && okB && differ, kind: "modsum_cex" };
-    }
-    if (wb?.out) {
-      return { ok: Array.isArray(wb.out) && wb.out.some((x) => x !== 0), kind: "limb_cex" };
-    }
-    if (wa?.y) {
-      return { ok: JSON.stringify(wa) !== JSON.stringify(wb), kind: "shared_cex" };
-    }
-    return { ok: false, kind: "unrecognized_cex" };
-  }
-  if (r.verdict === "Certified") {
-    if (r.method === "r1cs_triangular_uniqueness" || r.method === "r1cs_coupled_linear_rank" || r.method === "bitcoin_script_deterministic_subset" || r.method === "rv32im_execution_trace_exact")
-      return { ok: false, kind: "source_recheck_required" };
-    if (r.method === "circom_direct_arithmetic") {
-      const c = r.certificate;
-      const expected = c?.primitive === "and" ? "a*b" : c?.primitive === "mux1" ? "(b-a)*s+a" : null;
-      return { ok: c?.type === "functional_assignment" && c.expression === expected && r.witness_count === 1, kind: "functional_assignment" };
-    }
-    if (r.method === "circom_bitified_comparison") {
-      const c = r.certificate;
-      return { ok: c?.type === "bit_decomposition" && c.n === 4 && c.range_bits === 5 && r.witness_count === 1, kind: "bit_decomposition" };
-    }
-    return { ok: !!r.certificate, kind: "certificate" };
-  }
-  return { ok: true, kind: "unknown_skip" };
-}
-
-// engine/packages/carrycert-core/src/adapters/verilog.ts
-function classifyVerilogSource(src, id = "hw_circuit") {
-  const clean = src.replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
-  const widthM = clean.match(/\[\s*(\d+)\s*:\s*0\s*\]/);
-  const width = widthM ? Number(widthM[1]) + 1 : 8;
-  const hasFullAdder = /full_adder|FA\b|module\s+fa\b/i.test(clean);
-  const hasRipple = /ripple|rca\b|generate.*full_adder|cout\s*\(\s*c\s*\[/i.test(clean) || hasFullAdder;
-  const bitIO = /input\s+\[\s*\d+\s*:\s*0\s*\]\s*a/.test(clean) && /output\s+\[\s*\d+\s*:\s*0\s*\]\s*sum/.test(clean);
-  const carryChain = /cout|carry/.test(clean);
-  const bareAssign = /assign\s+sum\s*=\s*a\s*\+\s*b/.test(clean) && !carryChain;
-  if (bareAssign) {
-    return {
-      id,
-      family: "hw_adder",
-      domain: "verilog",
-      params: { width, style: "bare_assign" },
-      constraints: { equation: true, sum_bitified: false, carry_bitified: false, input_bitified: bitIO, incoming_bitified: false },
-      notes: "bare a+b assign without explicit carry chain"
-    };
-  }
-  if (hasRipple || hasFullAdder || bitIO && carryChain) {
-    return {
-      id,
-      family: "hw_adder",
-      domain: "verilog",
-      params: { width, style: hasRipple ? "ripple" : "adder" },
-      constraints: {
-        equation: true,
-        sum_bitified: true,
-        carry_bitified: carryChain,
-        input_bitified: true,
-        incoming_bitified: /cin/.test(clean)
-      },
-      notes: "structural bit-level adder"
-    };
-  }
-  return {
-    id,
-    family: "unknown",
-    domain: "verilog",
-    params: { width },
-    constraints: { equation: false, sum_bitified: false, carry_bitified: false, input_bitified: false, incoming_bitified: false },
-    notes: "unrecognized verilog"
-  };
-}
-
-// engine/packages/carrycert-core/src/adapters/int8.ts
-function classifyInt8Kernel(k) {
-  const range = k.range_checked !== false;
-  return {
-    id: k.id,
-    family: "fixed_mac",
-    domain: "int8",
-    params: {
-      bits: k.bits ?? 8,
-      acc_bits: k.acc_bits ?? 32,
-      overflow: k.overflow ?? "wrap"
-    },
-    constraints: {
-      equation: true,
-      sum_bitified: range,
-      carry_bitified: range,
-      input_bitified: range,
-      incoming_bitified: false,
-      extra: { overflow: k.overflow ?? "wrap" }
-    },
-    notes: k.notes
-  };
-}
-function classifyInt8Source(src, id = "int8_kernel") {
-  const s = src.toLowerCase();
-  const bitsM = s.match(/int(\d+)/);
-  const accM = s.match(/acc(\d+)/);
-  const range = /norange|no.?range|unchecked/.test(s) ? false : !/unchecked/.test(s);
-  const overflow = /sat/.test(s) ? "saturate" : "wrap";
-  return classifyInt8Kernel({
-    id,
-    bits: bitsM ? Number(bitsM[1]) : 8,
-    acc_bits: accM ? Number(accM[1]) : 32,
-    overflow,
-    range_checked: range && !/norange/.test(s)
-  });
-}
-
-// engine/packages/carrycert-core/src/adapters/onnx.ts
-function classifyOnnxKernel(k) {
-  const ir = classifyInt8Kernel({
-    id: k.id,
-    bits: k.bits ?? 8,
-    acc_bits: k.acc_bits ?? 32,
-    overflow: k.overflow ?? "wrap",
-    range_checked: k.range_checked !== false,
-    notes: k.notes ?? `onnx ${k.op ?? "mac"}`
-  });
-  ir.domain = "onnx";
-  ir.params = { ...ir.params, op: k.op ?? "mac" };
-  return ir;
-}
-function classifyOnnxSource(src, id = "onnx_kernel") {
-  const s = src.toLowerCase();
-  const bitsM = s.match(/int(\d+)/);
-  const accM = s.match(/acc(\d+)/);
-  const op = /conv/.test(s) ? "conv" : /matmul|gemm/.test(s) ? "matmul" : "mac";
-  const norange = /norange|unchecked|no.?quant/.test(s);
-  const overflow = /sat/.test(s) ? "saturate" : "wrap";
-  return classifyOnnxKernel({
-    id,
-    op,
-    bits: bitsM ? Number(bitsM[1]) : 8,
-    acc_bits: accM ? Number(accM[1]) : 32,
-    range_checked: !norange,
-    overflow,
-    notes: src.trim().slice(0, 120)
-  });
-}
-
-// engine/packages/carrycert-core/src/adapters/carry-graph.ts
-function unsupported(id, domain, reason) {
-  return {
-    id,
-    domain,
-    family: "unknown",
-    params: {},
-    constraints: {
-      equation: false,
-      sum_bitified: false,
-      carry_bitified: false,
-      input_bitified: false,
-      incoming_bitified: false
-    },
-    notes: reason
-  };
-}
-function classifyCarryGraph(graph, id = "carry_graph") {
-  const n = graph?.limb_bits;
-  const k = graph?.limbs;
-  const domain = graph?.domain || "unknown";
-  if (graph?.format !== "carry-graph-v1" || !["bitvm", "zkvm", "r1cs"].includes(domain) || graph.op !== "add" || !Number.isInteger(n) || n < 1 || n > 32 || !Number.isInteger(k) || k < 1 || k > 64 || !Array.isArray(graph.equations) || !Array.isArray(graph.ranges) || graph.equations.length !== k || graph.ranges.length !== 4 * k)
-    return unsupported(id, domain, "Carry graph requires complete bounded addition constraints");
-  const radix = (1n << BigInt(n)).toString();
-  const requiredEquations = Array.from(
-    { length: k },
-    (_, i) => `a[${i}]+b[${i}]${i ? `+carry[${i - 1}]` : ""}=sum[${i}]+${radix}*carry[${i}]`
-  );
-  const requiredRanges = Array.from({ length: k }, (_, i) => [
-    `a[${i}]:${n}`,
-    `b[${i}]:${n}`,
-    `sum[${i}]:${n}`,
-    `carry[${i}]:1`
-  ]).flat();
-  const normalize = (x) => typeof x === "string" ? x.replace(/\s+/g, "") : "";
-  const eqs = graph.equations.map(normalize);
-  const ranges = graph.ranges.map(normalize);
-  if (new Set(eqs).size !== k || new Set(ranges).size !== 4 * k || requiredEquations.some((e) => !eqs.includes(e)) || requiredRanges.some((r) => !ranges.includes(r)))
-    return unsupported(id, domain, "Unrecognized or incomplete equations/ranges; source contract undecided");
-  return {
-    id,
-    domain,
-    family: "limb_add",
-    params: { n, k, style: "bounded_carry_graph_v1" },
-    constraints: {
-      equation: true,
-      sum_bitified: true,
-      carry_bitified: true,
-      input_bitified: true,
-      incoming_bitified: false,
-      extra: { graph_format: "carry-graph-v1", equations: k, ranges: 4 * k }
-    },
-    notes: "Exact carry-graph constraints. Scope: mathematical graph; source frontend binding required."
-  };
-}
-
-// engine/packages/carrycert-core/src/adapters/native-bitvm.ts
-var effects = {
-  OP_0: [0, 1],
-  OP_1NEGATE: [0, 1],
-  OP_1: [0, 1],
-  OP_2: [0, 1],
-  OP_3: [0, 1],
-  OP_4: [0, 1],
-  OP_5: [0, 1],
-  OP_6: [0, 1],
-  OP_7: [0, 1],
-  OP_8: [0, 1],
-  OP_9: [0, 1],
-  OP_10: [0, 1],
-  OP_11: [0, 1],
-  OP_12: [0, 1],
-  OP_13: [0, 1],
-  OP_14: [0, 1],
-  OP_15: [0, 1],
-  OP_16: [0, 1],
-  OP_VERIFY: [1, 0],
-  OP_DUP: [1, 2],
-  OP_2DUP: [2, 4],
-  OP_TOALTSTACK: [1, 0],
-  OP_FROMALTSTACK: [0, 1],
-  OP_SHA256: [1, 1],
-  OP_HASH256: [1, 1],
-  OP_HASH160: [1, 1],
-  OP_RIPEMD160: [1, 1],
-  OP_SIZE: [1, 2],
-  OP_NIP: [2, 1],
-  OP_TUCK: [2, 3],
-  OP_DROP: [1, 0],
-  OP_SWAP: [2, 2],
-  OP_OVER: [2, 3],
-  OP_ROT: [3, 3],
-  OP_ADD: [2, 1],
-  OP_SUB: [2, 1],
-  OP_1ADD: [1, 1],
-  OP_1SUB: [1, 1],
-  OP_EQUAL: [2, 1],
-  OP_EQUALVERIFY: [2, 0],
-  OP_BOOLAND: [2, 1],
-  OP_BOOLOR: [2, 1],
-  OP_NUMEQUAL: [2, 1],
-  OP_NUMEQUALVERIFY: [2, 0],
-  OP_NOT: [1, 1],
-  OP_0NOTEQUAL: [1, 1],
-  OP_LESSTHAN: [2, 1],
-  OP_GREATERTHAN: [2, 1],
-  OP_MIN: [2, 1],
-  OP_MAX: [2, 1],
-  OP_WITHIN: [3, 1]
-};
-var opcodes = new Map([
-  [0, "OP_0"],
-  [79, "OP_1NEGATE"],
-  ...Array.from({ length: 16 }, (_, i) => [81 + i, "OP_" + (i + 1)]),
-  [105, "OP_VERIFY"],
-  [118, "OP_DUP"],
-  [110, "OP_2DUP"],
-  [117, "OP_DROP"],
-  [107, "OP_TOALTSTACK"],
-  [108, "OP_FROMALTSTACK"],
-  [168, "OP_SHA256"],
-  [170, "OP_HASH256"],
-  [169, "OP_HASH160"],
-  [166, "OP_RIPEMD160"],
-  [130, "OP_SIZE"],
-  [119, "OP_NIP"],
-  [125, "OP_TUCK"],
-  [124, "OP_SWAP"],
-  [120, "OP_OVER"],
-  [123, "OP_ROT"],
-  [147, "OP_ADD"],
-  [148, "OP_SUB"],
-  [139, "OP_1ADD"],
-  [140, "OP_1SUB"],
-  [135, "OP_EQUAL"],
-  [136, "OP_EQUALVERIFY"],
-  [154, "OP_BOOLAND"],
-  [155, "OP_BOOLOR"],
-  [156, "OP_NUMEQUAL"],
-  [157, "OP_NUMEQUALVERIFY"],
-  [145, "OP_NOT"],
-  [146, "OP_0NOTEQUAL"],
-  [159, "OP_LESSTHAN"],
-  [160, "OP_GREATERTHAN"],
-  [163, "OP_MIN"],
-  [164, "OP_MAX"],
-  [165, "OP_WITHIN"]
-]);
-function parseAsm(source) {
-  const withoutComments = source.replace(/#.*$/gm, "").trim();
-  const tokens = withoutComments.split(/\s+/).filter(Boolean);
-  if (!tokens.length || tokens.length > 4096) throw Error("Script opcode count out of range");
-  return tokens.map((token) => {
-    const effect = effects[token];
-    if (!effect) throw Error("Opcode outside deterministic subset: " + token.slice(0, 48));
-    return { name: token, need: effect[0], give: effect[1] };
-  });
-}
-function parseHex(source) {
-  const hex = source.trim().replace(/^0x/i, "");
-  if (!hex || hex.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(hex) || hex.length > 2e4)
-    throw Error("Invalid Bitcoin Script hex");
-  const bytes = Uint8Array.from(hex.match(/../g), (h) => Number.parseInt(h, 16));
-  const ops = [];
-  let p = 0;
-  while (p < bytes.length) {
-    const code = bytes[p++];
-    let len;
-    if (code >= 1 && code <= 75) len = code;
-    else if (code === 76) {
-      if (p >= bytes.length) throw Error("Truncated OP_PUSHDATA1");
-      len = bytes[p++];
-    } else if (code === 77) {
-      if (p + 2 > bytes.length) throw Error("Truncated OP_PUSHDATA2");
-      len = bytes[p] + 256 * bytes[p + 1];
-      p += 2;
-    }
-    if (len !== void 0) {
-      if (len > 520 || p + len > bytes.length) throw Error("Invalid Script data push");
-      p += len;
-      ops.push({ name: "PUSH", need: 0, give: 1 });
-    } else {
-      const name = opcodes.get(code);
-      if (!name) throw Error("Unsupported Script opcode 0x" + code.toString(16));
-      const effect = effects[name];
-      ops.push({ name, need: effect[0], give: effect[1] });
-    }
-    if (ops.length > 4096) throw Error("Script opcode count out of range");
-  }
-  return ops;
-}
-function scanNativeBitvm(source, id = "script") {
-  const t0 = performance.now();
-  try {
-    if (source.length > 128 * 1024) throw Error("Script source exceeds 128 KiB");
-    const hex = /^(?:0x)?(?:[0-9a-f]{2})+$/i.test(source.trim());
-    const program = hex ? parseHex(source) : parseAsm(source);
-    let required = 0, depth = 0, peak = 0, altDepth = 0, altPeak = 0;
-    const histogram = {};
-    for (const op of program) {
-      if (op.name === "OP_FROMALTSTACK") {
-        if (altDepth === 0) throw Error("OP_FROMALTSTACK without prior OP_TOALTSTACK");
-        altDepth--;
-      }
-      if (depth < op.need) {
-        required += op.need - depth;
-        depth = op.need;
-      }
-      depth += op.give - op.need;
-      if (op.name === "OP_TOALTSTACK") {
-        altDepth++;
-        altPeak = Math.max(altPeak, altDepth);
-      }
-      peak = Math.max(peak, depth);
-      histogram[op.name] = (histogram[op.name] || 0) + 1;
-    }
-    const certificate = {
-      type: "bitcoin_script_deterministic_subset",
-      source_form: hex ? "bytecode" : "assembly",
-      operations: program.length,
-      minimum_initial_items: required,
-      final_stack_items_for_minimum_input: depth,
-      extra_stack_peak: peak,
-      alternate_stack_peak: altPeak,
-      alternate_stack_final: altDepth,
-      opcodes: histogram,
-      scope: "At most one final main and alternate stack for a fixed initial stack on successful execution of parsed deterministic Bitcoin Script operations, including alternate-stack transfer and cryptographic hash primitives. Transaction context, Script consensus validity and BitVM dispute proof validity are outside this scope."
-    };
-    return {
-      id,
-      domain: "bitvm",
-      verdict: "Certified",
-      witness_count: "\u22641",
-      method: "bitcoin_script_deterministic_subset",
-      theorem: "Every supported opcode is a deterministic partial stack function; composition remains deterministic",
-      time_ms: performance.now() - t0,
-      certificate,
-      check: { ok: true, kind: "bitcoin_script_source_parsed" },
-      source_note: certificate.scope
-    };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      id,
-      domain: "bitvm",
-      verdict: "Unknown",
-      method: "bitcoin_script_opcode_unsupported",
-      theorem: "n/a",
-      reason,
-      time_ms: performance.now() - t0,
-      check: { ok: true, kind: "unknown_skip" },
-      source_note: "Script not fully parsed; source undecided"
-    };
-  }
-}
-
-// engine/packages/carrycert-core/src/adapters/native-zkvm.ts
-var u32 = (x) => x >>> 0;
-var signed = (x) => x | 0;
-var signExtend = (value, bits) => value & 1 << bits - 1 ? value - (1 << bits) : value;
-function uint(value) {
-  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 4294967295;
-}
-function instruction(word, pc, regs) {
-  const opcode = word & 127, rd = word >>> 7 & 31, f3 = word >>> 12 & 7;
-  const rs1 = word >>> 15 & 31, rs2 = word >>> 20 & 31, f7 = word >>> 25;
-  const a = regs[rs1], b = regs[rs2];
-  let value, name;
-  if (opcode === 51) {
-    if (f7 === 0 && f3 === 0) {
-      name = "ADD";
-      value = u32(a + b);
-    } else if (f7 === 32 && f3 === 0) {
-      name = "SUB";
-      value = u32(a - b);
-    } else if (f7 === 0 && f3 === 1) {
-      name = "SLL";
-      value = u32(a << (b & 31));
-    } else if (f7 === 0 && f3 === 2) {
-      name = "SLT";
-      value = Number(signed(a) < signed(b));
-    } else if (f7 === 0 && f3 === 3) {
-      name = "SLTU";
-      value = Number(a < b);
-    } else if (f7 === 0 && f3 === 4) {
-      name = "XOR";
-      value = u32(a ^ b);
-    } else if (f7 === 0 && f3 === 5) {
-      name = "SRL";
-      value = a >>> (b & 31);
-    } else if (f7 === 32 && f3 === 5) {
-      name = "SRA";
-      value = u32(signed(a) >> (b & 31));
-    } else if (f7 === 0 && f3 === 6) {
-      name = "OR";
-      value = u32(a | b);
-    } else if (f7 === 0 && f3 === 7) {
-      name = "AND";
-      value = u32(a & b);
-    } else if (f7 === 1 && f3 === 0) {
-      name = "MUL";
-      value = u32(Math.imul(a, b));
-    } else throw Error("Unsupported RV32IM register opcode");
-  } else if (opcode === 19) {
-    const imm = signExtend(word >>> 20, 12);
-    if (f3 === 0) {
-      name = "ADDI";
-      value = u32(a + imm);
-    } else if (f3 === 2) {
-      name = "SLTI";
-      value = Number(signed(a) < imm);
-    } else if (f3 === 3) {
-      name = "SLTIU";
-      value = Number(a < u32(imm));
-    } else if (f3 === 4) {
-      name = "XORI";
-      value = u32(a ^ imm);
-    } else if (f3 === 6) {
-      name = "ORI";
-      value = u32(a | imm);
-    } else if (f3 === 7) {
-      name = "ANDI";
-      value = u32(a & imm);
-    } else if (f3 === 1 && word >>> 25 === 0) {
-      name = "SLLI";
-      value = u32(a << (word >>> 20 & 31));
-    } else if (f3 === 5 && word >>> 25 === 0) {
-      name = "SRLI";
-      value = a >>> (word >>> 20 & 31);
-    } else if (f3 === 5 && word >>> 25 === 32) {
-      name = "SRAI";
-      value = u32(signed(a) >> (word >>> 20 & 31));
-    } else throw Error("Unsupported RV32IM immediate opcode");
-  } else if (opcode === 55) {
-    name = "LUI";
-    value = u32(word & 4294963200);
-  } else if (opcode === 23) {
-    name = "AUIPC";
-    value = u32(pc + (word & 4294963200));
-  } else throw Error("Unsupported RV32IM control, memory or system opcode");
-  return { rd, value: rd === 0 ? 0 : value, name };
-}
-function decodeV2(word, pc, regs, memory) {
-  const opcode = word & 127, rd = word >>> 7 & 31, f3 = word >>> 12 & 7;
-  const rs1 = word >>> 15 & 31, rs2 = word >>> 20 & 31;
-  const a = regs[rs1], b = regs[rs2];
-  let next_pc = u32(pc + 4), value = 0, name = "", write;
-  let target = false, register = 0;
-  if (opcode === 99) {
-    const imm = signExtend(word >>> 31 << 12 | (word >>> 7 & 1) << 11 | (word >>> 25 & 63) << 5 | (word >>> 8 & 15) << 1, 13);
-    const tests = { 0: a === b, 1: a !== b, 4: signed(a) < signed(b), 5: signed(a) >= signed(b), 6: a < b, 7: a >= b };
-    if (!(f3 in tests)) throw Error("Unsupported RV32IM branch condition");
-    name = ["BEQ", "BNE", "", "", "BLT", "BGE", "BLTU", "BGEU"][f3];
-    if (tests[f3]) {
-      next_pc = u32(pc + imm);
-      target = true;
-    }
-  } else if (opcode === 111) {
-    const imm = signExtend(word >>> 31 << 20 | (word >>> 12 & 255) << 12 | (word >>> 20 & 1) << 11 | (word >>> 21 & 1023) << 1, 21);
-    name = "JAL";
-    register = rd;
-    value = u32(pc + 4);
-    next_pc = u32(pc + imm);
-    target = true;
-  } else if (opcode === 103 && f3 === 0) {
-    name = "JALR";
-    register = rd;
-    value = u32(pc + 4);
-    next_pc = u32(a + signExtend(word >>> 20, 12)) & ~1;
-    target = true;
-  } else if (opcode === 3 && f3 === 2) {
-    name = "LW";
-    register = rd;
-    const address = u32(a + signExtend(word >>> 20, 12));
-    if (address % 4 || !memory.has(address)) throw Error("Unaligned/uninitialized LW");
-    value = memory.get(address);
-  } else if (opcode === 35 && f3 === 2) {
-    name = "SW";
-    const imm = signExtend(word >>> 25 << 5 | word >>> 7 & 31, 12);
-    const address = u32(a + imm);
-    if (address % 4) throw Error("Unaligned SW");
-    write = { address, value: b };
-  } else {
-    const out = instruction(word, pc, regs);
-    name = out.name;
-    register = out.rd;
-    value = out.value;
-  }
-  if (target && next_pc % 4) throw Error("Unaligned control target");
-  return { rd: register, value: register === 0 ? 0 : value, next_pc, name, ...write ? { write } : {} };
-}
-function scanV2(trace, id, t0) {
-  if (Object.keys(trace).sort().join(",") !== "format,initial_memory,initial_pc,initial_registers,steps" || !uint(trace.initial_pc) || trace.initial_pc % 4 || !Array.isArray(trace.initial_registers) || trace.initial_registers.length !== 32 || !trace.initial_registers.every(uint) || trace.initial_registers[0] !== 0 || !Array.isArray(trace.initial_memory) || trace.initial_memory.length > 1024 || !Array.isArray(trace.steps) || trace.steps.length < 1 || trace.steps.length > 4096)
-    throw Error("Invalid RV32IM v2 state bounds");
-  const memory = /* @__PURE__ */ new Map();
-  for (const cell of trace.initial_memory) {
-    if (!cell || typeof cell !== "object" || Array.isArray(cell) || Object.keys(cell).sort().join(",") !== "address,value" || !uint(cell.address) || cell.address % 4 || !uint(cell.value) || memory.has(cell.address))
-      throw Error("Invalid initial memory cell");
-    memory.set(cell.address, cell.value);
-  }
-  const regs = [...trace.initial_registers];
-  let pc = trace.initial_pc;
-  const histogram = {};
-  const written = /* @__PURE__ */ new Set();
-  for (let i = 0; i < trace.steps.length; i++) {
-    const step = trace.steps[i];
-    if (!step || typeof step !== "object" || Array.isArray(step) || !["instruction,next_pc,pc,rd,value", "instruction,memory_write,next_pc,pc,rd,value"].includes(Object.keys(step).sort().join(",")) || step.pc !== pc || !uint(step.next_pc) || step.next_pc % 4 || !uint(step.rd) || step.rd > 31 || !uint(step.value) || typeof step.instruction !== "string" || !/^0x[0-9a-f]{8}$/i.test(step.instruction))
-      throw Error("Invalid RV32IM v2 step " + i);
-    const effect = decodeV2(Number.parseInt(step.instruction.slice(2), 16), pc, regs, memory);
-    if (step.rd !== effect.rd || step.value !== effect.value || step.next_pc !== effect.next_pc)
-      throw Error("Incorrect RV32IM transition at step " + i);
-    if (effect.write) {
-      if (!step.memory_write || Object.keys(step.memory_write).sort().join(",") !== "address,value" || step.memory_write.address !== effect.write.address || step.memory_write.value !== effect.write.value)
-        throw Error("Incorrect RV32IM memory write at step " + i);
-      if (!memory.has(effect.write.address) && memory.size >= 1024) throw Error("Memory state capacity exceeded");
-      memory.set(effect.write.address, effect.write.value);
-    } else if ("memory_write" in step) throw Error("Unexpected memory write");
-    regs[effect.rd] = effect.value;
-    regs[0] = 0;
-    pc = effect.next_pc;
-    written.add(effect.rd);
-    histogram[effect.name] = (histogram[effect.name] || 0) + 1;
-  }
-  const certificate = {
-    type: "rv32im_control_memory_trace",
-    steps: trace.steps.length,
-    initial_pc: trace.initial_pc,
-    final_pc: pc,
-    operations: histogram,
-    registers_written: written.size,
-    final_registers: regs,
-    final_memory: [...memory].sort((a, b) => a[0] - b[0]).map(([address, value]) => ({ address, value })),
-    scope: "Every listed RV32IM arithmetic, conditional branch, jump, aligned LW and SW transition is checked against the fixed initial register and word-memory state. No program halt, host syscall, zkVM commitment or cryptographic proof is asserted."
-  };
-  return {
-    id,
-    domain: "zkvm",
-    verdict: "Certified",
-    witness_count: "\u22641",
-    method: "rv32im_control_memory_trace_exact",
-    theorem: "Decoded register, control-flow and word-memory transitions match every source-bound record",
-    time_ms: performance.now() - t0,
-    certificate,
-    source_note: certificate.scope,
-    check: { ok: true, kind: "rv32im_trace_checked" }
-  };
-}
-function scanNativeZkvm(source, id = "zkvm_trace") {
-  const t0 = performance.now();
-  try {
-    if (source.length > 128 * 1024) throw Error("Trace exceeds 128 KiB");
-    const trace = JSON.parse(source);
-    if (trace?.format === "rv32im-trace-v2") return scanV2(trace, id, t0);
-    if (trace?.format !== "rv32im-trace-v1" || Object.keys(trace).sort().join(",") !== "format,initial_pc,initial_registers,steps")
-      throw Error("Unsupported zkVM trace schema");
-    if (!uint(trace.initial_pc) || trace.initial_pc % 4 !== 0 || !Array.isArray(trace.initial_registers) || trace.initial_registers.length !== 32 || !trace.initial_registers.every(uint) || trace.initial_registers[0] !== 0 || !Array.isArray(trace.steps) || trace.steps.length < 1 || trace.steps.length > 4096)
-      throw Error("Invalid RV32IM initial state or step bound");
-    const regs = [...trace.initial_registers];
-    let pc = trace.initial_pc;
-    const histogram = {};
-    const written = /* @__PURE__ */ new Set();
-    for (let i = 0; i < trace.steps.length; i++) {
-      const step = trace.steps[i];
-      if (!step || typeof step !== "object" || Array.isArray(step) || Object.keys(step).sort().join(",") !== "instruction,pc,rd,value" || step.pc !== pc || !uint(step.rd) || step.rd > 31 || !uint(step.value) || typeof step.instruction !== "string" || !/^0x[0-9a-f]{8}$/i.test(step.instruction))
-        throw Error("Invalid trace record at step " + i);
-      const decoded = instruction(Number.parseInt(step.instruction.slice(2), 16), pc, regs);
-      if (step.rd !== decoded.rd || step.value !== decoded.value)
-        throw Error("Wrong register transition at step " + i);
-      regs[decoded.rd] = decoded.value;
-      regs[0] = 0;
-      written.add(decoded.rd);
-      histogram[decoded.name] = (histogram[decoded.name] || 0) + 1;
-      pc = u32(pc + 4);
-    }
-    const certificate = {
-      type: "rv32im_straight_line_trace",
-      steps: trace.steps.length,
-      initial_pc: trace.initial_pc,
-      final_pc: pc,
-      registers_written: written.size,
-      operations: histogram,
-      final_registers: regs,
-      scope: "Every recorded RV32IM arithmetic/register transition matches its instruction word and initial register state. Fixed-state straight-line execution has one trace. Memory, control flow, external input, zkVM commitments, and proof-system validity are not evaluated."
-    };
-    return {
-      id,
-      domain: "zkvm",
-      verdict: "Certified",
-      witness_count: "\u22641",
-      method: "rv32im_execution_trace_exact",
-      theorem: "Decoded deterministic register transitions match every source-bound step",
-      time_ms: performance.now() - t0,
-      certificate,
-      source_note: certificate.scope,
-      check: { ok: true, kind: "rv32im_trace_checked" }
-    };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return {
-      id,
-      domain: "zkvm",
-      verdict: "Unknown",
-      method: "rv32im_trace_rejected",
-      theorem: "n/a",
-      reason,
-      time_ms: performance.now() - t0,
-      check: { ok: true, kind: "unknown_skip" },
-      source_note: "Trace rejected or outside the supported RV32IM subset"
-    };
-  }
-}
-
-// engine/packages/carrycert-core/src/scan.ts
-function unknown(id, domain, detail) {
-  return {
-    id,
-    domain,
-    family: "unknown",
-    params: {},
-    constraints: {
-      equation: false,
-      sum_bitified: false,
-      carry_bitified: false,
-      input_bitified: false,
-      incoming_bitified: false
-    },
-    notes: detail
-  };
-}
-function classifySource(text, options = {}) {
-  const id = options.id || options.filename?.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || "pasted";
-  const fmt = options.format || options.filename?.toLowerCase().split(".").pop();
-  if (text.trimStart().startsWith("{")) {
-    try {
-      const spec = JSON.parse(text);
-      if (spec?.format === "carry-graph-v1") return classifyCarryGraph(spec, id);
-      if (spec?.format === "bitvm-limb-v1" || spec?.format === "zkvm-limb-v1")
-        return unknown(
-          id,
-          spec.format.startsWith("bitvm") ? "bitvm" : "zkvm",
-          "Legacy declaration alone does not bind carry constraints. Supply a carry-graph-v1."
-        );
-      return unknown(id, "declaration", "Unrecognized contract format");
-    } catch {
-      return unknown(id, "declaration", "Invalid JSON state contract");
-    }
-  }
-  if (fmt === "r1cs")
-    return unknown(id, "r1cs", "Binary R1CS needs a decoded constraint graph");
-  if (fmt === "circom" || /pragma\s+circom|template\s+\w+/.test(text))
-    return classifyCircomSource(text, id);
-  if (fmt === "verilog" || fmt === "v" || fmt === "sv" || /module\s+\w+/.test(text))
-    return classifyVerilogSource(text, id);
-  if (fmt === "int8" || fmt === "mac" || /mac\s+int|int8|acc\d+|range_checked/i.test(text))
-    return classifyInt8Source(text, id);
-  if (fmt === "bitvm" || fmt === "script" || /bitvm|script\s+limb|op_add/i.test(text))
-    return unknown(id, "bitvm", "Raw Bitcoin Script/BitVM requires a constraint-graph frontend");
-  if (fmt === "zkvm" || /zkvm|alu\s+limb/i.test(text))
-    return unknown(id, "zkvm", "Raw zkVM trace requires a constraint-graph frontend");
-  if (fmt === "onnx" || /onnx|quantizelinear/i.test(text))
-    return classifyOnnxSource(text, id);
-  return unknown(id, "pasted", "No recognized source adapter");
-}
+var CIRCOM_GUIDANCE = "A verdict about Circom source is a verdict about its compiled constraint system. Run `speedrunpapi scan file.circom` where the circom compiler is installed, or scan the compiled .r1cs.";
+var RETIRED_GUIDANCE = "Versions before 0.7.0 returned verdicts for this input type without establishing them. That path has been removed. The scanner analyses Circom (through the compiler) and binary R1CS.";
 function scanPasted(source, options = {}) {
   const input = String(source || "");
   const ext = options.format || options.filename?.toLowerCase().split(".").pop();
   const id = options.id || options.filename?.replace(/^.*[/\\]/, "").replace(/\.[^.]+$/, "") || "pasted";
   const trimmed = input.trimStart();
-  if (/"format"\s*:\s*"rv32im-trace-v[12]"/.test(trimmed))
-    return scanNativeZkvm(input, id);
-  if (!trimmed.startsWith("{") && (ext === "bitvm" || ext === "script" || /^\s*(?:OP_[A-Z0-9_]+|0x[0-9a-f]{2,})\b/i.test(input)))
-    return scanNativeBitvm(input, id);
-  const ir = classifySource(input, options);
-  const result = analyze(ir);
-  if (result.method === "arx_sha256_binsum_bitpath" && !options.trusted_sha256) {
-    return {
-      id: result.id,
-      domain: result.domain,
-      verdict: "Unknown",
-      method: "sha256_source_binding_required",
-      theorem: result.theorem,
-      time_ms: result.time_ms,
-      reason: "SHA-256 source requires a pinned dependency graph and digest",
-      source_note: ir.notes || null,
-      check: { ok: true, kind: "unknown_skip" }
-    };
-  }
-  return {
-    ...result,
-    source_note: ir.notes || null,
-    check: checkResult(result)
-  };
+  if (ext === "circom" || /\bpragma\s+circom\b|\btemplate\s+\w+\s*\(/.test(input))
+    return unknown(id, "circom", "circom_needs_compiler", CIRCOM_GUIDANCE);
+  if (ext === "r1cs" || trimmed.startsWith("r1cs"))
+    return unknown(id, "r1cs", "r1cs_needs_binary", "R1CS is a binary format; submit the file bytes, not text.");
+  const domain = ext === "v" || ext === "sv" || ext === "verilog" ? "verilog" : ext === "bitvm" || ext === "script" ? "bitvm" : ext === "zkvm" ? "zkvm" : "unsupported";
+  return unknown(id, domain, "unsupported_input", RETIRED_GUIDANCE);
 }
 
-// engine/packages/carrycert-core/src/adapters/r1cs-rank.ts
-var mod = (v) => (v % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
-function pow(v, e) {
-  let a = mod(v), out = 1n;
+// ../carrycert-core/src/determinism/ff.ts
+function mod(a, p) {
+  const r = a % p;
+  return r < 0n ? r + p : r;
+}
+function modPow(base, exp, p) {
+  let b = mod(base, p), e = exp, out = 1n;
   while (e > 0n) {
-    if (e & 1n) out = mod(out * a);
-    a = mod(a * a);
+    if (e & 1n) out = out * b % p;
+    b = b * b % p;
     e >>= 1n;
   }
   return out;
 }
-function constant(terms) {
-  return terms.every((t) => t.wire === 0) ? mod(terms.reduce((s, t) => s + t.coeff, 0n)) : null;
-}
-function rowOf(c, known, constraint) {
-  const remaining = (terms2) => terms2.filter((t) => !known.has(t.wire));
-  const a = remaining(c.A), b = remaining(c.B), d = remaining(c.C);
-  const ca = constant(c.A), cb = constant(c.B);
-  let terms = null;
-  if (a.length === 0 && b.length === 0) terms = [[d, -1n]];
-  else if (ca !== null) terms = [[b, ca], [d, -1n]];
-  else if (cb !== null) terms = [[a, cb], [d, -1n]];
-  if (!terms) return null;
-  const coeff = /* @__PURE__ */ new Map();
-  for (const [part, factor] of terms)
-    for (const t of part) coeff.set(t.wire, mod((coeff.get(t.wire) || 0n) + factor * t.coeff));
-  for (const [wire, value] of coeff) if (value === 0n) coeff.delete(wire);
-  return coeff.size ? { constraint, coeff } : null;
-}
-function proveR1CSCoupledRank(parsed, triangular) {
-  const known = /* @__PURE__ */ new Set([0]);
-  const inputStart = 1 + parsed.nPubOut;
-  for (let i = inputStart; i < inputStart + parsed.nPubIn + parsed.nPrvIn; i++) known.add(i);
-  for (const pivot of triangular) known.add(pivot.wire);
-  const unknown2 = parsed.nWires - known.size;
-  if (unknown2 === 0) return { complete: true, rank: 0, unknown: unknown2, linearRows: 0, pivots: [] };
-  if (unknown2 > 256) return { complete: false, rank: 0, unknown: unknown2, linearRows: 0, pivots: [], limit: "256 remaining wires" };
-  const basis = /* @__PURE__ */ new Map();
-  const pivots = [];
-  let linearRows = 0, work = 0;
-  for (let i = 0; i < parsed.constraints.length; i++) {
-    const original = rowOf(parsed.constraints[i], known, i);
-    if (!original) continue;
-    linearRows++;
-    if (linearRows > 8192) return { complete: false, rank: basis.size, unknown: unknown2, linearRows, pivots, limit: "8192 linear rows" };
-    const coeff = original.coeff;
-    while (coeff.size) {
-      if (++work > 25e4) return { complete: false, rank: basis.size, unknown: unknown2, linearRows, pivots, limit: "250000 elimination steps" };
-      const lead = Math.min(...coeff.keys());
-      const existing = basis.get(lead);
-      if (!existing) {
-        const inverse = pow(coeff.get(lead), BN128_PRIME - 2n);
-        for (const [wire, val] of coeff) coeff.set(wire, mod(val * inverse));
-        basis.set(lead, coeff);
-        pivots.push({ constraint: i, wire: lead });
-        break;
-      }
-      const scale = coeff.get(lead);
-      for (const [wire, val] of existing) {
-        const next = mod((coeff.get(wire) || 0n) - scale * val);
-        if (next === 0n) coeff.delete(wire);
-        else coeff.set(wire, next);
-      }
-    }
-    if (basis.size === unknown2) break;
+function modInv(a, p) {
+  let r0 = mod(a, p), r1 = p;
+  if (r0 === 0n) throw new Error("inverse of zero");
+  let s0 = 1n, s1 = 0n;
+  while (r1 !== 0n) {
+    const q = r0 / r1;
+    [r0, r1] = [r1, r0 - q * r1];
+    [s0, s1] = [s1, s0 - q * s1];
   }
-  return { complete: basis.size === unknown2, rank: basis.size, unknown: unknown2, linearRows, pivots };
+  if (r0 !== 1n) throw new Error("modulus is not prime");
+  return mod(s0, p);
+}
+function balanced(a, p) {
+  const r = mod(a, p);
+  return r > p >> 1n ? r - p : r;
+}
+function abs(a) {
+  return a < 0n ? -a : a;
+}
+var nonResidue = /* @__PURE__ */ new Map();
+function modSqrt(a, p) {
+  const n2 = mod(a, p);
+  if (n2 === 0n) return 0n;
+  if (p === 2n) return n2;
+  if (modPow(n2, p - 1n >> 1n, p) !== 1n) return null;
+  if ((p & 3n) === 3n) return modPow(n2, p + 1n >> 2n, p);
+  let q = p - 1n, s = 0n;
+  while ((q & 1n) === 0n) {
+    q >>= 1n;
+    s++;
+  }
+  let z = nonResidue.get(p);
+  if (z === void 0) {
+    z = 2n;
+    while (modPow(z, p - 1n >> 1n, p) !== p - 1n) z++;
+    nonResidue.set(p, z);
+  }
+  let m = s, c = modPow(z, q, p), t = modPow(n2, q, p), r = modPow(n2, q + 1n >> 1n, p);
+  while (t !== 1n) {
+    let i = 0n, t2 = t;
+    while (t2 !== 1n) {
+      t2 = t2 * t2 % p;
+      i++;
+      if (i === m) return null;
+    }
+    const b = modPow(c, 1n << m - i - 1n, p);
+    m = i;
+    c = b * b % p;
+    t = t * c % p;
+    r = r * b % p;
+  }
+  return r;
+}
+function superIncreasingUnder(weights, scale, p) {
+  if (mod(scale, p) === 0n) return false;
+  const h = weights.map((g) => abs(balanced(g * scale, p)));
+  h.sort((x, y) => x < y ? -1 : x > y ? 1 : 0);
+  let prefix = 0n;
+  for (const v of h) {
+    if (v <= prefix) return false;
+    prefix += v;
+  }
+  return prefix < p;
+}
+function findSuperIncreasingScale(weights, p, maxTries = 64) {
+  if (!weights.length) return null;
+  if (weights.some((g) => mod(g, p) === 0n)) return null;
+  if (superIncreasingUnder(weights, 1n, p)) return 1n;
+  const tried = /* @__PURE__ */ new Set([1n]);
+  const order = weights.map((g, i) => ({ i, m: abs(balanced(g, p)) })).sort((x, y) => x.m < y.m ? -1 : x.m > y.m ? 1 : 0);
+  let tries = 0;
+  for (const { i } of order) {
+    if (tries++ >= maxTries) break;
+    const scale = modInv(weights[i], p);
+    if (tried.has(scale)) continue;
+    tried.add(scale);
+    if (superIncreasingUnder(weights, scale, p)) return scale;
+  }
+  return null;
 }
 
-// engine/packages/carrycert-core/src/adapters/r1cs-binary.ts
-var MAX_SIZE = 8 * 1024 * 1024;
-var MAX_WIRES = 65536;
-var MAX_CONSTRAINTS = 2e5;
-var MAX_TERMS = 4e5;
-var Reader = class {
-  constructor(b, start = 0, end = b.length) {
-    this.b = b;
-    this.end = end;
-    this.p = start;
-  }
-  p;
-  require(n) {
-    if (!Number.isSafeInteger(n) || n < 0 || this.p + n > this.end)
-      throw new Error("Truncated or out-of-bounds R1CS section");
-  }
-  u32() {
-    this.require(4);
-    const v = new DataView(this.b.buffer, this.b.byteOffset + this.p, 4).getUint32(0, true);
-    this.p += 4;
-    return v;
-  }
-  u64() {
-    this.require(8);
-    const v = new DataView(this.b.buffer, this.b.byteOffset + this.p, 8).getBigUint64(0, true);
-    this.p += 8;
-    return v;
-  }
-  field(n) {
-    this.require(n);
-    let v = 0n;
-    for (let i = n - 1; i >= 0; i--) v = (v << 8n) + BigInt(this.b[this.p + i]);
-    this.p += n;
-    return v;
-  }
-  done() {
-    if (this.p !== this.end) throw new Error("Trailing bytes in R1CS section");
-  }
+// ../carrycert-core/src/determinism/r1cs.ts
+var DEFAULT_LIMITS = {
+  maxBytes: 1 << 30,
+  maxWires: 1 << 26,
+  maxConstraints: 1 << 26,
+  maxTerms: 1 << 28
 };
-function linear(r, nWires, fieldSize) {
-  const count = r.u32();
-  if (count > nWires || count > MAX_TERMS || count > Math.floor((r.end - r.p) / (fieldSize + 4)))
-    throw new Error("Invalid R1CS linear-combination length");
-  const result = [];
-  let prior = -1;
-  for (let i = 0; i < count; i++) {
-    const wire = r.u32();
-    const coeff = r.field(fieldSize);
-    if (wire >= nWires || wire <= prior || coeff === 0n || coeff >= BN128_PRIME)
-      throw new Error("Noncanonical R1CS term");
-    prior = wire;
-    result.push({ wire, coeff });
-  }
-  return result;
-}
-function parseR1CSBinary(bytes) {
-  if (bytes.byteLength > MAX_SIZE) throw new Error("R1CS exceeds 8 MiB parser limit");
-  const r = new Reader(bytes);
-  r.require(12);
-  if (String.fromCharCode(...bytes.subarray(0, 4)) !== "r1cs")
+function parseR1CS(bytes, limits = {}) {
+  const lim = { ...DEFAULT_LIMITS, ...limits };
+  if (bytes.byteLength > lim.maxBytes) throw new Error("R1CS exceeds the configured size limit");
+  const view2 = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const total = bytes.byteLength;
+  const need = (pos2, n2) => {
+    if (!Number.isSafeInteger(n2) || n2 < 0 || pos2 + n2 > total) throw new Error("Truncated R1CS");
+  };
+  need(0, 12);
+  if (bytes[0] !== 114 || bytes[1] !== 49 || bytes[2] !== 99 || bytes[3] !== 115)
     throw new Error("Invalid R1CS magic");
-  r.p = 4;
-  if (r.u32() !== 1) throw new Error("Unsupported R1CS version");
-  const count = r.u32();
-  if (count < 2 || count > 32) throw new Error("Invalid R1CS section count");
+  if (view2.getUint32(4, true) !== 1) throw new Error("Unsupported R1CS version");
+  const nSections = view2.getUint32(8, true);
+  if (nSections < 2 || nSections > 64) throw new Error("Invalid R1CS section count");
   const sections = /* @__PURE__ */ new Map();
-  for (let i = 0; i < count; i++) {
-    const kind = r.u32(), size = r.u64();
-    if (size > BigInt(r.end - r.p)) throw new Error("Invalid R1CS section length");
-    const n = Number(size);
+  let pos = 12;
+  for (let i = 0; i < nSections; i++) {
+    need(pos, 12);
+    const kind = view2.getUint32(pos, true);
+    const sizeBig = view2.getBigUint64(pos + 4, true);
+    pos += 12;
+    if (sizeBig > BigInt(total - pos)) throw new Error("Invalid R1CS section length");
+    const size = Number(sizeBig);
     if (sections.has(kind)) throw new Error("Duplicate R1CS section");
-    sections.set(kind, new Reader(bytes, r.p, r.p + n));
-    r.p += n;
+    sections.set(kind, { start: pos, size });
+    pos += size;
   }
-  r.done();
-  if (sections.has(4) || sections.has(5)) throw new Error("R1CS custom gates are outside this parser scope");
-  const h = sections.get(1), d = sections.get(2), w = sections.get(3);
-  if (!h || !d || !w) throw new Error("Missing required R1CS section");
-  const fieldSize = h.u32();
-  if (fieldSize !== 32 || h.field(fieldSize) !== BN128_PRIME)
-    throw new Error("Unsupported R1CS prime field");
-  const nWires = h.u32(), nPubOut = h.u32(), nPubIn = h.u32(), nPrvIn = h.u32();
-  const labelCountBig = h.u64(), nConstraints = h.u32();
-  h.done();
-  if (!nWires || nWires > MAX_WIRES || nConstraints > MAX_CONSTRAINTS || nPubOut + nPubIn + nPrvIn + 1 > nWires || labelCountBig > BigInt(Number.MAX_SAFE_INTEGER))
+  if (pos !== total) throw new Error("Trailing bytes after R1CS sections");
+  if (sections.has(4) || sections.has(5))
+    throw new Error("R1CS custom gates are outside the rank-1 analysis scope");
+  const header = sections.get(1), cons = sections.get(2);
+  if (!header || !cons) throw new Error("Missing required R1CS section");
+  let h = header.start;
+  const hEnd = header.start + header.size;
+  const hNeed = (n2) => {
+    if (h + n2 > hEnd) throw new Error("Truncated R1CS header");
+  };
+  hNeed(4);
+  const fieldBytes = view2.getUint32(h, true);
+  h += 4;
+  if (fieldBytes < 1 || fieldBytes > 128 || fieldBytes % 8 !== 0) throw new Error("Unsupported R1CS field size");
+  const readField = (at) => {
+    let v = 0n;
+    for (let off = fieldBytes - 8; off >= 0; off -= 8) v = v << 64n | view2.getBigUint64(at + off, true);
+    return v;
+  };
+  hNeed(fieldBytes);
+  const prime = readField(h);
+  h += fieldBytes;
+  if (prime < 3n || (prime & 1n) === 0n) throw new Error("Unsupported R1CS modulus");
+  hNeed(16 + 8 + 4);
+  const nWires = view2.getUint32(h, true);
+  h += 4;
+  const nPubOut = view2.getUint32(h, true);
+  h += 4;
+  const nPubIn = view2.getUint32(h, true);
+  h += 4;
+  const nPrvIn = view2.getUint32(h, true);
+  h += 4;
+  const nLabelsBig = view2.getBigUint64(h, true);
+  h += 8;
+  const nConstraints = view2.getUint32(h, true);
+  h += 4;
+  if (h !== hEnd) throw new Error("Unexpected R1CS header length");
+  if (nWires < 1 || nWires > lim.maxWires || nConstraints > lim.maxConstraints || 1 + nPubOut + nPubIn > nWires || nLabelsBig > BigInt(Number.MAX_SAFE_INTEGER))
     throw new Error("Invalid R1CS dimensions");
-  if (w.end - w.p !== nWires * 8) throw new Error("Invalid R1CS label map size");
-  const labels = /* @__PURE__ */ new Set();
-  for (let i = 0; i < nWires; i++) {
-    const label = w.u64();
-    if (label >= labelCountBig || labels.has(label) || i === 0 && label !== 0n)
-      throw new Error("Invalid R1CS wire-to-label map");
-    labels.add(label);
+  const nIO = nPubOut + nPubIn + nPrvIn;
+  const firstPrv = 1 + nPubOut + nPubIn;
+  let nPrvInWires;
+  let inputLayout;
+  const labels = sections.get(3);
+  if (labels) {
+    if (labels.size !== nWires * 8) throw new Error("Invalid R1CS wire-to-label map size");
+    const labelOf = (w) => view2.getBigUint64(labels.start + 8 * w, true);
+    if (labelOf(0) !== 0n) throw new Error("Invalid R1CS wire-to-label map");
+    for (let w = 1; w < firstPrv; w++) {
+      const l = labelOf(w);
+      if (l < 1n || l > BigInt(nIO)) throw new Error("R1CS output/public-input wire has a non-I/O label");
+    }
+    let count = 0;
+    while (firstPrv + count < nWires && labelOf(firstPrv + count) <= BigInt(nIO)) count++;
+    for (let w = firstPrv + count; w < nWires; w++)
+      if (labelOf(w) <= BigInt(nIO)) throw new Error("R1CS input wires are not contiguous");
+    if (count > nPrvIn) throw new Error("R1CS has more private-input wires than declared");
+    nPrvInWires = count;
+    inputLayout = "label-map";
+  } else {
+    if (firstPrv + nPrvIn > nWires) throw new Error("R1CS has no label map and its header exceeds the wire count");
+    nPrvInWires = nPrvIn;
+    inputLayout = "header";
   }
-  w.done();
-  const constraints = [];
-  let totalTerms = 0;
-  for (let i = 0; i < nConstraints; i++) {
-    const A = linear(d, nWires, fieldSize);
-    const B = linear(d, nWires, fieldSize);
-    const C = linear(d, nWires, fieldSize);
-    totalTerms += A.length + B.length + C.length;
-    if (totalTerms > MAX_TERMS) throw new Error("Too many R1CS terms");
-    constraints.push({ A, B, C });
+  const inputEnd = firstPrv + nPrvInWires;
+  const intern = /* @__PURE__ */ new Map();
+  let c = cons.start;
+  const cEnd = cons.start + cons.size;
+  let terms = 0;
+  const termBytes = 4 + fieldBytes;
+  const readLC = () => {
+    if (c + 4 > cEnd) throw new Error("Truncated R1CS constraint");
+    const n2 = view2.getUint32(c, true);
+    c += 4;
+    if (n2 > (cEnd - c) / termBytes) throw new Error("Invalid R1CS linear-combination length");
+    terms += n2;
+    if (terms > lim.maxTerms) throw new Error("R1CS exceeds the configured term limit");
+    const w = new Array(n2);
+    const co = new Array(n2);
+    let sorted = true, prev = -1;
+    for (let i = 0; i < n2; i++) {
+      const wire = view2.getUint32(c, true);
+      if (wire >= nWires) throw new Error("R1CS term references a wire outside the circuit");
+      let v = readField(c + 4);
+      if (v >= prime) v %= prime;
+      const seen = intern.get(v);
+      if (seen === void 0) intern.set(v, v);
+      else v = seen;
+      w[i] = wire;
+      co[i] = v;
+      if (wire <= prev) sorted = false;
+      prev = wire;
+      c += termBytes;
+    }
+    if (sorted && !co.includes(0n)) return { w, c: co };
+    const acc = /* @__PURE__ */ new Map();
+    for (let i = 0; i < n2; i++) acc.set(w[i], mod((acc.get(w[i]) ?? 0n) + co[i], prime));
+    const keys = [...acc.keys()].filter((k) => acc.get(k) !== 0n).sort((x, y) => x - y);
+    return { w: keys, c: keys.map((k) => acc.get(k)) };
+  };
+  const A = new Array(nConstraints), B = new Array(nConstraints), C = new Array(nConstraints);
+  for (let k = 0; k < nConstraints; k++) {
+    A[k] = readLC();
+    B[k] = readLC();
+    C[k] = readLC();
   }
-  d.done();
+  if (c !== cEnd) throw new Error("Trailing bytes in R1CS constraint section");
   return {
-    prime: BN128_PRIME,
+    prime,
+    fieldBytes,
     nWires,
     nPubOut,
     nPubIn,
     nPrvIn,
+    nPrvInWires,
+    inputEnd,
+    inputLayout,
+    inputsAllWired: nPrvInWires === nPrvIn,
+    nLabels: Number(nLabelsBig),
     nConstraints,
-    constraints,
-    labelCount: Number(labelCountBig)
+    A,
+    B,
+    C
   };
 }
-var mod2 = (n) => (n % BN128_PRIME + BN128_PRIME) % BN128_PRIME;
-function unknownTerms(lc, known) {
-  return lc.filter((t) => !known.has(t.wire));
+function wireRole(r, w) {
+  if (w === 0) return "one";
+  if (w <= r.nPubOut) return "output";
+  if (w <= r.nPubOut + r.nPubIn) return "public_input";
+  if (w < r.inputEnd) return "private_input";
+  return "internal";
 }
-function fixedConstant(lc) {
-  return lc.every((t) => t.wire === 0) ? mod2(lc.reduce((v, t) => v + t.coeff, 0n)) : null;
+function parseSym(input) {
+  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
+  let cap = 1024;
+  let start = new Uint32Array(cap), len = new Uint32Array(cap);
+  const n2 = bytes.length;
+  let i = 0;
+  while (i < n2) {
+    while (i < n2 && bytes[i] !== 44 && bytes[i] !== 10) i++;
+    if (i >= n2 || bytes[i] === 10) {
+      i++;
+      continue;
+    }
+    i++;
+    let neg = false, wire = 0, digits = 0;
+    if (i < n2 && bytes[i] === 45) {
+      neg = true;
+      i++;
+    }
+    while (i < n2 && bytes[i] >= 48 && bytes[i] <= 57) {
+      wire = wire * 10 + (bytes[i] - 48);
+      i++;
+      digits++;
+    }
+    if (i >= n2 || bytes[i] !== 44 || !digits) {
+      while (i < n2 && bytes[i] !== 10) i++;
+      i++;
+      continue;
+    }
+    i++;
+    while (i < n2 && bytes[i] !== 44 && bytes[i] !== 10) i++;
+    if (i >= n2 || bytes[i] === 10) {
+      i++;
+      continue;
+    }
+    i++;
+    const nameStart = i;
+    while (i < n2 && bytes[i] !== 10) i++;
+    let nameEnd = i;
+    if (nameEnd > nameStart && bytes[nameEnd - 1] === 13) nameEnd--;
+    i++;
+    if (neg || wire > 1073741823) continue;
+    if (wire >= cap) {
+      while (wire >= cap) cap *= 2;
+      const s2 = new Uint32Array(cap), l2 = new Uint32Array(cap);
+      s2.set(start);
+      l2.set(len);
+      start = s2;
+      len = l2;
+    }
+    if (len[wire] === 0 && nameEnd > nameStart) {
+      start[wire] = nameStart;
+      len[wire] = nameEnd - nameStart;
+    }
+  }
+  const decoder = new TextDecoder();
+  const names = {
+    get(wire) {
+      if (!Number.isInteger(wire) || wire < 0 || wire >= cap || len[wire] === 0) return void 0;
+      return decoder.decode(bytes.subarray(start[wire], start[wire] + len[wire]));
+    }
+  };
+  return { names };
 }
-function proveR1CSUniqueness(parsed) {
-  const known = /* @__PURE__ */ new Set([0]);
-  const firstInput = 1 + parsed.nPubOut;
-  const inputEnd = firstInput + parsed.nPubIn + parsed.nPrvIn;
-  for (let j = firstInput; j < inputEnd; j++) known.add(j);
-  const pivots = [];
-  const nonlinear_pivots = [];
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < parsed.constraints.length; i++) {
-      const { A, B, C } = parsed.constraints[i];
-      const a = unknownTerms(A, known), b = unknownTerms(B, known), c = unknownTerms(C, known);
-      let candidate = null;
-      let nonlinear = false;
-      if (A.length === 1 && B.length === 1 && C.length === 0 && A[0].wire === B[0].wire && A[0].wire > 0 && !known.has(A[0].wire)) {
-        candidate = A[0].wire;
-        nonlinear = true;
-      }
-      if (!nonlinear && !a.length && !b.length && c.length === 1) candidate = c[0].wire;
-      else if (!nonlinear) {
-        const ca = fixedConstant(A), cb = fixedConstant(B);
-        if (ca !== null && a.length === 0 && ca !== 0n) {
-          const coeffs = /* @__PURE__ */ new Map();
-          for (const t of b) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) + ca * t.coeff));
-          for (const t of c) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) - t.coeff));
-          const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
-          if (nonzero.length === 1) candidate = nonzero[0][0];
-        } else if (cb !== null && b.length === 0 && cb !== 0n) {
-          const coeffs = /* @__PURE__ */ new Map();
-          for (const t of a) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) + cb * t.coeff));
-          for (const t of c) coeffs.set(t.wire, mod2((coeffs.get(t.wire) || 0n) - t.coeff));
-          const nonzero = [...coeffs].filter(([, v]) => v !== 0n);
-          if (nonzero.length === 1) candidate = nonzero[0][0];
+function withAssumptions(r, a) {
+  const binary = [...new Set(a?.binary ?? [])].sort((x, y) => x - y);
+  if (!binary.length) return r;
+  const A = r.A.slice(), B = r.B.slice(), C = r.C.slice();
+  for (const w of binary) {
+    if (!Number.isInteger(w) || w <= r.nPubOut || w >= r.inputEnd)
+      throw new Error(`assumption on wire ${w}: only input wires can be assumed binary`);
+    A.push({ w: [w], c: [1n] });
+    B.push({ w: [0, w], c: [r.prime - 1n, 1n] });
+    C.push({ w: [], c: [] });
+  }
+  return { ...r, A, B, C, nConstraints: r.nConstraints + binary.length };
+}
+
+// ../carrycert-core/src/determinism/prove.ts
+var NONE = { kind: "none" };
+var DEAD = { kind: "dead" };
+var QUAD = { kind: "quad" };
+var COND_A = { kind: "cond", side: "A" };
+var COND_B = { kind: "cond", side: "B" };
+var Ctx = class {
+  constructor(eng, parent, zero, nz, depth) {
+    this.eng = eng;
+    this.parent = parent;
+    this.zero = zero;
+    this.nz = nz;
+    this.depth = depth;
+  }
+  det = /* @__PURE__ */ new Set();
+  val = /* @__PURE__ */ new Map();
+  steps = [];
+  dead = -1;
+  visits = 0;
+  touched = /* @__PURE__ */ new Set();
+  /** Wires this branch is trying to determine, and how many of them are still open. */
+  targets = null;
+  remaining = 0;
+  /** True when the branch stopped because it ran out of budget rather than out of work. */
+  exhausted = false;
+  isDet(w) {
+    let c = this;
+    while (c.parent) {
+      if (c.det.has(w)) return true;
+      c = c.parent;
+    }
+    return this.eng.det[w] === 1;
+  }
+  getVal(w) {
+    let c = this;
+    while (c.parent) {
+      const v = c.val.get(w);
+      if (v !== void 0) return v;
+      c = c.parent;
+    }
+    return this.eng.hasVal[w] ? this.eng.val.get(w) : void 0;
+  }
+};
+var Engine = class {
+  constructor(r, options = {}) {
+    this.r = r;
+    this.p = r.prime;
+    this.opts = {
+      branchBudget: options.branchBudget ?? 4096,
+      maxSplitDepth: options.maxSplitDepth ?? 2,
+      timeBudgetMs: options.timeBudgetMs ?? 6e5,
+      gaussMaxWires: options.gaussMaxWires ?? 600,
+      maxOps: options.maxOps ?? Number.MAX_SAFE_INTEGER
+    };
+    const n2 = r.nWires, m = r.nConstraints;
+    this.det = new Uint8Array(n2);
+    this.hasVal = new Uint8Array(n2);
+    this.top = new Ctx(this, null, null, null, 0);
+    this.unk = new Int32Array(m);
+    this.nonDom = new Int32Array(m);
+    this.dom2k = new Int32Array(n2).fill(-1);
+    this.inQueue = new Uint8Array(m);
+    this.queue = new Int32Array(Math.max(1, m));
+    const counts = new Int32Array(n2 + 1);
+    this.cw = new Array(m);
+    const mark = new Int32Array(n2).fill(-1);
+    for (let k = 0; k < m; k++) {
+      const list = [];
+      for (const lc of [r.A[k], r.B[k], r.C[k]])
+        for (const w of lc.w) if (w !== 0 && mark[w] !== k) {
+          mark[w] = k;
+          list.push(w);
         }
+      this.cw[k] = Int32Array.from(list);
+      for (const w of list) counts[w + 1]++;
+    }
+    for (let i = 0; i < n2; i++) counts[i + 1] += counts[i];
+    this.occStart = counts;
+    this.occ = new Int32Array(counts[n2]);
+    const fill = counts.slice(0, n2);
+    for (let k = 0; k < m; k++) for (const w of this.cw[k]) this.occ[fill[w]++] = k;
+    this.det[0] = 1;
+    this.hasVal[0] = 1;
+    this.val.set(0, 1n);
+    for (let w = 1 + r.nPubOut; w < r.inputEnd; w++) this.det[w] = 1;
+    this.findTwoValued();
+    for (let k = 0; k < m; k++) {
+      let u = 0, nd = 0;
+      for (const w of this.cw[k]) if (!this.det[w]) {
+        u++;
+        if (this.dom2k[w] < 0) nd++;
       }
-      if (candidate !== null && !known.has(candidate)) {
-        known.add(candidate);
-        if (nonlinear) nonlinear_pivots.push({ constraint: i, wire: candidate, rule: "nonzero_scaled_square_zero" });
-        else pivots.push({ constraint: i, wire: candidate });
-        changed = true;
+      this.unk[k] = u;
+      this.nonDom[k] = nd;
+    }
+  }
+  p;
+  det;
+  hasVal;
+  val = /* @__PURE__ */ new Map();
+  top;
+  /** distinct non-constant wires per constraint */
+  cw = [];
+  /** occurrence lists (CSR) */
+  occStart;
+  occ;
+  unk;
+  nonDom;
+  dom2k;
+  dom2 = /* @__PURE__ */ new Map();
+  queue;
+  qHead = 0;
+  qTail = 0;
+  qLen = 0;
+  inQueue;
+  rules = { lin: 0, fix: 0, bits: 0, gauss: 0, onehot: 0, split: 0 };
+  splitAttempts = 0;
+  ops = 0;
+  deadline = Infinity;
+  timedOut = false;
+  opts;
+  // ---------------------------------------------------------------- facts
+  /** Single-wire constraints: q2 x^2 + q1 x + q0 = 0. */
+  singleWirePoly(k) {
+    const ws = this.cw[k];
+    if (ws.length !== 1) return null;
+    const x = ws[0], p = this.p;
+    const co = (lc) => {
+      let c12 = 0n, c02 = 0n;
+      for (let i = 0; i < lc.w.length; i++) {
+        if (lc.w[i] === 0) c02 = lc.c[i];
+        else c12 = lc.c[i];
+      }
+      return [c12, c02];
+    };
+    const [a1, a0] = co(this.r.A[k]), [b1, b0] = co(this.r.B[k]), [c1, c0] = co(this.r.C[k]);
+    return { x, q2: mod(a1 * b1, p), q1: mod(a1 * b0 + a0 * b1 - c1, p), q0: mod(a0 * b0 - c0, p) };
+  }
+  /** Roots of a single-wire constraint: [] (none), [r] or [r1, r2]; null when every value is a root. */
+  rootsOf(k) {
+    const poly = this.singleWirePoly(k);
+    if (!poly) return null;
+    const { x, q2, q1, q0 } = poly, p = this.p;
+    if (q2 === 0n) {
+      if (q1 === 0n) return q0 === 0n ? null : { x, roots: [] };
+      return { x, roots: [mod(-q0 * modInv(q1, p), p)] };
+    }
+    if (q0 === 0n) {
+      if (q1 === 0n) return { x, roots: [0n] };
+      return { x, roots: [0n, mod(-q1 * modInv(q2, p), p)] };
+    }
+    const inv2a = modInv(2n * q2, p);
+    const disc = mod(q1 * q1 - 4n * q2 * q0, p);
+    if (disc === 0n) return { x, roots: [mod(-q1 * inv2a, p)] };
+    const s = modSqrt(disc, p);
+    if (s === null) return { x, roots: [] };
+    const r1 = mod((-q1 + s) * inv2a, p), r2 = mod((-q1 - s) * inv2a, p);
+    return { x, roots: r1 < r2 ? [r1, r2] : [r2, r1] };
+  }
+  findTwoValued() {
+    for (let k = 0; k < this.r.nConstraints; k++) {
+      if (this.cw[k].length !== 1) continue;
+      const got = this.rootsOf(k);
+      if (!got || got.roots.length !== 2) continue;
+      if (this.dom2k[got.x] < 0) {
+        this.dom2k[got.x] = k;
+        this.dom2.set(got.x, [got.roots[0], got.roots[1]]);
       }
     }
   }
-  const free = Array.from({ length: parsed.nWires }, (_, i) => i).filter((i) => !known.has(i));
-  return { complete: !free.length, pivots, nonlinear_pivots, free };
+  // ---------------------------------------------------------------- classification
+  part(lc, ctx) {
+    const ui = [];
+    let known = 0n, nsym = 0;
+    const w = lc.w, c = lc.c;
+    if (!ctx.parent) {
+      const det = this.det, hasVal = this.hasVal;
+      for (let i = 0; i < w.length; i++) {
+        const wi = w[i];
+        if (!det[wi]) ui.push(i);
+        else if (hasVal[wi]) known += c[i] * this.val.get(wi);
+        else nsym++;
+      }
+    } else {
+      for (let i = 0; i < w.length; i++) {
+        const wi = w[i];
+        if (!ctx.isDet(wi)) {
+          ui.push(i);
+          continue;
+        }
+        const v = ctx.getVal(wi);
+        if (v === void 0) nsym++;
+        else known += c[i] * v;
+      }
+    }
+    return { ui, known: known % this.p, nsym };
+  }
+  /** Normal form of a determined linear form under the context's known values. */
+  normForm(lc, ctx) {
+    const p = this.p;
+    const wires = [], coefs = [];
+    let c0 = 0n;
+    for (let i = 0; i < lc.w.length; i++) {
+      const v = ctx.getVal(lc.w[i]);
+      if (v !== void 0) c0 += lc.c[i] * v;
+      else {
+        wires.push(lc.w[i]);
+        coefs.push(lc.c[i]);
+      }
+    }
+    c0 = mod(c0, p);
+    if (!wires.length) return null;
+    const inv2 = modInv(coefs[0], p);
+    return { wires, coefs: coefs.map((c) => c * inv2 % p), c0: c0 * inv2 % p };
+  }
+  sameForm(a, b, ctx) {
+    const x = this.normForm(a, ctx), y = this.normForm(b, ctx);
+    if (!x || !y || x.wires.length !== y.wires.length || x.c0 !== y.c0) return false;
+    for (let i = 0; i < x.wires.length; i++)
+      if (x.wires[i] !== y.wires[i] || x.coefs[i] !== y.coefs[i]) return false;
+    return true;
+  }
+  /** 0 = known zero, 1 = known nonzero, -1 = no fact, for a determined non-constant form. */
+  formFact(lc, ctx) {
+    let c = ctx;
+    while (c && c.parent) {
+      if (c.zero && this.sameForm(lc, c.zero, ctx)) return 0;
+      if (c.nz && this.sameForm(lc, c.nz, ctx)) return 1;
+      c = c.parent;
+    }
+    return -1;
+  }
+  rowFrom(lcs, rhs) {
+    const p = this.p;
+    if (lcs.length === 1) {
+      const { lc, ui, scale } = lcs[0];
+      const wires2 = ui.map((i) => lc.w[i]);
+      const coefs2 = ui.map((i) => mod(lc.c[i] * scale, p));
+      return { kind: "row", wires: wires2, coefs: coefs2, rhs };
+    }
+    const acc = /* @__PURE__ */ new Map();
+    for (const { lc, ui, scale } of lcs)
+      for (const i of ui) acc.set(lc.w[i], mod((acc.get(lc.w[i]) ?? 0n) + lc.c[i] * scale, p));
+    const wires = [], coefs = [];
+    for (const [w, c] of acc) if (c !== 0n) {
+      wires.push(w);
+      coefs.push(c);
+    }
+    return { kind: "row", wires, coefs, rhs };
+  }
+  /**
+   * Reduce constraint k (A*B = C) under a context to what it says about the
+   * undetermined wires. `rhs` is the right-hand side of the row equation
+   * sum(coefs_i * x_i) = rhs when every other quantity has a known value.
+   */
+  classify(k, ctx) {
+    this.ops++;
+    const p = this.p, r = this.r;
+    const A = r.A[k], B = r.B[k], C = r.C[k];
+    const a = this.part(A, ctx), b = this.part(B, ctx), c = this.part(C, ctx);
+    if (!a.ui.length && !b.ui.length) {
+      const allKnown = !a.nsym && !b.nsym && !c.nsym;
+      const rhs2 = allKnown ? mod(a.known * b.known - c.known, p) : null;
+      if (!c.ui.length) return rhs2 !== null && rhs2 !== 0n ? DEAD : NONE;
+      return this.rowFrom([{ lc: C, ui: c.ui, scale: 1n }], rhs2);
+    }
+    if (a.ui.length && b.ui.length) return QUAD;
+    const mIsA = !a.ui.length;
+    const M = mIsA ? A : B, N = mIsA ? B : A;
+    const m = mIsA ? a : b, nn = mIsA ? b : a;
+    let mval = m.nsym ? null : m.known;
+    let nzUnknown = false;
+    if (mval === null) {
+      const fact = this.formFact(M, ctx);
+      if (fact === 0) mval = 0n;
+      else if (fact === 1) nzUnknown = true;
+      else return mIsA ? COND_A : COND_B;
+    }
+    if (nzUnknown) {
+      if (c.ui.length) return NONE;
+      return this.rowFrom([{ lc: N, ui: nn.ui, scale: 1n }], null);
+    }
+    if (mval === 0n) {
+      const rhs2 = c.nsym ? null : mod(-c.known, p);
+      if (!c.ui.length) return rhs2 !== null && rhs2 !== 0n ? DEAD : NONE;
+      return this.rowFrom([{ lc: C, ui: c.ui, scale: 1n }], rhs2);
+    }
+    const rhs = nn.nsym || c.nsym ? null : mod(c.known - mval * nn.known, p);
+    const parts = [{ lc: N, ui: nn.ui, scale: mval }];
+    if (c.ui.length) parts.push({ lc: C, ui: c.ui, scale: p - 1n });
+    const row = this.rowFrom(parts, rhs);
+    if (!row.wires.length) return rhs !== null && rhs !== 0n ? DEAD : NONE;
+    return row;
+  }
+  // ---------------------------------------------------------------- state updates
+  enqueue(k) {
+    if (this.inQueue[k]) return;
+    this.inQueue[k] = 1;
+    this.queue[this.qTail] = k;
+    this.qTail = (this.qTail + 1) % this.queue.length;
+    this.qLen++;
+  }
+  determine(x, ctx, local) {
+    if (!ctx.parent) {
+      if (this.det[x]) return;
+      this.det[x] = 1;
+      const isDom = this.dom2k[x] >= 0;
+      for (let i = this.occStart[x]; i < this.occStart[x + 1]; i++) {
+        const k = this.occ[i];
+        const u = --this.unk[k];
+        const nd = isDom ? this.nonDom[k] : --this.nonDom[k];
+        if (u <= 1 || nd === 0) this.enqueue(k);
+      }
+    } else {
+      if (ctx.isDet(x)) return;
+      ctx.det.add(x);
+      if (ctx.targets && ctx.targets.has(x)) ctx.remaining--;
+      for (let i = this.occStart[x]; i < this.occStart[x + 1]; i++) local.push(this.occ[i]);
+    }
+  }
+  setVal(x, v, ctx, local) {
+    if (!ctx.parent) {
+      if (this.hasVal[x]) return;
+      this.hasVal[x] = 1;
+      this.val.set(x, v);
+      for (let i = this.occStart[x]; i < this.occStart[x + 1]; i++) this.enqueue(this.occ[i]);
+    } else {
+      if (ctx.getVal(x) !== void 0) return;
+      ctx.val.set(x, v);
+      for (let i = this.occStart[x]; i < this.occStart[x + 1]; i++) local.push(this.occ[i]);
+    }
+  }
+  /** Apply the direct rules to one constraint. Returns true when it determined something. */
+  apply(k, ctx, local) {
+    const cls = this.classify(k, ctx);
+    if (cls.kind === "dead") {
+      if (ctx.dead < 0) ctx.dead = k;
+      return false;
+    }
+    if (cls.kind !== "row") return false;
+    const { wires, coefs, rhs } = cls;
+    const p = this.p;
+    if (wires.length === 0) {
+      if (rhs !== null && rhs !== 0n && ctx.dead < 0) ctx.dead = k;
+      return false;
+    }
+    if (wires.length === 1) {
+      const x = wires[0];
+      ctx.steps.push({ t: "lin", k, x });
+      this.rules.lin++;
+      this.determine(x, ctx, local);
+      if (rhs !== null) this.setVal(x, mod(rhs * modInv(coefs[0], p), p), ctx, local);
+      return true;
+    }
+    if (wires.length > 1024) return false;
+    const weights = new Array(wires.length);
+    const d = new Array(wires.length);
+    for (let i = 0; i < wires.length; i++) {
+      const dk = this.dom2k[wires[i]];
+      if (dk < 0) return false;
+      const [r1, r2] = this.dom2.get(wires[i]);
+      weights[i] = mod(coefs[i] * (r2 - r1), p);
+      d[i] = dk;
+    }
+    const scale = findSuperIncreasingScale(weights, p);
+    if (scale === null) return false;
+    ctx.steps.push({ t: "bits", k, xs: wires.slice(), d, s: scale.toString() });
+    this.rules.bits++;
+    for (const x of wires) this.determine(x, ctx, local);
+    return true;
+  }
+  drain() {
+    while (this.qLen) {
+      const k = this.queue[this.qHead];
+      this.qHead = (this.qHead + 1) % this.queue.length;
+      this.qLen--;
+      this.inQueue[k] = 0;
+      if (this.unk[k] === 0 && !this.cwHasNewValue(k)) continue;
+      this.apply(k, this.top, null);
+    }
+  }
+  /** At top level a constraint with no undetermined wire can teach nothing. */
+  cwHasNewValue(_k) {
+    return false;
+  }
+  // ---------------------------------------------------------------- single-root facts
+  applyFixes() {
+    for (let k = 0; k < this.r.nConstraints; k++) {
+      if (this.cw[k].length !== 1) continue;
+      const x = this.cw[k][0];
+      if (this.det[x]) continue;
+      const got = this.rootsOf(k);
+      if (!got || got.roots.length !== 1) continue;
+      this.top.steps.push({ t: "fix", k, x });
+      this.rules.fix++;
+      this.determine(x, this.top, null);
+      this.setVal(x, got.roots[0], this.top, null);
+    }
+  }
+  // ---------------------------------------------------------------- linear systems
+  gaussPass() {
+    const p = this.p, m = this.r.nConstraints;
+    const rows = [];
+    for (let k = 0; k < m; k++) {
+      if (this.unk[k] < 2) continue;
+      const cls = this.classify(k, this.top);
+      if (cls.kind === "row" && cls.wires.length >= 2 && cls.wires.length <= 64)
+        rows.push({ k, wires: cls.wires, coefs: cls.coefs });
+    }
+    if (!rows.length) return false;
+    const parent = /* @__PURE__ */ new Map();
+    const find = (x) => {
+      let root = x;
+      while (parent.get(root) !== root) root = parent.get(root);
+      while (parent.get(x) !== root) {
+        const nx = parent.get(x);
+        parent.set(x, root);
+        x = nx;
+      }
+      return root;
+    };
+    for (const row of rows) {
+      for (const w of row.wires) if (!parent.has(w)) parent.set(w, w);
+      const r0 = find(row.wires[0]);
+      for (let i = 1; i < row.wires.length; i++) parent.set(find(row.wires[i]), r0);
+    }
+    const comps = /* @__PURE__ */ new Map();
+    rows.forEach((row, i) => {
+      const root = find(row.wires[0]);
+      const list = comps.get(root);
+      if (list) list.push(i);
+      else comps.set(root, [i]);
+    });
+    let progress = false;
+    for (const idxs of comps.values()) {
+      if (idxs.length < 2) continue;
+      const wireSet = /* @__PURE__ */ new Set();
+      for (const i of idxs) for (const w of rows[i].wires) wireSet.add(w);
+      if (wireSet.size > this.opts.gaussMaxWires || idxs.length > 4 * this.opts.gaussMaxWires) continue;
+      const basis = /* @__PURE__ */ new Map();
+      const addScaled = (dst, src, f) => {
+        for (const [key, v] of src) {
+          const nv = mod((dst.get(key) ?? 0n) + v * f, p);
+          if (nv === 0n) dst.delete(key);
+          else dst.set(key, nv);
+        }
+      };
+      let work = 0;
+      const cap = 4e6;
+      let aborted = false;
+      for (const i of idxs) {
+        const vec = /* @__PURE__ */ new Map(), comb = /* @__PURE__ */ new Map([[i, 1n]]);
+        rows[i].wires.forEach((w, j) => vec.set(w, rows[i].coefs[j]));
+        for (const w of [...vec.keys()]) {
+          const b = basis.get(w);
+          if (!b) continue;
+          const f = vec.get(w);
+          if (f === void 0) continue;
+          const neg = p - f;
+          addScaled(vec, b.vec, neg);
+          addScaled(comb, b.comb, neg);
+          work += b.vec.size + b.comb.size;
+        }
+        if (!vec.size) continue;
+        let pivot = -1;
+        for (const w of vec.keys()) if (pivot < 0 || w < pivot) pivot = w;
+        const inv2 = modInv(vec.get(pivot), p);
+        for (const [key, v] of vec) vec.set(key, v * inv2 % p);
+        for (const [key, v] of comb) comb.set(key, v * inv2 % p);
+        for (const b of basis.values()) {
+          const f = b.vec.get(pivot);
+          if (f === void 0) continue;
+          const neg = p - f;
+          addScaled(b.vec, vec, neg);
+          addScaled(b.comb, comb, neg);
+          work += vec.size + comb.size;
+        }
+        basis.set(pivot, { vec, comb });
+        if (work > cap) {
+          aborted = true;
+          break;
+        }
+      }
+      if (aborted) continue;
+      for (const [pivot, b] of basis) {
+        if (b.vec.size !== 1 || this.det[pivot]) continue;
+        const rk = [], mult = [];
+        for (const [i, v] of b.comb) {
+          rk.push(rows[i].k);
+          mult.push(v.toString());
+        }
+        this.top.steps.push({ t: "gauss", x: pivot, rows: rk, mult });
+        this.rules.gauss++;
+        this.determine(pivot, this.top, null);
+        progress = true;
+      }
+    }
+    return progress;
+  }
+  // ---------------------------------------------------------------- one-hot families
+  /**
+   * Selector families. Members are constraints with a determined, non-constant
+   * multiplicand whose other multiplicand has exactly one undetermined wire and
+   * whose right-hand side has none. Members whose multiplicands differ only by
+   * a constant belong to one family.
+   */
+  oneHotPass() {
+    const m = this.r.nConstraints;
+    const families = /* @__PURE__ */ new Map();
+    for (let k = 0; k < m; k++) {
+      if (this.unk[k] !== 1) continue;
+      const cls = this.classify(k, this.top);
+      if (cls.kind !== "cond") continue;
+      const M = cls.side === "A" ? this.r.A[k] : this.r.B[k];
+      const N = cls.side === "A" ? this.r.B[k] : this.r.A[k];
+      const n2 = this.part(N, this.top), c = this.part(this.r.C[k], this.top);
+      if (n2.ui.length !== 1 || c.ui.length !== 0) continue;
+      const nf = this.normForm(M, this.top);
+      if (!nf) continue;
+      const key = nf.wires.join(",") + "|" + nf.coefs.join(",");
+      const member = { k, side: cls.side, s: N.w[n2.ui[0]], c0: nf.c0 };
+      const list = families.get(key);
+      if (list) list.push(member);
+      else families.set(key, [member]);
+    }
+    let progress = false;
+    for (const members of families.values()) {
+      if (members.length < 2) continue;
+      const byWire = /* @__PURE__ */ new Map();
+      for (const mem of members) if (!this.det[mem.s] && !byWire.has(mem.s)) byWire.set(mem.s, mem);
+      if (byWire.size < 2) continue;
+      const tried = /* @__PURE__ */ new Set();
+      for (const start of byWire.keys()) {
+        if (this.det[start]) continue;
+        for (let i = this.occStart[start]; i < this.occStart[start + 1]; i++) {
+          const k = this.occ[i];
+          if (tried.has(k)) continue;
+          tried.add(k);
+          const cls = this.classify(k, this.top);
+          if (cls.kind !== "row" || cls.wires.length < 2) continue;
+          if (!cls.wires.every((w) => byWire.has(w))) continue;
+          const mem = cls.wires.map((w) => byWire.get(w));
+          if (new Set(mem.map((x) => x.c0)).size !== mem.length) continue;
+          this.top.steps.push({ t: "onehot", k, m: mem.map((x) => [x.k, x.side]) });
+          this.rules.onehot++;
+          for (const w of cls.wires) this.determine(w, this.top, null);
+          progress = true;
+          break;
+        }
+      }
+    }
+    return progress;
+  }
+  // ---------------------------------------------------------------- case analysis
+  /**
+   * Run the direct rules inside a branch. `seeds` are processed first, together
+   * with everything they unlock; `lazy` (typically every constraint mentioning
+   * a wire whose value the branch learned) is consumed only when that work runs
+   * dry, so a widely used wire cannot starve the relevant follow-ups.
+   *
+   * The branch stops as soon as every target wire is determined: whatever lies
+   * downstream is cheaper to derive once at the parent level than twice here.
+   */
+  closure(ctx, seeds, lazy, budget) {
+    const local = seeds.slice();
+    let i = 0, j = 0;
+    const done = () => ctx.dead >= 0 || ctx.targets !== null && ctx.remaining <= 0;
+    const pump = (limit) => {
+      for (; ; ) {
+        if (done()) return;
+        let k;
+        if (i < local.length) k = local[i++];
+        else if (j < lazy.length) k = lazy[j++];
+        else return;
+        if (++ctx.visits > limit) {
+          ctx.exhausted = true;
+          return;
+        }
+        ctx.touched.add(k);
+        this.apply(k, ctx, local);
+      }
+    };
+    pump(budget);
+    if (done() || ctx.depth >= this.opts.maxSplitDepth) return;
+    let attempts = 0;
+    for (let round = 0; round < 3 && !done(); round++) {
+      let progress = false;
+      const groups = /* @__PURE__ */ new Map();
+      for (const k of ctx.touched) {
+        let relevant = false;
+        for (const w of this.cw[k]) if (ctx.targets.has(w) && !ctx.isDet(w)) {
+          relevant = true;
+          break;
+        }
+        if (!relevant) continue;
+        const cls = this.classify(k, ctx);
+        if (cls.kind !== "cond") continue;
+        const nf = this.normForm(cls.side === "A" ? this.r.A[k] : this.r.B[k], ctx);
+        if (!nf) continue;
+        const key = nf.wires.join(",") + "|" + nf.coefs.join(",") + "|" + nf.c0;
+        const g = groups.get(key);
+        if (g) g.push({ k, side: cls.side });
+        else groups.set(key, [{ k, side: cls.side }]);
+      }
+      for (const group of groups.values()) {
+        if (done() || attempts >= 8 || ctx.visits > budget * 3) return;
+        attempts++;
+        ctx.visits += 4;
+        if (this.trySplit(group[0].k, group[0].side, group, ctx, local, Math.max(48, budget >> 2)) === "ok") {
+          progress = true;
+          pump(budget * 3);
+        }
+      }
+      if (!progress) return;
+    }
+  }
+  /**
+   * Case-split on the determined multiplicand of constraint k. Commits to
+   * `ctx` every wire that both cases determine. `local` receives follow-up
+   * constraints when ctx is itself a branch. On failure `blockers` collects
+   * wires whose later determination could make a retry worthwhile.
+   */
+  trySplit(k, side, group, ctx, local, budget, blockers) {
+    this.splitAttempts++;
+    const form = side === "A" ? this.r.A[k] : this.r.B[k];
+    const nf = this.normForm(form, ctx);
+    if (!nf) return "fail";
+    const seeds = group.map((g) => g.k);
+    const targets = /* @__PURE__ */ new Set();
+    for (const g of group) for (const w of this.cw[g.k]) if (!ctx.isDet(w)) targets.add(w);
+    if (!targets.size) return "fail";
+    const note = (c) => {
+      if (!blockers) return;
+      for (const kk of c.touched) {
+        if (blockers.size >= 24) return;
+        for (const w of this.cw[kk]) if (!ctx.isDet(w)) {
+          blockers.add(w);
+          if (blockers.size >= 24) return;
+        }
+      }
+    };
+    const Z = new Ctx(this, ctx, form, null, ctx.depth + 1);
+    Z.targets = targets;
+    Z.remaining = targets.size;
+    const zLazy = [];
+    if (nf.wires.length === 1) {
+      const x = nf.wires[0];
+      Z.val.set(x, mod(-nf.c0, this.p));
+      const near = new Set(targets);
+      let wide = false, scanned = 0;
+      for (const t of targets) {
+        if (wide) break;
+        for (let i = this.occStart[t]; i < this.occStart[t + 1] && !wide; i++) {
+          const ws = this.cw[this.occ[i]];
+          scanned += ws.length;
+          if (scanned > 4e4) {
+            wide = true;
+            break;
+          }
+          for (const w of ws) if (!ctx.isDet(w)) near.add(w);
+          if (near.size > 8192) wide = true;
+        }
+      }
+      for (let i = this.occStart[x]; i < this.occStart[x + 1]; i++) {
+        const kk = this.occ[i];
+        let useful = wide;
+        if (!useful) {
+          for (const w of this.cw[kk]) if (near.has(w)) {
+            useful = true;
+            break;
+          }
+        }
+        if (useful) zLazy.push(kk);
+      }
+    }
+    this.closure(Z, seeds, zLazy, budget);
+    if (Z.dead < 0 && Z.remaining === targets.size) {
+      note(Z);
+      return Z.exhausted ? "fail-budget" : "fail";
+    }
+    const N = new Ctx(this, ctx, null, form, ctx.depth + 1);
+    N.targets = targets;
+    N.remaining = targets.size;
+    this.closure(N, seeds, [], budget);
+    if (N.dead < 0 && N.remaining === targets.size) {
+      note(N);
+      return N.exhausted ? "fail-budget" : "fail";
+    }
+    if (Z.dead >= 0 && N.dead >= 0) return "fail";
+    const xs = [];
+    const pick = Z.dead >= 0 ? N.det : N.dead >= 0 ? Z.det : null;
+    if (pick) {
+      for (const x of pick) if (!ctx.isDet(x)) xs.push(x);
+    } else for (const x of Z.det) if (N.det.has(x) && !ctx.isDet(x)) xs.push(x);
+    if (!xs.length) {
+      note(Z);
+      note(N);
+      return Z.exhausted || N.exhausted ? "fail-budget" : "fail";
+    }
+    xs.sort((x, y) => x - y);
+    const branch = (c) => c.dead >= 0 ? { steps: c.steps, dead: c.dead } : { steps: c.steps };
+    ctx.steps.push({ t: "split", k, side, xs, zero: branch(Z), nonzero: branch(N) });
+    this.rules.split++;
+    for (const x of xs) this.determine(x, ctx, local);
+    return "ok";
+  }
+  /**
+   * Groups that failed: the wires whose determination would justify another
+   * attempt, and the budget at which a budget-limited failure happened (0 when
+   * the attempt ran out of work, in which case a larger budget cannot help).
+   */
+  failed = /* @__PURE__ */ new Map();
+  splitPass(budget) {
+    const m = this.r.nConstraints;
+    const groups = /* @__PURE__ */ new Map();
+    for (let k = 0; k < m; k++) {
+      if (this.unk[k] === 0) continue;
+      const cls = this.classify(k, this.top);
+      if (cls.kind !== "cond") continue;
+      const nf = this.normForm(cls.side === "A" ? this.r.A[k] : this.r.B[k], this.top);
+      if (!nf) continue;
+      const key = nf.wires.join(",") + "|" + nf.coefs.join(",") + "|" + nf.c0;
+      const g = groups.get(key);
+      if (g) g.push({ k, side: cls.side });
+      else groups.set(key, [{ k, side: cls.side }]);
+    }
+    let progress = false;
+    for (const [key, group] of groups) {
+      if (performance.now() > this.deadline || this.ops > this.opts.maxOps) {
+        this.timedOut = true;
+        break;
+      }
+      const memo = this.failed.get(key);
+      if (memo && !(memo.limitedAt > 0 && budget > memo.limitedAt) && !memo.blockers.some((w) => this.det[w])) continue;
+      const live = group.filter((g) => {
+        if (this.unk[g.k] === 0) return false;
+        const cls = this.classify(g.k, this.top);
+        return cls.kind === "cond" && cls.side === g.side;
+      });
+      if (!live.length) continue;
+      const blockers = /* @__PURE__ */ new Set();
+      const outcome = this.trySplit(live[0].k, live[0].side, live, this.top, null, budget, blockers);
+      if (outcome === "ok") {
+        progress = true;
+        this.failed.delete(key);
+        this.drain();
+      } else this.failed.set(key, { blockers: [...blockers], limitedAt: outcome === "fail-budget" ? budget : 0 });
+    }
+    return progress;
+  }
+  // ---------------------------------------------------------------- driver
+  run() {
+    const t0 = performance.now();
+    this.deadline = t0 + this.opts.timeBudgetMs;
+    this.applyFixes();
+    for (let k = 0; k < this.r.nConstraints; k++) this.enqueue(k);
+    this.drain();
+    const budgets = [64, 512, this.opts.branchBudget].filter((b, i, all) => b <= this.opts.branchBudget && all.indexOf(b) === i);
+    let level = 0, rounds = 0;
+    for (; ; ) {
+      if (performance.now() > this.deadline || this.ops > this.opts.maxOps) {
+        this.timedOut = true;
+        break;
+      }
+      if (++rounds > 400) break;
+      if (this.gaussPass()) {
+        this.drain();
+        continue;
+      }
+      if (this.oneHotPass()) {
+        this.drain();
+        continue;
+      }
+      if (this.splitPass(budgets[level])) {
+        this.drain();
+        level = 0;
+        continue;
+      }
+      if (level + 1 < budgets.length) {
+        level++;
+        continue;
+      }
+      break;
+    }
+    let determined = 0;
+    for (let w = 0; w < this.r.nWires; w++) determined += this.det[w];
+    const twoValued = /* @__PURE__ */ new Map();
+    for (const [w, roots] of this.dom2) twoValued.set(w, { k: this.dom2k[w], r: roots });
+    return {
+      determined: this.det,
+      steps: this.top.steps,
+      stats: {
+        wires: this.r.nWires,
+        constraints: this.r.nConstraints,
+        determined,
+        undetermined: this.r.nWires - determined,
+        rules: { ...this.rules },
+        splitAttempts: this.splitAttempts,
+        time_ms: performance.now() - t0,
+        timedOut: this.timedOut
+      },
+      twoValued,
+      open: this.openItems()
+    };
+  }
+  /** For each undetermined wire, why no rule fixed it. Bounded for reporting. */
+  openItems(limit = 5e3) {
+    const out = [];
+    for (let w = 1; w < this.r.nWires && out.length < limit; w++) {
+      if (this.det[w]) continue;
+      const item = { wire: w, conditional: [], nonlinear: [], occurrences: this.occStart[w + 1] - this.occStart[w] };
+      for (let i = this.occStart[w]; i < this.occStart[w + 1] && item.conditional.length + item.nonlinear.length < 8; i++) {
+        const k = this.occ[i];
+        const cls = this.classify(k, this.top);
+        if (cls.kind === "cond") item.conditional.push({ k, side: cls.side });
+        else if (cls.kind === "quad") item.nonlinear.push(k);
+      }
+      out.push(item);
+    }
+    return out;
+  }
+};
+function prove(r, options = {}) {
+  return new Engine(r, options).run();
 }
-function scanR1CSBinary(bytes, id = "binary_r1cs") {
-  const t0 = performance.now();
+
+// ../carrycert-core/src/determinism/check.ts
+var md = (a, p) => {
+  const r = a % p;
+  return r < 0n ? r + p : r;
+};
+function inv(a, p) {
+  let lo = md(a, p), hi = p, x = 1n, y = 0n;
+  if (lo === 0n) throw new Error("zero has no inverse");
+  while (hi !== 0n) {
+    const q = lo / hi;
+    [lo, hi] = [hi, lo - q * hi];
+    [x, y] = [y, x - q * y];
+  }
+  if (lo !== 1n) throw new Error("modulus is not prime");
+  return md(x, p);
+}
+function pw(b, e, p) {
+  let out = 1n, base = md(b, p);
+  for (let n2 = e; n2 > 0n; n2 >>= 1n) {
+    if (n2 & 1n) out = out * base % p;
+    base = base * base % p;
+  }
+  return out;
+}
+var Replay = class {
+  constructor(r) {
+    this.r = r;
+    this.p = r.prime;
+    this.det = new Uint8Array(r.nWires);
+    this.det[0] = 1;
+    this.val.set(0, 1n);
+    for (let w = 1 + r.nPubOut; w < r.inputEnd; w++) this.det[w] = 1;
+  }
+  p;
+  det;
+  val = /* @__PURE__ */ new Map();
+  frames = [];
+  count = 0;
+  isDet(w) {
+    for (let i = this.frames.length - 1; i >= 0; i--) if (this.frames[i].det.has(w)) return true;
+    return this.det[w] === 1;
+  }
+  value(w) {
+    for (let i = this.frames.length - 1; i >= 0; i--) {
+      const v = this.frames[i].val.get(w);
+      if (v !== void 0) return v;
+    }
+    return this.val.get(w);
+  }
+  mark(w) {
+    if (this.frames.length) this.frames[this.frames.length - 1].det.add(w);
+    else this.det[w] = 1;
+  }
+  learn(w, v) {
+    if (this.value(w) !== void 0) return;
+    if (this.frames.length) this.frames[this.frames.length - 1].val.set(w, v);
+    else this.val.set(w, v);
+  }
+  constraintOk(k) {
+    return Number.isInteger(k) && k >= 0 && k < this.r.nConstraints;
+  }
+  wireOk(w) {
+    return Number.isInteger(w) && w > 0 && w < this.r.nWires;
+  }
+  /** Split a linear combination into its undetermined part, known constant part and "has unvalued determined wires". */
+  view(lc) {
+    const open = /* @__PURE__ */ new Map();
+    let known = 0n, symbolic = false;
+    for (let i = 0; i < lc.w.length; i++) {
+      const w = lc.w[i];
+      if (!this.isDet(w)) {
+        open.set(w, lc.c[i]);
+        continue;
+      }
+      const v = this.value(w);
+      if (v === void 0) symbolic = true;
+      else known = md(known + lc.c[i] * v, this.p);
+    }
+    return { open, known, symbolic };
+  }
+  /** A determined linear form scaled so that its first unvalued wire has coefficient one. */
+  normal(lc) {
+    const terms = [];
+    let c0 = 0n;
+    for (let i = 0; i < lc.w.length; i++) {
+      const v = this.value(lc.w[i]);
+      if (v === void 0) terms.push([lc.w[i], lc.c[i]]);
+      else c0 = md(c0 + lc.c[i] * v, this.p);
+    }
+    if (!terms.length) return null;
+    const s = inv(terms[0][1], this.p);
+    return terms.map(([w, c]) => w + ":" + c * s % this.p).join(",") + "|" + c0 * s % this.p;
+  }
+  /** "zero" / "nonzero" when a case fact on the frame stack applies to this form. */
+  fact(lc) {
+    const key = this.normal(lc);
+    if (key === null) return null;
+    for (let i = this.frames.length - 1; i >= 0; i--) {
+      const f = this.frames[i];
+      if (f.zero && this.normal(f.zero) === key) return "zero";
+      if (f.nz && this.normal(f.nz) === key) return "nonzero";
+    }
+    return null;
+  }
+  reduce(k) {
+    const p = this.p;
+    const A = this.view(this.r.A[k]), B = this.view(this.r.B[k]), C = this.view(this.r.C[k]);
+    const finish = (row2, rhs) => {
+      for (const [w, c] of [...row2]) if (c === 0n) row2.delete(w);
+      if (!row2.size) return rhs !== null && rhs !== 0n ? { kind: "dead" } : { kind: "none" };
+      return { kind: "row", row: row2, rhs };
+    };
+    if (!A.open.size && !B.open.size) {
+      const rhs = A.symbolic || B.symbolic || C.symbolic ? null : md(A.known * B.known - C.known, p);
+      return finish(new Map(C.open), rhs);
+    }
+    if (A.open.size && B.open.size) return { kind: "quad" };
+    const aDetermined = !A.open.size;
+    const M = aDetermined ? A : B, N = aDetermined ? B : A;
+    const Mlc = aDetermined ? this.r.A[k] : this.r.B[k];
+    let m = M.symbolic ? null : M.known;
+    if (m === null) {
+      const f = this.fact(Mlc);
+      if (f === "zero") m = 0n;
+      else if (f === "nonzero") {
+        if (C.open.size) return { kind: "none" };
+        return finish(new Map(N.open), null);
+      } else return { kind: "cond" };
+    }
+    if (m === 0n) return finish(new Map(C.open), C.symbolic ? null : md(-C.known, p));
+    const row = /* @__PURE__ */ new Map();
+    for (const [w, c] of N.open) row.set(w, md(c * m, p));
+    for (const [w, c] of C.open) row.set(w, md((row.get(w) ?? 0n) - c, p));
+    return finish(row, N.symbolic || C.symbolic ? null : md(C.known - m * N.known, p));
+  }
+  /** Roots of a constraint that mentions exactly one non-constant wire x. */
+  roots(k, x) {
+    const p = this.p;
+    const co = (lc) => {
+      let c1 = 0n, c0 = 0n;
+      for (let i = 0; i < lc.w.length; i++) {
+        if (lc.w[i] === 0) c0 = lc.c[i];
+        else if (lc.w[i] === x) c1 = lc.c[i];
+        else return null;
+      }
+      return [c1, c0];
+    };
+    const a = co(this.r.A[k]), b = co(this.r.B[k]), c = co(this.r.C[k]);
+    if (!a || !b || !c) return null;
+    const q2 = md(a[0] * b[0], p), q1 = md(a[0] * b[1] + a[1] * b[0] - c[0], p), q0 = md(a[1] * b[1] - c[1], p);
+    const isRoot = (v) => md(q2 * v * v + q1 * v + q0, p) === 0n;
+    if (q2 === 0n) {
+      if (q1 === 0n) return null;
+      return [md(-q0 * inv(q1, p), p)];
+    }
+    if (q0 === 0n) {
+      if (q1 === 0n) return [0n];
+      const other = md(-q1 * inv(q2, p), p);
+      return isRoot(other) && other !== 0n ? [0n, other] : null;
+    }
+    const half = inv(2n * q2, p);
+    const disc = md(q1 * q1 - 4n * q2 * q0, p);
+    if (disc === 0n) return [md(-q1 * half, p)];
+    if (pw(disc, (p - 1n) / 2n, p) !== 1n) return [];
+    let s;
+    if ((p & 3n) === 3n) s = pw(disc, (p + 1n) / 4n, p);
+    else {
+      let q = p - 1n, e = 0n;
+      while ((q & 1n) === 0n) {
+        q >>= 1n;
+        e++;
+      }
+      let z = 2n;
+      while (pw(z, (p - 1n) / 2n, p) !== p - 1n) z++;
+      let mm = e, cc = pw(z, q, p), t = pw(disc, q, p);
+      s = pw(disc, (q + 1n) / 2n, p);
+      while (t !== 1n) {
+        let i = 0n, t2 = t;
+        while (t2 !== 1n) {
+          t2 = t2 * t2 % p;
+          i++;
+        }
+        const bb = pw(cc, 1n << mm - i - 1n, p);
+        mm = i;
+        cc = bb * bb % p;
+        t = t * cc % p;
+        s = s * bb % p;
+      }
+    }
+    const r1 = md((-q1 + s) * half, p), r2 = md((-q1 - s) * half, p);
+    if (!isRoot(r1) || !isRoot(r2) || r1 === r2) return null;
+    return [r1, r2];
+  }
+  superIncreasing(weights, scale) {
+    const p = this.p;
+    if (md(scale, p) === 0n) return false;
+    const mags = weights.map((g) => {
+      const v = md(g * scale, p);
+      return v > p / 2n ? p - v : v;
+    }).sort((x, y) => x < y ? -1 : x > y ? 1 : 0);
+    let sum = 0n;
+    for (const v of mags) {
+      if (v <= sum) return false;
+      sum += v;
+    }
+    return sum < p;
+  }
+  step(s) {
+    this.count++;
+    const p = this.p;
+    if (!s || typeof s !== "object") return "malformed step";
+    if (s.t === "lin") {
+      if (!this.constraintOk(s.k) || !this.wireOk(s.x)) return "lin: bad index";
+      const red = this.reduce(s.k);
+      if (red.kind !== "row" || red.row.size !== 1 || !red.row.has(s.x))
+        return `lin: constraint ${s.k} does not isolate wire ${s.x}`;
+      this.mark(s.x);
+      if (red.rhs !== null) this.learn(s.x, md(red.rhs * inv(red.row.get(s.x), p), p));
+      return null;
+    }
+    if (s.t === "fix") {
+      if (!this.constraintOk(s.k) || !this.wireOk(s.x)) return "fix: bad index";
+      const roots = this.roots(s.k, s.x);
+      if (!roots || roots.length !== 1) return `fix: constraint ${s.k} does not pin wire ${s.x} to one value`;
+      this.mark(s.x);
+      this.learn(s.x, roots[0]);
+      return null;
+    }
+    if (s.t === "bits") {
+      if (!this.constraintOk(s.k) || !Array.isArray(s.xs) || !Array.isArray(s.d) || s.xs.length !== s.d.length || s.xs.length < 2)
+        return "bits: malformed";
+      const red = this.reduce(s.k);
+      if (red.kind !== "row" || red.row.size !== s.xs.length) return `bits: constraint ${s.k} is not a matching linear row`;
+      let scale;
+      try {
+        scale = BigInt(s.s);
+      } catch {
+        return "bits: bad scale";
+      }
+      const weights = [];
+      const seen = /* @__PURE__ */ new Set();
+      for (let i = 0; i < s.xs.length; i++) {
+        const x = s.xs[i], dk = s.d[i];
+        if (!this.wireOk(x) || !this.constraintOk(dk) || seen.has(x)) return "bits: bad index";
+        seen.add(x);
+        const coef = red.row.get(x);
+        if (coef === void 0) return `bits: wire ${x} is not open in constraint ${s.k}`;
+        const roots = this.roots(dk, x);
+        if (!roots || roots.length !== 2) return `bits: constraint ${dk} does not make wire ${x} two-valued`;
+        weights.push(md(coef * (roots[1] - roots[0]), p));
+      }
+      if (!this.superIncreasing(weights, scale)) return `bits: weights of constraint ${s.k} are not injective under the given scale`;
+      for (const x of s.xs) this.mark(x);
+      return null;
+    }
+    if (s.t === "gauss") {
+      if (!this.wireOk(s.x) || !Array.isArray(s.rows) || !Array.isArray(s.mult) || s.rows.length !== s.mult.length || !s.rows.length)
+        return "gauss: malformed";
+      const acc = /* @__PURE__ */ new Map();
+      for (let i = 0; i < s.rows.length; i++) {
+        if (!this.constraintOk(s.rows[i])) return "gauss: bad constraint index";
+        const red = this.reduce(s.rows[i]);
+        if (red.kind !== "row") return `gauss: constraint ${s.rows[i]} is not a linear row`;
+        let f;
+        try {
+          f = md(BigInt(s.mult[i]), p);
+        } catch {
+          return "gauss: bad multiplier";
+        }
+        for (const [w, c] of red.row) acc.set(w, md((acc.get(w) ?? 0n) + c * f, p));
+      }
+      for (const [w, c] of acc) if (c !== 0n && w !== s.x) return `gauss: combination leaves wire ${w}`;
+      if (!acc.get(s.x)) return `gauss: combination does not isolate wire ${s.x}`;
+      this.mark(s.x);
+      return null;
+    }
+    if (s.t === "onehot") {
+      if (!this.constraintOk(s.k) || !Array.isArray(s.m) || s.m.length < 2) return "onehot: malformed";
+      const row = this.reduce(s.k);
+      if (row.kind !== "row" || row.row.size !== s.m.length) return `onehot: constraint ${s.k} is not a linear row over the family`;
+      let base = null;
+      const constants = /* @__PURE__ */ new Set();
+      const wires = /* @__PURE__ */ new Set();
+      for (const entry of s.m) {
+        if (!Array.isArray(entry) || entry.length !== 2) return "onehot: malformed member";
+        const [k, side] = entry;
+        if (!this.constraintOk(k) || side !== "A" && side !== "B") return "onehot: bad member";
+        const Mlc = side === "A" ? this.r.A[k] : this.r.B[k];
+        const M = this.view(Mlc), N = this.view(side === "A" ? this.r.B[k] : this.r.A[k]), C = this.view(this.r.C[k]);
+        if (M.open.size !== 0) return `onehot: multiplicand of constraint ${k} is not determined`;
+        if (N.open.size !== 1 || C.open.size !== 0) return `onehot: constraint ${k} does not isolate one wire when its multiplicand is nonzero`;
+        const key = this.normal(Mlc);
+        if (key === null) return `onehot: multiplicand of constraint ${k} is constant here`;
+        const cut = key.lastIndexOf("|");
+        const sym = key.slice(0, cut), c0 = key.slice(cut + 1);
+        if (base === null) base = sym;
+        else if (base !== sym) return "onehot: members do not share one form";
+        if (constants.has(c0)) return "onehot: two members have the same constant";
+        constants.add(c0);
+        const x = N.open.keys().next().value;
+        if (wires.has(x)) return "onehot: a wire has two members";
+        if (!row.row.has(x)) return `onehot: wire ${x} is not in the row`;
+        wires.add(x);
+      }
+      for (const x of wires) this.mark(x);
+      return null;
+    }
+    if (s.t === "split") {
+      if (!this.constraintOk(s.k) || s.side !== "A" && s.side !== "B" || !Array.isArray(s.xs) || !s.xs.length)
+        return "split: malformed";
+      const form = s.side === "A" ? this.r.A[s.k] : this.r.B[s.k];
+      for (const w of form.w) if (!this.isDet(w)) return `split: form of constraint ${s.k} uses undetermined wire ${w}`;
+      const key = this.normal(form);
+      if (key === null) return `split: form of constraint ${s.k} is constant here`;
+      for (const x of s.xs) if (!this.wireOk(x)) return "split: bad wire";
+      const run = (branch, zero) => {
+        if (!branch || !Array.isArray(branch.steps)) return { err: "split: malformed branch", dead: false, ok: false };
+        const frame = { det: /* @__PURE__ */ new Set(), val: /* @__PURE__ */ new Map(), zero: zero ? form : null, nz: zero ? null : form };
+        this.frames.push(frame);
+        try {
+          if (zero) {
+            const terms = [];
+            let c0 = 0n;
+            for (let i = 0; i < form.w.length; i++) {
+              const v = this.value(form.w[i]);
+              if (v === void 0) terms.push([form.w[i], form.c[i]]);
+              else c0 = md(c0 + form.c[i] * v, p);
+            }
+            if (terms.length === 1) frame.val.set(terms[0][0], md(-c0 * inv(terms[0][1], p), p));
+          }
+          for (const sub of branch.steps) {
+            const err = this.step(sub);
+            if (err) return { err: (zero ? "zero" : "nonzero") + " case: " + err, dead: false, ok: false };
+          }
+          if (branch.dead !== void 0) {
+            if (!this.constraintOk(branch.dead) || this.reduce(branch.dead).kind !== "dead")
+              return { err: `split: constraint ${branch.dead} is not contradictory in the ${zero ? "zero" : "nonzero"} case`, dead: false, ok: false };
+            return { err: null, dead: true, ok: true };
+          }
+          for (const x of s.xs) if (!this.isDet(x))
+            return { err: `split: wire ${x} is not determined in the ${zero ? "zero" : "nonzero"} case`, dead: false, ok: false };
+          return { err: null, dead: false, ok: true };
+        } finally {
+          this.frames.pop();
+        }
+      };
+      const z = run(s.zero, true);
+      if (z.err) return z.err;
+      const n2 = run(s.nonzero, false);
+      if (n2.err) return n2.err;
+      if (z.dead && n2.dead) return "split: both cases contradictory";
+      for (const x of s.xs) this.mark(x);
+      return null;
+    }
+    return "unknown step type";
+  }
+};
+function checkProof(r, steps) {
+  const replay = new Replay(r);
   try {
-    const parsed = parseR1CSBinary(bytes);
-    const proof = proveR1CSUniqueness(parsed);
-    const coupled = proof.complete ? null : proveR1CSCoupledRank(parsed, [...proof.pivots, ...proof.nonlinear_pivots]);
-    if (!proof.complete && !coupled?.complete) return {
-      id,
-      domain: "r1cs",
-      verdict: "Unknown",
-      method: "r1cs_constraints_undecided",
-      theorem: "n/a",
-      time_ms: performance.now() - t0,
-      reason: proof.free.length + " unbound wires after triangular proof; linear rank " + (coupled?.rank ?? 0) + "/" + (coupled?.unknown ?? proof.free.length) + (coupled?.limit ? "; limit " + coupled.limit : ""),
-      source_note: "R1CS parsed; remaining wire uniqueness not established",
-      check: { ok: true, kind: "unknown_skip" }
+    for (const s of steps) {
+      const err = replay.step(s);
+      if (err) return { ok: false, error: `step ${replay.count}: ${err}`, determined: replay.det, steps: replay.count };
+    }
+  } catch (e) {
+    return { ok: false, error: `step ${replay.count}: ${e instanceof Error ? e.message : String(e)}`, determined: replay.det, steps: replay.count };
+  }
+  return { ok: true, determined: replay.det, steps: replay.count };
+}
+function firstViolation(r, w) {
+  const p = r.prime;
+  if (w.length !== r.nWires || w[0] !== 1n) return 0;
+  const ev = (lc) => {
+    let acc = 0n;
+    for (let i = 0; i < lc.w.length; i++) acc += lc.c[i] * w[lc.w[i]];
+    return md(acc, p);
+  };
+  for (let k = 0; k < r.nConstraints; k++)
+    if (md(ev(r.A[k]) * ev(r.B[k]) - ev(r.C[k]), p) !== 0n) return k;
+  return -1;
+}
+function checkCounterexample(r, a, b) {
+  const p = r.prime;
+  for (const w of [a, b]) {
+    if (w.length !== r.nWires) return { ok: false, error: "assignment length differs from wire count", differingOutputs: [] };
+    for (const v of w) if (typeof v !== "bigint" || v < 0n || v >= p) return { ok: false, error: "assignment value outside the field", differingOutputs: [] };
+  }
+  const va = firstViolation(r, a), vb = firstViolation(r, b);
+  if (va >= 0) return { ok: false, error: `first assignment violates constraint ${va}`, differingOutputs: [] };
+  if (vb >= 0) return { ok: false, error: `second assignment violates constraint ${vb}`, differingOutputs: [] };
+  for (let w = 1 + r.nPubOut; w < r.inputEnd; w++)
+    if (a[w] !== b[w]) return { ok: false, error: `assignments differ on input wire ${w}`, differingOutputs: [] };
+  const diff = [];
+  for (let w = 1; w <= r.nPubOut; w++) if (a[w] !== b[w]) diff.push(w);
+  if (!diff.length) return { ok: false, error: "assignments agree on every output", differingOutputs: [] };
+  return { ok: true, differingOutputs: diff };
+}
+
+// ../carrycert-core/src/determinism/cex.ts
+function rng(seed) {
+  let s = seed >>> 0 || 2654435769;
+  return () => {
+    s |= 0;
+    s = s + 1831565813 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return (t ^ t >>> 14) >>> 0;
+  };
+}
+var Index = class {
+  constructor(r) {
+    this.r = r;
+    const n2 = r.nWires, m = r.nConstraints;
+    const counts = new Int32Array(n2 + 1);
+    const mark = new Int32Array(n2).fill(-1);
+    this.cw = new Array(m);
+    for (let k = 0; k < m; k++) {
+      const list = [];
+      for (const lc of [r.A[k], r.B[k], r.C[k]])
+        for (const w of lc.w) if (w !== 0 && mark[w] !== k) {
+          mark[w] = k;
+          list.push(w);
+        }
+      this.cw[k] = Int32Array.from(list);
+      for (const w of list) counts[w + 1]++;
+    }
+    for (let i = 0; i < n2; i++) counts[i + 1] += counts[i];
+    this.occStart = counts;
+    this.occ = new Int32Array(counts[n2]);
+    const fill = counts.slice(0, n2);
+    for (let k = 0; k < m; k++) for (const w of this.cw[k]) this.occ[fill[w]++] = k;
+  }
+  cw;
+  occStart;
+  occ;
+};
+function looseScale(weights, p) {
+  const ok = (scale) => {
+    const h = weights.map((g) => abs(balanced(g * scale, p))).sort((x, y) => x < y ? -1 : x > y ? 1 : 0);
+    let prefix = 0n;
+    for (const v of h) {
+      if (v <= prefix) return false;
+      prefix += v;
+    }
+    return true;
+  };
+  if (weights.some((g) => g === 0n)) return null;
+  if (ok(1n)) return 1n;
+  const order = weights.map((g, i) => ({ i, m: abs(balanced(g, p)) })).sort((x, y) => x.m < y.m ? -1 : x.m > y.m ? 1 : 0);
+  for (let t = 0; t < Math.min(order.length, 16); t++) {
+    const scale = modInv(weights[order[t].i], p);
+    if (ok(scale)) return scale;
+  }
+  return null;
+}
+function subsetSolutions(weights, target, p, maxSolutions = 4) {
+  const scale = looseScale(weights, p);
+  if (scale === null) return null;
+  const h = weights.map((g) => balanced(g * scale, p));
+  const order = h.map((v, i) => i).sort((x, y) => abs(h[x]) > abs(h[y]) ? -1 : abs(h[x]) < abs(h[y]) ? 1 : 0);
+  let pos = 0n, neg = 0n;
+  for (const v of h) {
+    if (v > 0n) pos += v;
+    else neg += v;
+  }
+  const t0 = mod(target * scale, p);
+  let j = (neg - t0) / p;
+  while (t0 + j * p < neg) j++;
+  while (t0 + (j - 1n) * p >= neg) j--;
+  const out = [];
+  for (; t0 + j * p <= pos; j++) {
+    let tau = t0 + j * p;
+    let restPos = pos, restNeg = neg;
+    const beta = new Array(weights.length).fill(0);
+    let ok = true;
+    for (const i of order) {
+      const v = h[i];
+      if (v > 0n) restPos -= v;
+      else restNeg -= v;
+      const withIt = tau - v;
+      const canTake = withIt >= restNeg && withIt <= restPos;
+      const canSkip = tau >= restNeg && tau <= restPos;
+      if (canTake) {
+        beta[i] = 1;
+        tau = withIt;
+      } else if (!canSkip) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok && tau === 0n) {
+      out.push(beta);
+      if (out.length >= maxSolutions) break;
+    }
+  }
+  return out;
+}
+var Solver = class _Solver {
+  /**
+   * `extra`, when given, adds the equation extra = 0 as a virtual constraint.
+   * It is used to steer inputs into a degenerate case; the pair that results
+   * is still judged against the original system only.
+   */
+  constructor(r, ix, dom2, domWires, undetermined, chooser, twoValuedFirst, maxChoices, extra = null) {
+    this.r = r;
+    this.ix = ix;
+    this.dom2 = dom2;
+    this.domWires = domWires;
+    this.undetermined = undetermined;
+    this.chooser = chooser;
+    this.twoValuedFirst = twoValuedFirst;
+    this.maxChoices = maxChoices;
+    this.extra = extra;
+    this.p = r.prime;
+    this.m = r.nConstraints + (extra ? 1 : 0);
+    this.w = new Array(r.nWires).fill(void 0);
+    this.un = new Int32Array(this.m);
+    this.done = new Uint8Array(this.m);
+    this.queued = new Uint8Array(this.m);
+    for (let k = 0; k < r.nConstraints; k++) this.un[k] = ix.cw[k].length;
+    this.extraWires = extra ? new Set(extra.w.filter((x) => x !== 0)) : null;
+    if (extra) this.un[r.nConstraints] = this.extraWires.size;
+    this.inputPtr = 1 + r.nPubOut;
+    this.w[0] = 1n;
+  }
+  p;
+  w;
+  un;
+  done;
+  queue = [];
+  queued;
+  multi = [];
+  domPtr = 0;
+  livePtr = 0;
+  failed = false;
+  choices = 0;
+  /** Number of constraints including the optional virtual one (index r.nConstraints). */
+  m;
+  extraWires;
+  inputPtr;
+  static EMPTY = { w: [], c: [] };
+  lcA(k) {
+    return k < this.r.nConstraints ? this.r.A[k] : _Solver.EMPTY;
+  }
+  lcB(k) {
+    return k < this.r.nConstraints ? this.r.B[k] : _Solver.EMPTY;
+  }
+  lcC(k) {
+    return k < this.r.nConstraints ? this.r.C[k] : this.extra;
+  }
+  wiresOf(k) {
+    return k < this.r.nConstraints ? this.ix.cw[k] : [...this.extraWires];
+  }
+  push(k) {
+    if (!this.queued[k] && !this.done[k]) {
+      this.queued[k] = 1;
+      this.queue.push(k);
+    }
+  }
+  assign(x, v) {
+    if (this.w[x] !== void 0) {
+      if (this.w[x] !== v) this.failed = true;
+      return;
+    }
+    this.w[x] = v;
+    for (let i = this.ix.occStart[x]; i < this.ix.occStart[x + 1]; i++) {
+      const k = this.ix.occ[i];
+      this.un[k]--;
+      this.push(k);
+    }
+    if (this.extraWires && this.extraWires.has(x)) {
+      this.un[this.r.nConstraints]--;
+      this.push(this.r.nConstraints);
+    }
+  }
+  pick(nOptions) {
+    const c = this.chooser;
+    const at = c.index++;
+    let choice = 0;
+    if (c.random) choice = c.random() % nOptions;
+    else if (c.flip && c.flip.has(at)) choice = 1 % nOptions;
+    c.log.push(choice);
+    this.choices++;
+    return choice;
+  }
+  freeValue() {
+    const c = this.chooser;
+    const at = c.index++;
+    this.choices++;
+    let v;
+    if (c.random) {
+      const roll = c.random() % 8;
+      if (roll < 3) v = BigInt(c.random() % 4);
+      else if (roll < 5) v = BigInt(c.random() % 65536);
+      else {
+        v = 0n;
+        for (let i = 0; i < 9; i++) v = v << 32n | BigInt(c.random());
+        v = mod(v, this.p);
+      }
+    } else v = c.flip && c.flip.has(at) ? 1n : 0n;
+    c.log.push(Number(v % 1000000007n));
+    return v;
+  }
+  evalLC(lc) {
+    let val = 0n;
+    let open = null;
+    for (let i = 0; i < lc.w.length; i++) {
+      const v = this.w[lc.w[i]];
+      if (v === void 0) (open ??= /* @__PURE__ */ new Map()).set(lc.w[i], lc.c[i]);
+      else val += lc.c[i] * v;
+    }
+    return { val: val % this.p, open };
+  }
+  /** Solve or classify one constraint. `allowChoice` enables multi-solution picks. */
+  process(k, allowChoice) {
+    if (this.done[k]) return;
+    const p = this.p;
+    const A = this.evalLC(this.lcA(k)), B = this.evalLC(this.lcB(k)), C = this.evalLC(this.lcC(k));
+    if (A.open && B.open) {
+      const wires = /* @__PURE__ */ new Set([...A.open.keys(), ...B.open.keys(), ...C.open ? C.open.keys() : []]);
+      if (wires.size !== 1) return;
+      const x = wires.values().next().value;
+      const a1 = A.open.get(x) ?? 0n, b1 = B.open.get(x) ?? 0n, c1 = C.open?.get(x) ?? 0n;
+      const q2 = mod(a1 * b1, p), q1 = mod(a1 * B.val + A.val * b1 - c1, p), q0 = mod(A.val * B.val - C.val, p);
+      const roots = this.quadRoots(q2, q1, q0);
+      if (roots === null) {
+        this.done[k] = 1;
+        return;
+      }
+      if (!roots.length) {
+        this.failed = true;
+        return;
+      }
+      if (roots.length === 1) {
+        this.assign(x, roots[0]);
+        return;
+      }
+      if (!allowChoice) {
+        if (this.wiresOf(k).length !== 1) this.multi.push(k);
+        return;
+      }
+      this.assign(x, roots[this.pick(2)]);
+      return;
+    }
+    const row = /* @__PURE__ */ new Map();
+    let rhs;
+    if (!A.open && !B.open) {
+      if (C.open) for (const [w, c] of C.open) row.set(w, c);
+      rhs = mod(A.val * B.val - C.val, p);
+    } else {
+      const m = A.open ? B.val : A.val;
+      const N = A.open ? A : B;
+      for (const [w, c] of N.open) {
+        const v = mod(c * m, p);
+        if (v !== 0n) row.set(w, v);
+      }
+      if (C.open) for (const [w, c] of C.open) {
+        const v = mod((row.get(w) ?? 0n) - c, p);
+        if (v === 0n) row.delete(w);
+        else row.set(w, v);
+      }
+      rhs = mod(C.val - m * N.val, p);
+    }
+    if (!row.size) {
+      if (rhs !== 0n) {
+        this.failed = true;
+        return;
+      }
+      this.done[k] = 1;
+      return;
+    }
+    if (row.size === 1) {
+      const [x, c] = row.entries().next().value;
+      this.assign(x, mod(rhs * modInv(c, p), p));
+      return;
+    }
+    if (row.size > 600) return;
+    const xs = [], weights = [];
+    let target = rhs;
+    for (const [x, c] of row) {
+      const d = this.dom2.get(x);
+      if (!d) return;
+      xs.push(x);
+      weights.push(mod(c * (d[1] - d[0]), p));
+      target = mod(target - c * d[0], p);
+    }
+    const sols = subsetSolutions(weights, target, p);
+    if (sols === null) return;
+    if (!sols.length) {
+      this.failed = true;
+      return;
+    }
+    let sol = sols[0];
+    if (sols.length > 1) {
+      if (!allowChoice) {
+        this.multi.push(k);
+        return;
+      }
+      sol = sols[this.pick(sols.length)];
+    }
+    for (let i = 0; i < xs.length; i++) this.assign(xs[i], this.dom2.get(xs[i])[sol[i]]);
+  }
+  quadRoots(q2, q1, q0) {
+    const p = this.p;
+    if (q2 === 0n) {
+      if (q1 === 0n) return q0 === 0n ? null : [];
+      return [mod(-q0 * modInv(q1, p), p)];
+    }
+    const inv2a = modInv(2n * q2, p);
+    const disc = mod(q1 * q1 - 4n * q2 * q0, p);
+    if (disc === 0n) return [mod(-q1 * inv2a, p)];
+    const s = modSqrt(disc, p);
+    if (s === null) return [];
+    const r1 = mod((-q1 + s) * inv2a, p), r2 = mod((-q1 - s) * inv2a, p);
+    return r1 < r2 ? [r1, r2] : [r2, r1];
+  }
+  drain() {
+    while (this.queue.length && !this.failed) {
+      const k = this.queue.pop();
+      this.queued[k] = 0;
+      this.process(k, false);
+    }
+  }
+  chooseTwoValued() {
+    while (this.domPtr < this.domWires.length) {
+      const x = this.domWires[this.domPtr];
+      if (this.w[x] !== void 0) {
+        this.domPtr++;
+        continue;
+      }
+      const d = this.dom2.get(x);
+      this.assign(x, d[this.pick(2)]);
+      return true;
+    }
+    return false;
+  }
+  /** Lazy-input mode: give the next unassigned input its strategy value. */
+  chooseInput(inputs) {
+    while (this.inputPtr < this.r.inputEnd) {
+      const x = this.inputPtr++;
+      if (this.w[x] !== void 0) continue;
+      this.assign(x, inputs.get(x) ?? 0n);
+      return true;
+    }
+    return false;
+  }
+  chooseFromLive() {
+    const m = this.m;
+    while (this.livePtr < m) {
+      const k = this.livePtr;
+      if (this.done[k] || this.un[k] === 0) {
+        this.livePtr++;
+        continue;
+      }
+      let pickWire = -1;
+      const ws = this.wiresOf(k);
+      for (let i = 0; i < ws.length; i++) {
+        const x = ws[i];
+        if (this.w[x] !== void 0) continue;
+        if (pickWire < 0) pickWire = x;
+        if (this.undetermined && this.undetermined[x]) {
+          pickWire = x;
+          break;
+        }
+      }
+      if (pickWire < 0) {
+        this.livePtr++;
+        continue;
+      }
+      this.assign(pickWire, this.freeValue());
+      return true;
+    }
+    return false;
+  }
+  /**
+   * `lazyInputs` leaves the inputs open so propagation can solve for the ones
+   * a degenerate case forces; the rest take their strategy value when stuck.
+   */
+  run(inputs, lazyInputs = false) {
+    if (!lazyInputs) for (const [x, v] of inputs) this.assign(x, v);
+    for (let k = 0; k < this.m; k++) this.push(k);
+    for (; ; ) {
+      this.drain();
+      if (this.failed) return null;
+      if (this.choices > this.maxChoices) return null;
+      if (lazyInputs && this.chooseInput(inputs)) continue;
+      let acted = false;
+      while (this.multi.length && !acted) {
+        const k = this.multi.pop();
+        const before = this.choices;
+        this.process(k, true);
+        if (this.failed) return null;
+        acted = this.choices > before || this.queue.length > 0;
+      }
+      if (acted) continue;
+      if (this.twoValuedFirst) {
+        if (this.chooseTwoValued() || this.chooseFromLive()) continue;
+      } else if (this.chooseFromLive() || this.chooseTwoValued()) continue;
+      break;
+    }
+    for (let x = 1; x < this.r.nWires; x++) {
+      if (this.w[x] !== void 0) continue;
+      const d = this.dom2.get(x);
+      this.assign(x, d ? d[this.pick(2)] : this.freeValue());
+      this.drain();
+      if (this.failed) return null;
+    }
+    return this.w;
+  }
+};
+function inputStrategies(r, next, twoValued) {
+  const first = 1 + r.nPubOut, n2 = r.inputEnd - first;
+  const p = r.prime;
+  const all = (f) => () => {
+    const m = /* @__PURE__ */ new Map();
+    for (let i = 0; i < n2; i++) {
+      const d = twoValued.get(first + i);
+      const v = mod(f(i), p);
+      m.set(first + i, d ? v === d[0] || v === d[1] ? v : d[Number(v & 1n)] : v);
+    }
+    return m;
+  };
+  const field = () => {
+    let v = 0n;
+    for (let i = 0; i < 9; i++) v = v << 32n | BigInt(next());
+    return mod(v, p);
+  };
+  return [
+    { name: "zeros", gen: all(() => 0n) },
+    { name: "ones", gen: all(() => 1n) },
+    { name: "bits", gen: all(() => BigInt(next() & 1)) },
+    { name: "small", gen: all(() => BigInt(next() % 16)) },
+    { name: "equal-small", gen: (() => {
+      const v = BigInt(next() % 16);
+      return all(() => v);
+    })() },
+    { name: "bytes", gen: all(() => BigInt(next() % 256)) },
+    { name: "u32", gen: all(() => BigInt(next())) },
+    { name: "equal-field", gen: (() => {
+      const v = field();
+      return all(() => v);
+    })() },
+    { name: "field", gen: all(() => field()) }
+  ];
+}
+function findCounterexample(r, proof, options = {}) {
+  if (r.nPubOut === 0) return null;
+  const t0 = performance.now();
+  const budget = options.timeBudgetMs ?? 15e3;
+  const next = rng(options.seed ?? 12587047);
+  const ix = new Index(r);
+  const dom2 = /* @__PURE__ */ new Map();
+  for (const [w, v] of proof.twoValued) dom2.set(w, v.r);
+  const domWires = [...dom2.keys()].sort((x, y) => x - y);
+  const undet = new Uint8Array(r.nWires);
+  for (let w = 0; w < r.nWires; w++) undet[w] = proof.determined[w] ? 0 : 1;
+  const maxChoices = options.maxChoices ?? 2e4;
+  let solves = 0;
+  const maxSolves = options.maxSolves ?? Number.MAX_SAFE_INTEGER;
+  const timeUp = () => performance.now() - t0 > budget || solves >= maxSolves;
+  const solve = (inputs, chooser, twoValuedFirst) => {
+    solves++;
+    return new Solver(r, ix, dom2, domWires, undet, chooser, twoValuedFirst, maxChoices).run(inputs);
+  };
+  const outputsDiffer = (a, b) => {
+    for (let w = 1; w <= r.nPubOut; w++) if (a[w] !== b[w]) return true;
+    return false;
+  };
+  const confirm = (a, b, strategy) => {
+    const res = checkCounterexample(r, a, b);
+    return res.ok ? { a, b, differingOutputs: res.differingOutputs, strategy } : null;
+  };
+  const vary = (inputs, label) => {
+    for (const twoValuedFirst of [true, false]) {
+      if (timeUp()) return null;
+      const base = { flip: null, random: null, index: 0, log: [] };
+      const a = solve(inputs, base, twoValuedFirst);
+      if (!a) continue;
+      const points = base.index;
+      if (!points) return null;
+      const tag = twoValuedFirst ? "bits-first" : "live-first";
+      const limit = Math.min(points, 48);
+      for (let j = 0; j < limit && !timeUp(); j++) {
+        const b = solve(inputs, { flip: /* @__PURE__ */ new Set([j]), random: null, index: 0, log: [] }, twoValuedFirst);
+        if (b && outputsDiffer(a, b)) {
+          const hit2 = confirm(a, b, `${label}/flip${j}/${tag}`);
+          if (hit2) return hit2;
+        }
+      }
+      for (let j = 0; j < 6 && !timeUp(); j++) {
+        const b = solve(inputs, { flip: null, random: rng(next()), index: 0, log: [] }, twoValuedFirst);
+        if (b && outputsDiffer(a, b)) {
+          const hit2 = confirm(a, b, `${label}/random${j}/${tag}`);
+          if (hit2) return hit2;
+        }
+      }
+    }
+    return null;
+  };
+  const generic = () => {
+    for (const strat of inputStrategies(r, next, dom2)) {
+      if (timeUp()) return null;
+      const hit2 = vary(strat.gen(), strat.name);
+      if (hit2) return hit2;
+    }
+    return null;
+  };
+  const directed = () => {
+    const forms = [];
+    const seen = /* @__PURE__ */ new Set();
+    const add = (item) => {
+      for (const c of item.conditional) {
+        const key = c.k + c.side;
+        if (!seen.has(key) && forms.length < 48) {
+          seen.add(key);
+          forms.push(c);
+        }
+      }
     };
-    const rankMode = !proof.complete;
-    const hasNonlinear = proof.nonlinear_pivots.length > 0;
-    const certificate = {
-      type: hasNonlinear ? "r1cs_square_zero_elimination" : rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness",
-      field: "BN254",
-      n_wires: parsed.nWires,
-      n_constraints: parsed.nConstraints,
-      public_inputs: parsed.nPubIn,
-      private_inputs: parsed.nPrvIn,
-      public_outputs: parsed.nPubOut,
-      pivots: proof.pivots,
-      nonlinear_pivots: proof.nonlinear_pivots,
-      ...rankMode ? {
-        linear_rows: coupled.linearRows,
-        remaining_unknown: coupled.unknown,
-        matrix_rank: coupled.rank,
-        rank_pivots: coupled.pivots
-      } : {},
-      scope: "At most one full wire assignment for each fixed public AND private input tuple; existence not asserted"
-    };
-    const method = hasNonlinear ? "r1cs_square_zero_elimination" : rankMode ? "r1cs_coupled_linear_rank" : "r1cs_triangular_uniqueness";
-    return {
-      id,
-      domain: "r1cs",
-      verdict: "Certified",
-      witness_count: "\u22641",
-      method,
-      theorem: hasNonlinear ? "source-bound zero-square constraints force their wires to zero over BN254; remaining pivots determine the extension" : rankMode ? "full-column-rank linear subsystem determines coupled wires over BN254" : "nonzero constant pivots determine all non-input wires",
-      time_ms: performance.now() - t0,
-      certificate,
-      source_note: certificate.scope,
-      check: { ok: true, kind: method }
-    };
-  } catch (err) {
-    return {
-      id,
-      domain: "r1cs",
-      verdict: "Unknown",
-      method: "r1cs_parse_rejected",
-      theorem: "n/a",
-      time_ms: performance.now() - t0,
-      reason: err instanceof Error ? err.message : String(err),
-      source_note: "Binary R1CS format rejected",
-      check: { ok: true, kind: "unknown_skip" }
-    };
+    for (const item of proof.open) if (item.wire <= r.nPubOut) add(item);
+    for (const item of proof.open) if (item.wire > r.nPubOut) add(item);
+    const first = 1 + r.nPubOut;
+    for (const f of forms) {
+      const form = f.side === "A" ? r.A[f.k] : r.B[f.k];
+      for (const strat of inputStrategies(r, next, dom2).filter((s) => ["zeros", "small", "bits", "field"].includes(s.name))) {
+        if (timeUp()) return null;
+        const wanted = strat.gen();
+        solves++;
+        const a = new Solver(r, ix, dom2, domWires, undet, { flip: null, random: null, index: 0, log: [] }, true, maxChoices, form).run(wanted, true);
+        if (!a) continue;
+        const inputs = /* @__PURE__ */ new Map();
+        for (let w = first; w < r.inputEnd; w++) inputs.set(w, a[w]);
+        const hit2 = vary(inputs, `directed(c${f.k}${f.side})/${strat.name}`);
+        if (hit2) return hit2;
+      }
+    }
+    return null;
+  };
+  let hit = generic();
+  if (hit) return hit;
+  hit = directed();
+  if (hit) return hit;
+  for (let round = 1; round < 6 && !timeUp(); round++) {
+    hit = generic();
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// ../carrycert-core/src/determinism/index.ts
+var DETERMINISM_SCHEMA = "colony.determinism/1";
+var ENGINE_VERSION = "1.0.0";
+function countSteps(steps) {
+  let n2 = 0;
+  for (const s of steps) {
+    n2++;
+    if (s.t === "split") n2 += countSteps(s.zero.steps) + countSteps(s.nonzero.steps);
+  }
+  return n2;
+}
+function formatLC(lc, prime, name, maxTerms = 6) {
+  if (!lc.w.length) return "0";
+  const parts = [];
+  for (let i = 0; i < lc.w.length && i < maxTerms; i++) {
+    const c = balanced(lc.c[i], prime);
+    const mag = c < 0n ? -c : c;
+    const sign = c < 0n ? "-" : "+";
+    const body = lc.w[i] === 0 ? mag.toString() : (mag === 1n ? "" : (mag.toString().length > 12 ? "k" + (i + 1) : mag.toString()) + "*") + name(lc.w[i]);
+    parts.push(parts.length ? ` ${sign} ${body}` : (sign === "-" ? "-" : "") + body);
+  }
+  if (lc.w.length > maxTerms) parts.push(` + ...(${lc.w.length - maxTerms} more)`);
+  return parts.join("");
+}
+function analyzeParsed(base, options = {}) {
+  const tStart = performance.now();
+  const r = withAssumptions(base, options.assumptions);
+  const binary = [...new Set(options.assumptions?.binary ?? [])].sort((x, y) => x - y);
+  const sym = options.sym ? parseSym(options.sym) : null;
+  const name = (w) => sym?.names.get(w) ?? (w === 0 ? "1" : `wire[${w}]`);
+  const strict = Boolean(options.strict);
+  const declaredInputs = base.nPubIn + base.nPrvIn;
+  let complete, basis;
+  if (base.inputsAllWired) {
+    complete = true;
+    basis = "every declared input has its own wire";
+  } else if (options.inputProvenance === "unsimplified") {
+    complete = true;
+    basis = "declared: compiled without simplification (circom --O0), where an input without a wire is unused";
+  } else {
+    complete = false;
+    basis = "some declared inputs have no wire and the simplification level is unknown";
+  }
+  const tProve0 = performance.now();
+  const proof = prove(r, options);
+  const tProve = performance.now() - tProve0;
+  const tReplay0 = performance.now();
+  const replay = checkProof(r, proof.steps);
+  const tReplay = performance.now() - tReplay0;
+  const det = replay.ok ? replay.determined : new Uint8Array(r.nWires);
+  let outDet = 0;
+  const outUndet = [];
+  for (let w = 1; w <= r.nPubOut; w++) {
+    if (det[w]) outDet++;
+    else if (outUndet.length < 64) outUndet.push({ wire: w, name: name(w) });
+  }
+  let wiresDet = 0;
+  for (let w = 0; w < r.nWires; w++) wiresDet += det[w];
+  const allOutputs = outDet === r.nPubOut;
+  const allWires = wiresDet === r.nWires;
+  const report = {
+    schema: DETERMINISM_SCHEMA,
+    engine: ENGINE_VERSION,
+    verdict: "Unknown",
+    property: strict ? "witness-uniqueness" : "output-determinism",
+    claim: "",
+    method: "r1cs-determinism-propagation",
+    field: { prime: r.prime.toString(), bits: r.prime.toString(2).length },
+    circuit: {
+      wires: base.nWires,
+      constraints: base.nConstraints,
+      outputs: r.nPubOut,
+      public_inputs: r.nPubIn,
+      private_inputs: r.nPrvIn,
+      private_input_wires: r.nPrvInWires,
+      input_layout: r.inputLayout
+    },
+    outputs: { total: r.nPubOut, determined: outDet, undetermined: outUndet },
+    wires: { total: r.nWires, determined: wiresDet },
+    rules: proof.stats.rules,
+    inputs: { declared: declaredInputs, wired: base.nPubIn + base.nPrvInWires, complete, basis },
+    time_ms: { parse: 0, prove: tProve, replay: tReplay, counterexample: 0, total: 0 }
+  };
+  if (proof.stats.timedOut) report.timed_out = true;
+  if (binary.length) report.assumptions = { binary_inputs: binary.map((w) => ({ wire: w, name: name(w) })) };
+  const under = binary.length ? ` Assumes ${binary.length} input signal(s) are 0 or 1.` : "";
+  if (!replay.ok) {
+    report.reason = "internal: independent replay rejected the derivation (" + replay.error + ")";
+    report.claim = "No claim.";
+    report.time_ms.total = performance.now() - tStart;
+    return report;
+  }
+  const includeProof = options.includeProof !== false;
+  const proved = strict ? allWires : allOutputs && r.nPubOut > 0;
+  if (proved) {
+    report.verdict = "Certified";
+    report.claim = strict ? "For every assignment of the input signals there is at most one satisfying assignment of all signals." : "For every assignment of the input signals, every satisfying witness has the same output signals.";
+    report.claim += under;
+    if (includeProof) report.proof = { steps: proof.steps, step_count: countSteps(proof.steps), replayed: true };
+    report.time_ms.total = performance.now() - tStart;
+    return report;
+  }
+  if (!strict && r.nPubOut === 0) {
+    report.reason = "The circuit declares no output signals, so output determinism says nothing about it. " + (allWires ? "Every signal is determined by the inputs." : `${r.nWires - wiresDet} internal signal(s) are not fixed by the inputs; see 'open'.`);
+    report.claim = "No claim.";
+  }
+  let tCex = 0;
+  if (!strict && r.nPubOut > 0 && !complete) {
+    report.reason = `${r.nPubOut - outDet} of ${r.nPubOut} output signal(s) are not shown to be fixed by the inputs. No counterexample search was run: only ${base.nPrvInWires} of ${base.nPrvIn} declared private inputs have a wire, which happens when circom's full simplification (--O2) substitutes inputs. Scan the .circom source, or an R1CS compiled with --O0 or --O1.`;
+  }
+  if (!strict && r.nPubOut > 0 && complete && options.searchCounterexample !== false) {
+    const t0 = performance.now();
+    const cex = findCounterexample(r, proof, { timeBudgetMs: options.counterexampleBudgetMs, seed: options.seed, maxSolves: options.counterexampleMaxSolves });
+    tCex = performance.now() - t0;
+    if (cex) {
+      const again = checkCounterexample(r, cex.a, cex.b);
+      if (again.ok) {
+        const inputs = {};
+        for (let w = 1 + r.nPubOut; w < r.inputEnd; w++) inputs[name(w)] = cex.a[w].toString();
+        let differing = 0;
+        for (let w = 0; w < r.nWires; w++) if (cex.a[w] !== cex.b[w]) differing++;
+        report.verdict = "Broken";
+        report.claim = "Two satisfying witnesses share every input signal and differ on an output signal." + (binary.length ? " Both respect the declared binary-input assumptions." : "");
+        report.method = "checked-counterexample";
+        report.counterexample = {
+          strategy: cex.strategy,
+          inputs,
+          differing_outputs: again.differingOutputs.map((w) => ({ wire: w, name: name(w), a: cex.a[w].toString(), b: cex.b[w].toString() })),
+          differing_wires: differing,
+          witness_a: cex.a.map((v) => v.toString()),
+          witness_b: cex.b.map((v) => v.toString()),
+          replayed: true
+        };
+      }
+    }
+  }
+  report.time_ms.counterexample = tCex;
+  if (report.verdict === "Unknown") {
+    if (!report.claim) report.claim = "No claim.";
+    if (!report.reason) {
+      report.reason = strict ? `${r.nWires - wiresDet} signal(s) are not shown to be fixed by the inputs.` : `${r.nPubOut - outDet} of ${r.nPubOut} output signal(s) are not shown to be fixed by the inputs, and no counterexample was found.`;
+    }
+  }
+  if (includeProof) report.proof = { steps: proof.steps, step_count: countSteps(proof.steps), replayed: true };
+  const open = [];
+  for (const item of proof.open) {
+    if (det[item.wire]) continue;
+    if (open.length >= 200) break;
+    open.push({
+      wire: item.wire,
+      name: name(item.wire),
+      role: wireRole(r, item.wire),
+      fixed_if_nonzero: item.conditional.map((c) => ({
+        constraint: c.k,
+        form: formatLC(c.side === "A" ? r.A[c.k] : r.B[c.k], r.prime, name)
+      })),
+      nonlinear_constraints: item.nonlinear,
+      occurrences: item.occurrences
+    });
+  }
+  report.open = open;
+  report.open_total = r.nWires - wiresDet;
+  report.time_ms.total = performance.now() - tStart;
+  return report;
+}
+function analyzeR1CS(bytes, options = {}) {
+  const t0 = performance.now();
+  const r = parseR1CS(bytes, options.limits);
+  const tParse = performance.now() - t0;
+  const report = analyzeParsed(r, options);
+  report.time_ms.parse = tParse;
+  report.time_ms.total += tParse;
+  return report;
+}
+function verifyReport(bytes, report, limits) {
+  if (!report || typeof report !== "object" || report.schema !== DETERMINISM_SCHEMA)
+    return { ok: false, verdict: "Unknown", error: "unsupported report schema" };
+  const alias = report.input_alias_wires;
+  if (alias !== void 0 && alias !== null && !(Array.isArray(alias) && alias.length === 0))
+    return { ok: false, verdict: "Unknown", error: "a report may not declare extra input wires" };
+  let base, r;
+  try {
+    const binary = (report.assumptions?.binary_inputs ?? []).map((b) => b.wire);
+    base = parseR1CS(bytes, limits);
+    r = withAssumptions(base, { binary });
+  } catch (e) {
+    return { ok: false, verdict: "Unknown", error: e instanceof Error ? e.message : String(e) };
+  }
+  if (report.verdict === "Certified") {
+    if (!report.proof || !Array.isArray(report.proof.steps)) return { ok: false, verdict: "Unknown", error: "report carries no derivation" };
+    const out = checkProof(r, report.proof.steps);
+    if (!out.ok) return { ok: false, verdict: "Unknown", error: out.error };
+    if (report.property === "witness-uniqueness") {
+      for (let w = 0; w < r.nWires; w++) if (!out.determined[w]) return { ok: false, verdict: "Unknown", error: `wire ${w} is not determined by the derivation` };
+    } else {
+      if (r.nPubOut === 0) return { ok: false, verdict: "Unknown", error: "circuit has no outputs" };
+      for (let w = 1; w <= r.nPubOut; w++) if (!out.determined[w]) return { ok: false, verdict: "Unknown", error: `output wire ${w} is not determined by the derivation` };
+    }
+    return { ok: true, verdict: "Certified" };
+  }
+  if (report.verdict === "Broken") {
+    const cex = report.counterexample;
+    if (!cex || !Array.isArray(cex.witness_a) || !Array.isArray(cex.witness_b)) return { ok: false, verdict: "Unknown", error: "report carries no counterexample" };
+    const declared = report.inputs?.complete === true;
+    if (!base.inputsAllWired && !declared)
+      return { ok: false, verdict: "Unknown", error: "some declared inputs have no wire, so a witness pair is not a counterexample for the circuit" };
+    let a, b;
+    try {
+      a = cex.witness_a.map((v) => BigInt(v));
+      b = cex.witness_b.map((v) => BigInt(v));
+    } catch {
+      return { ok: false, verdict: "Unknown", error: "malformed witness values" };
+    }
+    const out = checkCounterexample(r, a, b);
+    if (!out.ok) return { ok: false, verdict: "Unknown", error: out.error };
+    return { ok: true, verdict: "Broken", relies_on_declared_provenance: !base.inputsAllWired };
+  }
+  return { ok: true, verdict: "Unknown" };
+}
+
+// ../carrycert-core/src/determinism/scan-circom.ts
+import { createHash } from "node:crypto";
+import * as fs2 from "node:fs";
+import * as path2 from "node:path";
+
+// ../carrycert-core/src/determinism/circom.ts
+import { spawnSync } from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+function findCircom(explicit) {
+  const candidates = [explicit, process.env.CIRCOM_BIN, process.env.CIRCOM, "circom"].filter(Boolean);
+  for (const bin of candidates) {
+    try {
+      const out = spawnSync(bin, ["--version"], { encoding: "utf8", timeout: 15e3 });
+      const m = /circom compiler\s+(\d+\.\d+\.\d+)/.exec((out.stdout || "") + (out.stderr || ""));
+      if (out.status === 0 && m) return { bin, version: m[1] };
+    } catch {
+    }
+  }
+  return null;
+}
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
+function hasMainComponent(source) {
+  return /\bcomponent\s+main\b/.test(stripComments(source));
+}
+function compileCircom(file, options = {}) {
+  const found = findCircom(options.bin);
+  if (!found)
+    return { ok: false, stage: "locate", error: "circom compiler not found. Install circom 2.x (https://docs.circom.io), set CIRCOM_BIN, or scan the compiled .r1cs instead." };
+  const abs2 = path.resolve(file);
+  let source;
+  try {
+    source = fs.readFileSync(abs2, "utf8");
+  } catch (e) {
+    return { ok: false, stage: "source", error: "cannot read " + file + ": " + (e instanceof Error ? e.message : String(e)) };
+  }
+  const declared = hasMainComponent(source);
+  if (!declared && !options.main)
+    return { ok: false, stage: "source", error: 'no main component. A library file has no constraint system of its own; pass --main "Template(args)" to instantiate one.' };
+  if (declared && options.main)
+    return { ok: false, stage: "source", error: "the file already declares a main component; --main applies to library files only." };
+  const outDir = options.outDir ?? fs.mkdtempSync(path.join(os.tmpdir(), "speedrunpapi-circom-"));
+  fs.mkdirSync(outDir, { recursive: true });
+  const cleanup = () => {
+    if (!options.outDir) fs.rmSync(outDir, { recursive: true, force: true });
+  };
+  try {
+    let entry = abs2;
+    let wrapper = null;
+    if (options.main) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*\s*\([^;{}]*\)\s*$/.test(options.main.trim())) {
+        cleanup();
+        return { ok: false, stage: "source", error: "--main must look like Template(arg, ...)" };
+      }
+      const pragma = /^\s*pragma\s+circom\s+[^;]+;/m.exec(stripComments(source))?.[0]?.trim() ?? "pragma circom 2.0.0;";
+      wrapper = `${pragma}
+include ${JSON.stringify(abs2)};
+component main = ${options.main.trim()};
+`;
+      entry = path.join(outDir, path.basename(abs2, path.extname(abs2)) + "__main.circom");
+      fs.writeFileSync(entry, wrapper);
+    }
+    const args = [entry, "--r1cs", "--sym", "-o", outDir];
+    if (options.opt) args.push("--" + options.opt);
+    if (options.prime) args.push("-p", options.prime);
+    const include = [...options.include ?? []];
+    if (wrapper) include.push(path.dirname(abs2));
+    for (const dir of include) args.push("-l", path.resolve(dir));
+    const run = spawnSync(found.bin, args, { encoding: "utf8", timeout: options.timeoutMs ?? 6e5, maxBuffer: 64 << 20 });
+    const log = ((run.stdout || "") + (run.stderr || "")).replace(/\x1b\[[0-9;]*m/g, "");
+    if (run.error || run.status !== 0) {
+      cleanup();
+      return { ok: false, stage: "compile", error: run.error ? run.error.message : "circom exited with status " + run.status, log: log.slice(0, 4e3) };
+    }
+    const base = path.basename(entry, path.extname(entry));
+    const r1csPath = path.join(outDir, base + ".r1cs"), symPath = path.join(outDir, base + ".sym");
+    if (!fs.existsSync(r1csPath)) {
+      cleanup();
+      return { ok: false, stage: "output", error: "circom produced no .r1cs", log: log.slice(0, 4e3) };
+    }
+    const r1cs = new Uint8Array(fs.readFileSync(r1csPath));
+    const sym = fs.existsSync(symPath) ? new Uint8Array(fs.readFileSync(symPath)) : new Uint8Array(0);
+    const shown = ["--r1cs", "--sym"];
+    if (options.opt) shown.push("--" + options.opt);
+    if (options.prime) shown.push("-p", options.prime);
+    cleanup();
+    return { ok: true, r1cs, sym, compiler: "circom " + found.version, args: shown, opt: options.opt ?? "default", entry: path.basename(abs2), wrapper, log };
+  } catch (e) {
+    cleanup();
+    return { ok: false, stage: "compile", error: e instanceof Error ? e.message : String(e) };
   }
 }
 
-// engine/packages/carrycert-cli/src/cli.ts
+// ../carrycert-core/src/determinism/scan-circom.ts
+var sha256 = (data) => "sha256:" + createHash("sha256").update(data).digest("hex");
+function patternToRegex(pattern) {
+  const body = pattern.trim().replace(/^main\./, "");
+  const esc = body.replace(/[.+?^${}()|\\]/g, "\\$&").replace(/\[/g, "\\[").replace(/\]/g, "\\]").replace(/\*/g, ".*");
+  return new RegExp("^main\\." + esc + (/[\]*]$/.test(body) ? "" : "(\\[.*\\])?") + "$");
+}
+function resolveBinaryInputs(r, symText, patterns) {
+  if (!patterns.length) return [];
+  const { names } = parseSym(symText);
+  const wires = /* @__PURE__ */ new Set();
+  for (const pattern of patterns) {
+    const re = patternToRegex(pattern);
+    let hit = 0;
+    for (let w = 1 + r.nPubOut; w < r.inputEnd; w++) {
+      const name = names.get(w);
+      if (name && re.test(name)) {
+        wires.add(w);
+        hit++;
+      }
+    }
+    if (!hit) throw new Error(`--assume-binary ${JSON.stringify(pattern)} matches no input signal that has a wire`);
+  }
+  return [...wires].sort((x, y) => x - y);
+}
+function scanCircomFile(file, options = {}) {
+  let sourceBytes;
+  try {
+    sourceBytes = new Uint8Array(fs2.readFileSync(path2.resolve(file)));
+  } catch (e) {
+    return { ok: false, stage: "source", error: "cannot read " + file + ": " + (e instanceof Error ? e.message : String(e)) };
+  }
+  const levels = options.opt ? [options.opt] : ["O0", "O1"];
+  const tried = [];
+  let first = null;
+  for (const level of levels) {
+    const compiled = compileCircom(file, { bin: options.bin, include: options.include, prime: options.prime, main: options.main, timeoutMs: options.timeoutMs, opt: level });
+    if (!compiled.ok) {
+      if (first) break;
+      return { ok: false, stage: compiled.stage, error: compiled.error, log: compiled.log };
+    }
+    let report;
+    try {
+      const r = parseR1CS(compiled.r1cs, options.analyze?.limits);
+      const binary = resolveBinaryInputs(r, compiled.sym, options.assumeBinary ?? []);
+      report = analyzeParsed(r, {
+        ...options.analyze,
+        sym: compiled.sym,
+        assumptions: { binary },
+        inputProvenance: level === "O0" ? "unsimplified" : "unknown"
+      });
+    } catch (e) {
+      if (first) break;
+      return { ok: false, stage: "analyze", error: e instanceof Error ? e.message : String(e) };
+    }
+    const result = {
+      ok: true,
+      report,
+      r1cs: compiled.r1cs,
+      sym: compiled.sym,
+      binding: {
+        source: compiled.entry,
+        source_sha256: sha256(sourceBytes),
+        main: options.main ?? null,
+        compiler: compiled.compiler,
+        flags: compiled.args,
+        r1cs_sha256: sha256(compiled.r1cs)
+      }
+    };
+    if (report.verdict !== "Unknown") {
+      if (tried.length) result.binding.also_tried = tried;
+      return result;
+    }
+    tried.push({ flags: compiled.args, verdict: report.verdict });
+    if (!first) first = result;
+  }
+  if (first && tried.length > 1) first.binding.also_tried = tried.slice(1);
+  return first;
+}
+
+// src/cli.ts
+var VERSION = "0.7.0";
 function usage() {
-  console.log(`\u1455. \u2014 exact arithmetic circuit verification by state contraction
+  console.log(`speedrunpapi ${VERSION}: output-determinism analysis for Circom circuits and R1CS
 
 Usage:
-  speedrunpapi scan <file...> [--json] [--references] [--sarif out.sarif] [--api <url>] [--key <key>]
-  speedrunpapi scan --batch files.json [--json] [--require-signed]
-  # files.json: ["path/to/first.circom", "path/to/second.circom"]
-  speedrunpapi classify <file>
-  speedrunpapi verify <result.json> [--source circuit.r1cs]
-  speedrunpapi claim <order> <confirmation> <email>
-  speedrunpapi usage [--key <key>]
-  speedrunpapi optimize <model.onnx> [--out candidate.onnx] [--proof-dir evidence]
-  speedrunpapi verify-onnx <original.onnx> <artifacts-dir>
-  speedrunpapi solve <problem.math> | quote <source>
-  speedrunpapi run <source> [--format circom] [--cert]
-  speedrunpapi status <job-id> | result <job-id> | check <source> <result.json>
+  speedrunpapi scan <file...> [options]
+  speedrunpapi scan --batch files.json [options]
+  speedrunpapi verify <report.json> --source <circuit.r1cs>
   speedrunpapi version
 
-File types: .r1cs (binary) | .circom | .v/.sv | .txt/.mac (int8) | .bitvm/.script | .zkvm | .json (carry graph) | .onnx.txt
-Compute is local. Optional source-bound API signature uses one certificate credit.
-Research DOI references appear only with --references.
+What scan decides, per file:
+  Certified  every satisfying witness with the same inputs has the same outputs.
+             Backed by a derivation that an independent checker has replayed.
+  Broken     two satisfying witnesses share all inputs and differ on an output.
+             Both witnesses are re-evaluated against every constraint.
+  Unknown    neither was established. The open signals are listed.
+
+Inputs:
+  .circom    compiled with the circom compiler (must be installed), then analysed
+  .r1cs      analysed directly; a sibling .sym supplies signal names
+
+Options:
+  --json                    print the result as JSON (add --full for the derivation or witnesses)
+  --report <path>           write the full report, for verify (a directory when scanning several files)
+  --main "T(args)"          instantiate a library template as the main component
+  -l, --include <dir>       circom library directory (repeatable)
+  --circom <bin>            circom binary (default: $CIRCOM_BIN, then PATH)
+  --opt O0|O1|O2            force one simplification level (default: --O0, then --O1 where exact)
+  --prime <name>            circom -p value (bn128, bls12381, goldilocks, ...)
+  --assume-binary <pattern> treat matching input signals as bits, e.g. in, "sel[*]" or "*" (repeatable)
+  --strict                  require every signal, not just outputs, to be fixed by the inputs
+  --sym <file>              .sym for an .r1cs input
+  --r1cs-level O0           the .r1cs was compiled with --O0 (an input without a wire is then unused)
+  --timeout <seconds>       proof search limit (default 600)
+  --cex-timeout <seconds>   counterexample search budget (default 15)
+  --sarif <file>            write Broken results as SARIF
+  --key <key> | --api <url> | --require-signed   request a signed certificate (uses one credit)
+
+Exit status: 0 all Certified, 2 any Broken, 3 any Unknown, 1 error.
+Compute is local. Nothing is uploaded unless a key is supplied.
 `);
 }
-function scanAny(file) {
-  const abs = path2.resolve(file);
-  const id = path2.basename(file).replace(/\.[^.]+$/, "");
-  if (path2.extname(file).toLowerCase() === ".r1cs")
-    return scanR1CSBinary(new Uint8Array(fs2.readFileSync(abs)), id);
-  if (path2.extname(file).toLowerCase() === ".circom")
-    return scanCircomFile(abs, { followIncludes: true });
-  return scanPasted(fs2.readFileSync(abs, "utf8"), { id, filename: file });
+var sha2562 = (data) => "sha256:" + createHash2("sha256").update(data).digest("hex");
+function scanOne(file, flags) {
+  const abs2 = path3.resolve(file);
+  const id = path3.basename(file).replace(/\.[^.]+$/, "");
+  const ext = path3.extname(file).toLowerCase();
+  const bytes = new Uint8Array(fs3.readFileSync(abs2));
+  const source_checksum = sha2562(bytes);
+  const analyze = { strict: flags.strict, timeBudgetMs: flags.timeoutMs, counterexampleBudgetMs: flags.cexTimeoutMs };
+  if (ext === ".circom") {
+    const res = scanCircomFile(abs2, {
+      bin: flags.circom,
+      include: flags.include,
+      main: flags.main,
+      opt: flags.opt,
+      prime: flags.prime,
+      assumeBinary: flags.assumeBinary,
+      analyze
+    });
+    if (!res.ok) {
+      return {
+        file,
+        id,
+        verdict: "Unknown",
+        method: "circom_" + res.stage + "_failed",
+        time_ms: 0,
+        source_checksum,
+        reason: res.error,
+        error: res.log
+      };
+    }
+    return {
+      file,
+      id,
+      verdict: res.report.verdict,
+      method: res.report.method,
+      reason: res.report.reason,
+      time_ms: res.report.time_ms.total,
+      source_checksum,
+      binding: res.binding,
+      report: res.report,
+      r1cs: res.r1cs
+    };
+  }
+  if (ext === ".r1cs") {
+    const symPath = flags.sym ?? abs2.replace(/\.r1cs$/i, ".sym");
+    const sym = fs3.existsSync(symPath) ? new Uint8Array(fs3.readFileSync(symPath)) : void 0;
+    try {
+      const parsed = parseR1CS(bytes);
+      const binary = flags.assumeBinary.length ? (() => {
+        if (!sym) throw new Error("--assume-binary needs signal names; pass --sym");
+        return resolveBinaryInputs(parsed, sym, flags.assumeBinary);
+      })() : [];
+      const report = analyzeR1CS(bytes, {
+        ...analyze,
+        sym,
+        assumptions: { binary },
+        inputProvenance: flags.r1csLevel === "O0" ? "unsimplified" : "unknown"
+      });
+      return {
+        file,
+        id,
+        verdict: report.verdict,
+        method: report.method,
+        reason: report.reason,
+        time_ms: report.time_ms.total,
+        source_checksum,
+        binding: { r1cs_sha256: source_checksum, ...sym ? { sym_sha256: sha2562(sym) } : {} },
+        report,
+        r1cs: bytes
+      };
+    } catch (e) {
+      return {
+        file,
+        id,
+        verdict: "Unknown",
+        method: "r1cs_rejected",
+        time_ms: 0,
+        source_checksum,
+        reason: e instanceof Error ? e.message : String(e)
+      };
+    }
+  }
+  const legacy = scanPasted(new TextDecoder().decode(bytes), { id, filename: file });
+  return {
+    file,
+    id,
+    verdict: legacy.verdict,
+    method: legacy.method,
+    reason: legacy.reason,
+    time_ms: legacy.time_ms,
+    source_checksum,
+    legacy
+  };
 }
-function classifyAny(file) {
-  const abs = path2.resolve(file);
-  const id = path2.basename(file).replace(/\.[^.]+$/, "");
-  if (path2.extname(file).toLowerCase() === ".r1cs")
-    return scanR1CSBinary(new Uint8Array(fs2.readFileSync(abs)), id);
-  if (path2.extname(file).toLowerCase() === ".circom")
-    return classifyCircomFile(abs, { followIncludes: true });
-  if ([".bitvm", ".script", ".zkvm"].includes(path2.extname(file).toLowerCase()))
-    return scanPasted(fs2.readFileSync(abs, "utf8"), { id, filename: file });
-  return classifySource(fs2.readFileSync(abs, "utf8"), { id, filename: file });
+function fullReport(s) {
+  return { ...s.report, binding: s.binding, source_checksum: s.source_checksum, tool: "speedrunpapi " + VERSION };
 }
-async function maybeRegister(api, key, result, file) {
-  const bytes = fs2.readFileSync(path2.resolve(file));
-  const binary = path2.extname(file).toLowerCase() === ".r1cs";
+function view(s, full) {
+  if (!s.report) {
+    return {
+      file: s.file,
+      id: s.id,
+      verdict: s.verdict,
+      method: s.method,
+      reason: s.reason,
+      source_checksum: s.source_checksum,
+      ...s.legacy ? { domain: s.legacy.domain, theorem: s.legacy.theorem, certificate: s.legacy.certificate } : {},
+      ...s.error ? { compiler_output: s.error } : {},
+      time_ms: s.time_ms
+    };
+  }
+  const r = s.report;
+  const out = {
+    file: s.file,
+    id: s.id,
+    verdict: r.verdict,
+    property: r.property,
+    claim: r.claim,
+    method: r.method,
+    ...r.reason ? { reason: r.reason } : {},
+    source_checksum: s.source_checksum,
+    binding: s.binding,
+    schema: r.schema,
+    engine: r.engine,
+    field: r.field,
+    circuit: r.circuit,
+    inputs: r.inputs,
+    ...r.assumptions ? { assumptions: r.assumptions } : {},
+    outputs: r.outputs,
+    wires: r.wires,
+    rules: r.rules,
+    ...r.timed_out ? { timed_out: true } : {}
+  };
+  if (r.proof) out.proof = full ? r.proof : { step_count: r.proof.step_count, replayed: r.proof.replayed };
+  if (r.counterexample) {
+    const c = r.counterexample;
+    out.counterexample = full ? c : {
+      strategy: c.strategy,
+      inputs: c.inputs,
+      differing_outputs: c.differing_outputs,
+      differing_wires: c.differing_wires,
+      replayed: c.replayed
+    };
+  }
+  if (r.open) {
+    out.open = full ? r.open : r.open.slice(0, 20);
+    out.open_total = r.open_total;
+  }
+  out.time_ms = r.time_ms;
+  return out;
+}
+var n = (v) => v.toLocaleString("en-US");
+var ms = (v) => (v < 10 ? v.toFixed(2) : v < 1e3 ? v.toFixed(0) : (v / 1e3).toFixed(2) + " s").replace(/(\d)$/, v < 1e3 ? "$1 ms" : "$1");
+function printHuman(s) {
+  console.log(`${s.verdict}  ${s.file}`);
+  const r = s.report;
+  if (!r) {
+    if (s.reason) console.log("  reason   " + s.reason);
+    if (s.error) console.log(s.error.split("\n").filter(Boolean).slice(0, 12).map((l) => "  | " + l).join("\n"));
+    return;
+  }
+  console.log("  claim    " + r.claim);
+  const b = s.binding;
+  const how = b?.compiler ? `${b.compiler} ${(b.flags || []).filter((f) => /^--O|^-p$|^[a-z0-9]+$/.test(f)).join(" ")} \xB7 ` : "";
+  console.log(`  system   ${how}${n(r.circuit.constraints)} constraints \xB7 ${n(r.circuit.wires)} wires \xB7 ${n(r.circuit.outputs)} outputs \xB7 ${n(r.circuit.public_inputs + r.circuit.private_inputs)} inputs`);
+  if (r.assumptions) console.log(`  assumes  ${r.assumptions.binary_inputs.length} input signal(s) are 0 or 1: ${r.assumptions.binary_inputs.slice(0, 6).map((x) => x.name).join(", ")}${r.assumptions.binary_inputs.length > 6 ? ", ..." : ""}`);
+  if (r.verdict === "Certified") {
+    const used = Object.entries(r.rules).filter(([, v]) => v).map(([k, v]) => `${k} ${n(v)}`).join(" \xB7 ");
+    console.log(`  proof    ${n(r.proof?.step_count ?? 0)} steps (${used}), replayed by the independent checker`);
+  } else if (r.verdict === "Broken") {
+    const c = r.counterexample;
+    const ins = Object.entries(c.inputs);
+    console.log("  inputs   " + ins.slice(0, 8).map(([k, v]) => `${k} = ${v.length > 24 ? v.slice(0, 10) + "\u2026" + v.slice(-6) : v}`).join(", ") + (ins.length > 8 ? `, ... (${ins.length} inputs)` : ""));
+    for (const d of c.differing_outputs.slice(0, 6)) {
+      const short = (v) => v.length > 24 ? v.slice(0, 10) + "\u2026" + v.slice(-6) : v;
+      console.log(`  differs  ${d.name}: ${short(d.a)} vs ${short(d.b)}`);
+    }
+    if (c.differing_outputs.length > 6) console.log(`           ... ${c.differing_outputs.length - 6} more output(s)`);
+    console.log("  checked  both witnesses satisfy all " + n(r.circuit.constraints) + " constraints");
+  } else {
+    if (r.reason) console.log("  reason   " + r.reason);
+    console.log(`  outputs  ${n(r.outputs.determined)} of ${n(r.outputs.total)} shown to be fixed by the inputs`);
+    if (r.open?.length) {
+      console.log(`  open     ${n(r.open_total ?? r.open.length)} signal(s) not shown to be fixed by the inputs. First:`);
+      for (const o of r.open.slice(0, 8)) {
+        const why = o.fixed_if_nonzero.length ? `fixed by constraint ${o.fixed_if_nonzero[0].constraint} only where (${o.fixed_if_nonzero[0].form}) != 0` : o.nonlinear_constraints.length ? `appears nonlinearly in constraint ${o.nonlinear_constraints[0]}` : o.occurrences ? "no constraint isolates it" : "appears in no constraint";
+        console.log(`    ${o.name}  (${o.role.replace("_", " ")}): ${why}`);
+      }
+    }
+  }
+  console.log(`  time     prove ${ms(r.time_ms.prove)} \xB7 replay ${ms(r.time_ms.replay)}${r.time_ms.counterexample ? " \xB7 search " + ms(r.time_ms.counterexample) : ""}`);
+}
+async function requestCertificate(api, key, s) {
+  if (!s.report || !s.r1cs) throw new Error("Only Circom and R1CS results can be signed");
+  if (s.report.verdict === "Unknown") throw new Error("An Unknown result makes no claim and cannot be signed");
   const body = {
-    ...binary ? { source_base64: bytes.toString("base64"), format: "r1cs" } : { source: bytes.toString("utf8") },
-    filename: path2.basename(file),
-    result: result.verdict,
-    family: result.certificate?.family || result.method || "unknown",
-    domain: result.domain || "circom",
-    scope: result.certificate?.lemma || result.theorem || result.method,
-    gadget_id: result.id,
-    checksum: result.source_checksum,
+    format: "r1cs",
+    source_base64: Buffer.from(s.r1cs).toString("base64"),
+    filename: path3.basename(s.file),
+    result: s.report.verdict,
+    report: fullReport(s),
+    gadget_id: s.id,
     public: process.env.COLONY_CERT_PUBLIC === "true"
   };
   const res = await fetch(`${api.replace(/\/$/, "")}/v1/cert`, {
@@ -2043,44 +2798,27 @@ async function maybeRegister(api, key, result, file) {
   if (!res.ok) throw new Error(`API ${res.status}: ${await res.text()}`);
   return res.json();
 }
-function toSarif(file, result) {
+function toSarif(file, s) {
   return {
-    $schema: "https://json.schemastore.org/sarif-2.1.0.json",
-    version: "2.1.0",
-    runs: [{
-      tool: { driver: {
-        name: "exactlab",
-        version: "0.1.0",
-        rules: [{ id: "exact-broken", shortDescription: { text: "Multiple witnesses / underconstrained" } }]
-      } },
-      results: result.verdict === "Broken" ? [{
-        ruleId: "exact-broken",
-        level: "error",
-        message: { text: `${result.id}: ${result.reason ?? result.method}` },
-        locations: [{ physicalLocation: { artifactLocation: { uri: file } } }]
-      }] : []
-    }]
+    tool: { driver: {
+      name: "speedrunpapi",
+      version: VERSION,
+      informationUri: "https://colony.technology",
+      rules: [{ id: "output-not-determined", shortDescription: { text: "An output signal is not fixed by the inputs" } }]
+    } },
+    results: s.verdict === "Broken" ? [{
+      ruleId: "output-not-determined",
+      level: "error",
+      message: { text: `${s.id}: ` + (s.report?.counterexample?.differing_outputs.slice(0, 4).map((d) => d.name).join(", ") ?? "") + " take different values in two satisfying witnesses with the same inputs" },
+      locations: [{ physicalLocation: { artifactLocation: { uri: file } } }]
+    }] : []
   };
-}
-function cliView(value) {
-  if (Array.isArray(value)) return value.map(cliView);
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const [key, part] of Object.entries(value)) {
-      if (key === "theorem_ref") continue;
-      out[key] = cliView(part);
-    }
-    return out;
-  }
-  if (typeof value === "string")
-    return value.replace(/\s+DOI 10\.5281\/zenodo\.\d+/g, "");
-  return value;
 }
 async function main() {
   const args = process.argv.slice(2);
   const cmd = args[0];
-  if (!cmd || cmd === "-h" || cmd === "--help") return usage();
-  if (cmd === "version") return void console.log("\u1455. speedrunpapi 0.6.4");
+  if (!cmd || cmd === "-h" || cmd === "--help" || cmd === "help") return usage();
+  if (cmd === "version" || cmd === "--version" || cmd === "-V") return void console.log("speedrunpapi " + VERSION);
   if (cmd === "claim") {
     if (!args[1] || !args[2] || !args[3]) return usage();
     const order = args[1].startsWith("#") ? args[1] : "#" + args[1];
@@ -2106,125 +2844,160 @@ async function main() {
     console.log(JSON.stringify(body, null, 2));
     return;
   }
-  if (cmd === "classify") {
-    console.log(JSON.stringify(classifyAny(args[1]), null, 2));
-    return;
-  }
   if (cmd === "verify") {
-    const results = JSON.parse(fs2.readFileSync(args[1], "utf8"));
-    const arr = Array.isArray(results) ? results : [results];
-    let bad = 0;
-    for (const x of arr) {
-      let c = checkResult(x);
-      if ([
-        "r1cs_triangular_uniqueness",
-        "r1cs_coupled_linear_rank",
-        "bitcoin_script_deterministic_subset",
-        "rv32im_execution_trace_exact",
-        "rv32im_control_memory_trace_exact",
-        "r1cs_square_zero_elimination"
-      ].includes(x.method)) {
-        const sourceIdx = args.indexOf("--source");
-        const sourcePath = sourceIdx >= 0 ? args[sourceIdx + 1] : void 0;
-        if (sourcePath) {
-          const bytes = fs2.readFileSync(path2.resolve(sourcePath));
-          const hash = "sha256:" + createHash("sha256").update(bytes).digest("hex");
-          const binary = path2.extname(sourcePath).toLowerCase() === ".r1cs";
-          const fresh = binary ? scanR1CSBinary(new Uint8Array(bytes), x.id) : scanPasted(bytes.toString("utf8"), { id: x.id, filename: sourcePath });
-          c = {
-            ok: x.source_checksum === hash && fresh.verdict === "Certified" && fresh.method === x.method && x.witness_count === "\u22641" && JSON.stringify(cliView(fresh.certificate)) === JSON.stringify(cliView(x.certificate)),
-            kind: "exact_source_recheck"
-          };
-        }
-      }
-      console.log(`${c.ok ? "PASS" : "FAIL"} ${x.id} ${x.verdict} ${c.kind}`);
-      if (!c.ok) bad++;
+    const sourceIdx = args.indexOf("--source");
+    const sourcePath = sourceIdx >= 0 ? args[sourceIdx + 1] : void 0;
+    const reportPath = args.slice(1).find((a, i, all) => !a.startsWith("--") && all[i - 1] !== "--source");
+    if (!reportPath || !sourcePath) {
+      console.error("Usage: speedrunpapi verify <report.json> --source <circuit.r1cs>");
+      process.exit(1);
     }
-    process.exit(bad ? 1 : 0);
+    const report = JSON.parse(fs3.readFileSync(reportPath, "utf8"));
+    const bytes = new Uint8Array(fs3.readFileSync(path3.resolve(sourcePath)));
+    const digest = sha2562(bytes);
+    const bound = report?.binding?.r1cs_sha256;
+    let res;
+    if (report?.schema !== "colony.determinism/1")
+      res = { ok: false, verdict: "Unknown", error: "not a determinism report (results from versions before 0.7.0 were not proofs and cannot be verified; scan again)" };
+    else if (bound && bound !== digest)
+      res = { ok: false, verdict: "Unknown", error: `report is bound to ${bound}, but ${sourcePath} is ${digest}` };
+    else res = verifyReport(bytes, report);
+    const claimed = report?.verdict ?? "?";
+    const pass = res.ok && res.verdict === claimed;
+    console.log(JSON.stringify({
+      ok: pass,
+      verdict: pass ? res.verdict : "Unknown",
+      claimed,
+      claim_verified: pass && claimed !== "Unknown",
+      r1cs_sha256: digest,
+      ...res.relies_on_declared_provenance ? {
+        relies_on_declared_provenance: true,
+        note: "Some declared inputs have no wire in this R1CS. The counterexample stands for the circuit only if it was compiled at circom --O0, as the report declares."
+      } : {},
+      ...res.error ? { error: res.error } : {}
+    }, null, 2));
+    process.exit(pass ? 0 : 1);
   }
   if (cmd === "scan") {
     const files = [];
-    let batchManifest;
-    let sarifPath;
+    let batchManifest, sarifPath, reportPath;
     let api = process.env.EXACTLAB_API || process.env.COLONY_API || "https://api.colony.technology";
     let key = process.env.EXACTLAB_API_KEY || process.env.COLONY_API_KEY;
-    let json = false;
-    let references = false;
-    let requireSigned = false;
+    let json = false, full = false, requireSigned = false;
+    const flags = { include: [], assumeBinary: [], strict: false, timeoutMs: 6e5, cexTimeoutMs: 15e3 };
+    const valued = /* @__PURE__ */ new Set([
+      "--sarif",
+      "--api",
+      "--key",
+      "--batch",
+      "--report",
+      "--main",
+      "-l",
+      "--include",
+      "--circom",
+      "--opt",
+      "--prime",
+      "--assume-binary",
+      "--sym",
+      "--r1cs-level",
+      "--timeout",
+      "--cex-timeout"
+    ]);
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
       if (arg === "--json") json = true;
-      else if (arg === "--references") references = true;
+      else if (arg === "--full") full = true;
+      else if (arg === "--strict") flags.strict = true;
       else if (arg === "--require-signed") requireSigned = true;
-      else if (["--sarif", "--api", "--key", "--batch"].includes(arg)) {
+      else if (arg === "--references") {
+      } else if (valued.has(arg)) {
         const value = args[++i];
-        if (!value) throw new Error("Missing value for " + arg);
+        if (value === void 0) throw new Error("Missing value for " + arg);
         if (arg === "--sarif") sarifPath = value;
         else if (arg === "--api") api = value;
         else if (arg === "--key") key = value;
-        else batchManifest = value;
-      } else if (arg.startsWith("--")) throw new Error("Unknown scan option: " + arg);
+        else if (arg === "--batch") batchManifest = value;
+        else if (arg === "--report") reportPath = value;
+        else if (arg === "--main") flags.main = value;
+        else if (arg === "-l" || arg === "--include") flags.include.push(value);
+        else if (arg === "--circom") flags.circom = value;
+        else if (arg === "--opt") {
+          if (!/^O[012]$/.test(value)) throw new Error("--opt takes O0, O1 or O2");
+          flags.opt = value;
+        } else if (arg === "--prime") flags.prime = value;
+        else if (arg === "--assume-binary") flags.assumeBinary.push(value);
+        else if (arg === "--sym") flags.sym = value;
+        else if (arg === "--r1cs-level") flags.r1csLevel = value;
+        else if (arg === "--timeout") flags.timeoutMs = Math.max(1, Number(value)) * 1e3;
+        else if (arg === "--cex-timeout") flags.cexTimeoutMs = Math.max(0, Number(value)) * 1e3;
+      } else if (arg.startsWith("-")) throw new Error("Unknown scan option: " + arg);
       else files.push(arg);
     }
     if (batchManifest) {
-      const abs = path2.resolve(batchManifest);
-      const text = fs2.readFileSync(abs, "utf8");
+      const abs2 = path3.resolve(batchManifest);
+      const text = fs3.readFileSync(abs2, "utf8");
       let list;
       if (text.trimStart().startsWith("[") || text.trimStart().startsWith("{")) {
         const decoded = JSON.parse(text);
         list = Array.isArray(decoded) ? decoded : decoded.files;
       } else list = text.split(/\r?\n/).map((x) => x.trim()).filter((x) => x && !x.startsWith("#"));
-      if (!Array.isArray(list) || !list.length || !list.every((x) => typeof x === "string" && x.length)) {
+      if (!Array.isArray(list) || !list.length || !list.every((x) => typeof x === "string" && x.length))
         throw new Error("Batch manifest needs a nonempty array of file paths");
-      }
-      files.unshift(...list.map((x) => path2.isAbsolute(x) ? x : path2.resolve(path2.dirname(abs), x)));
+      files.unshift(...list.map((x) => path3.isAbsolute(x) ? x : path3.resolve(path3.dirname(abs2), x)));
     }
     if (!files.length) throw new Error("Provide at least one source file or --batch manifest");
     if (requireSigned && !key) throw new Error("--require-signed needs --key or COLONY_API_KEY");
     const started = performance.now();
     const results = [];
-    const sarifRuns = [];
+    const extra = /* @__PURE__ */ new Map();
     const counts = { Certified: 0, Broken: 0, Unknown: 0 };
+    const multi = files.length > 1 || Boolean(batchManifest);
+    if (reportPath && multi) fs3.mkdirSync(reportPath, { recursive: true });
     for (const file of files) {
-      const result = scanAny(file);
-      result.source_checksum = "sha256:" + createHash("sha256").update(fs2.readFileSync(path2.resolve(file))).digest("hex");
-      counts[result.verdict]++;
-      if (sarifPath) sarifRuns.push(...toSarif(file, result).runs);
-      if (key) {
-        const registered = await maybeRegister(api, key, result, file);
+      const s = scanOne(file, flags);
+      counts[s.verdict]++;
+      if (reportPath && s.report) {
+        const target = multi ? path3.join(reportPath, s.id + ".report.json") : reportPath;
+        fs3.writeFileSync(target, JSON.stringify(fullReport(s)));
+        if (s.r1cs && path3.extname(file).toLowerCase() === ".circom")
+          fs3.writeFileSync(target.replace(/(\.report)?\.json$/i, "") + ".r1cs", s.r1cs);
+      }
+      if (key && s.report && s.verdict !== "Unknown") {
+        const registered = await requestCertificate(api, key, s);
         const certificate = registered.certificate;
-        result.certificate_id = certificate?.id || registered.id;
-        result.mark = certificate?.mark;
-        result.signed = Boolean(certificate?.signature && certificate.signature_algorithm === "Ed25519");
-        result.signature_algorithm = certificate?.signature_algorithm;
-        result.remaining = registered.remaining;
+        extra.set(s, {
+          certificate_id: certificate?.id,
+          signed: Boolean(certificate?.signature && certificate.signature_algorithm === "Ed25519"),
+          signature_algorithm: certificate?.signature_algorithm,
+          remaining: registered.remaining
+        });
       }
-      if (requireSigned && (!result.signed || !result.certificate_id)) {
-        throw new Error("Signed Ed25519 certificate required for " + file + " (" + result.verdict + ")");
-      }
-      results.push({ file, result });
+      if (requireSigned && !extra.get(s)?.signed)
+        throw new Error("Signed certificate required for " + file + " (" + s.verdict + ")");
+      results.push(s);
     }
-    if (sarifPath) fs2.writeFileSync(sarifPath, JSON.stringify({
+    if (sarifPath) fs3.writeFileSync(sarifPath, JSON.stringify({
       $schema: "https://json.schemastore.org/sarif-2.1.0.json",
       version: "2.1.0",
-      runs: sarifRuns
+      runs: results.map((s) => toSarif(s.file, s))
     }, null, 2));
-    const display = results.map((row) => ({ file: row.file, ...references ? row.result : cliView(row.result) }));
-    const batch = files.length > 1 || Boolean(batchManifest);
     if (json) {
-      console.log(JSON.stringify(batch ? {
-        schema: "speedrunpapi.scan-batch.v1",
-        version: "0.6.4",
+      const display = results.map((s) => ({ ...view(s, full), ...extra.get(s) ?? {} }));
+      console.log(JSON.stringify(multi ? {
+        schema: "speedrunpapi.scan-batch.v2",
+        version: VERSION,
         summary: { files: results.length, ...counts, wall_ms: performance.now() - started },
         results: display
       } : display[0], null, 2));
     } else {
-      for (const { file, result } of results) {
-        console.log(`${result.verdict}  ${file}  ${result.method}  ${result.time_ms.toFixed(3)}ms`);
-        if (result.reason) console.log("  reason: " + result.reason);
-        if (result.certificate_id) console.log("  cert: " + result.certificate_id);
+      for (const s of results) {
+        printHuman(s);
+        const e = extra.get(s);
+        if (e?.certificate_id) console.log("  cert     " + e.certificate_id + (e.signed ? " (Ed25519)" : ""));
+        if (reportPath && s.report) console.log("  report   " + (multi ? path3.join(reportPath, s.id + ".report.json") : reportPath));
       }
-      console.log(`scanned ${results.length}: ${counts.Certified} Certified / ${counts.Broken} Broken / ${counts.Unknown} Unknown; ${(performance.now() - started).toFixed(3)}ms wall`);
+      if (multi) console.log(`
+scanned ${results.length}: ${counts.Certified} Certified / ${counts.Broken} Broken / ${counts.Unknown} Unknown; ${ms(performance.now() - started)} wall`);
     }
     process.exit(counts.Broken ? 2 : counts.Unknown ? 3 : 0);
   }

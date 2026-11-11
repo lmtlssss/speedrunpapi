@@ -9,29 +9,24 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Scan exact source and request one paid certificate
-        id: carry
-        uses: lmtlssss/speedrunpapi@054131b8aed8ca7da8df2f5c7a33df7be3999a95
+      - name: Scan and request one signed certificate
+        id: scan
+        uses: ./
         with:
-          file: examples/rv32im_memory_branch_v2.zkvm
+          file: examples/iszero.circom
           api_key: ${{ secrets.COLONY_PILOT_API_KEY }}
           public: 'true'
-      - name: Independently inspect the signed public receipt
+      - name: Inspect the signed public record
         shell: bash
         env:
-          CERT_ID: ${{ steps.carry.outputs.certificate_id }}
-          VERDICT: ${{ steps.carry.outputs.verdict }}
+          CERT_ID: ${{ steps.scan.outputs.certificate_id }}
+          VERDICT: ${{ steps.scan.outputs.verdict }}
         run: |
           set -euo pipefail
           test "$VERDICT" = Certified
           test -n "$CERT_ID"
-          curl --fail --silent --show-error --retry 5 --retry-delay 2 "https://api.colony.technology/v1/cert/$CERT_ID" -o colony-pilot-receipt.json
-          jq -e --arg id "$CERT_ID" '.signature_valid == true and .certificate.id == $id and .certificate.public == true and .certificate.gadget_id == "rv32im_memory_branch_v2" and .certificate.result == "Certified" and (.certificate.scope | length > 0)' colony-pilot-receipt.json
-          printf 'Verified paid source-bound receipt: https://api.colony.technology/v1/cert/%s\n' "$CERT_ID" >> "$GITHUB_STEP_SUMMARY"
-      - name: Preserve signed pilot receipt
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: colony-pilot-receipt
-          path: colony-pilot-receipt.json
-          if-no-files-found: warn
+          curl --fail --silent --show-error --retry 5 --retry-delay 2 "https://api.colony.technology/v1/cert/$CERT_ID" -o certificate.json
+          jq -e --arg id "$CERT_ID" '.signature_valid == true and .certificate.id == $id and .certificate.result == "Certified" and .certificate.family == "r1cs_output_determinism"' certificate.json
+          jq '.certificate' certificate.json > certificate-only.json
+          node verifiers/cert/verify.mjs certificate-only.json colony-reports/result.r1cs
+          printf 'Signed certificate: https://api.colony.technology/v1/cert/%s\n' "$CERT_ID" >> "$GITHUB_STEP_SUMMARY"

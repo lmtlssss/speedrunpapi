@@ -1,7 +1,7 @@
 {
   "name": "speedrunpapi",
-  "version": "0.6.4",
-  "description": "ᑕ. exact arithmetic circuit verification by state contraction",
+  "version": "0.7.0",
+  "description": "Output-determinism analysis for Circom circuits and R1CS: checked proofs, checked counterexamples",
   "type": "module",
   "bin": {
     "speedrunpapi": "bin/speedrunpapi.mjs",
@@ -11,7 +11,10 @@
     "bin/speedrunpapi.mjs",
     "bin/colony-jobs.mjs",
     "verifiers/onnx/",
+    "verifiers/cert/",
+    "verifiers/determinism/",
     "examples/",
+    "docs/",
     "README.md",
     "LICENSE.md"
   ],
@@ -27,12 +30,13 @@
   "keywords": [
     "circom",
     "zk",
+    "zero-knowledge",
     "r1cs",
-    "verilog",
-    "bitvm",
-    "zkvm",
+    "under-constrained",
     "formal-verification",
     "arithmetic-circuits",
-    "state-contraction"
+    "determinism",
+    "snark",
+    "audit"
   ]
 }
