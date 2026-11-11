@@ -1,6 +1,6 @@
 # Hosted jobs and offline checkers
 
-This page carries the documentation of the hosted-job client and the ONNX checker as published with 0.6.4. They are unchanged in 0.7.0. The circuit scanner described in the main README is separate from these commands.
+This page carries the documentation of the hosted-job client and the ONNX checker as published with 0.6.4. They are unchanged in 0.7.1. The circuit scanner described in the main README is separate from these commands.
 
 ## Hosted jobs
 

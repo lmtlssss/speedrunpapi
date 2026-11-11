@@ -13,6 +13,6 @@ The scanner needs Node.js 20 or later on `PATH`, and the circom compiler for `.c
 
 Full documentation: https://github.com/lmtlssss/speedrunpapi
 
-Versions before 0.7.0 classified sources by template name and keyword and could report `Certified` for a circuit whose outputs were unconstrained. Those results were not proofs. If you relied on one, scan again.
+Versions before 0.7.1 classified sources by template name and keyword and could report `Certified` for a circuit whose outputs were unconstrained. Those results were not proofs. If you relied on one, scan again.
 
 `pip install 'speedrunpapi[onnx]'` adds the dependencies of the separate ONNX checker used by the hosted optimization jobs.

@@ -20,7 +20,7 @@ function unknown(id, domain, method, reason) {
   };
 }
 var CIRCOM_GUIDANCE = "A verdict about Circom source is a verdict about its compiled constraint system. Run `speedrunpapi scan file.circom` where the circom compiler is installed, or scan the compiled .r1cs.";
-var RETIRED_GUIDANCE = "Versions before 0.7.0 returned verdicts for this input type without establishing them. That path has been removed. The scanner analyses Circom (through the compiler) and binary R1CS.";
+var RETIRED_GUIDANCE = "Versions before 0.7.1 returned verdicts for this input type without establishing them. That path has been removed. The scanner analyses Circom (through the compiler) and binary R1CS.";
 function scanPasted(source, options = {}) {
   const input = String(source || "");
   const ext = options.format || options.filename?.toLowerCase().split(".").pop();
@@ -82,7 +82,9 @@ function modSqrt(a, p) {
   let z = nonResidue.get(p);
   if (z === void 0) {
     z = 2n;
-    while (modPow(z, p - 1n >> 1n, p) !== p - 1n) z++;
+    while (modPow(z, p - 1n >> 1n, p) !== p - 1n) {
+      if (++z > 4096n) return null;
+    }
     nonResidue.set(p, z);
   }
   let m = s, c = modPow(z, q, p), t = modPow(n2, q, p), r = modPow(n2, q + 1n >> 1n, p);
@@ -134,8 +136,50 @@ var DEFAULT_LIMITS = {
   maxBytes: 1 << 30,
   maxWires: 1 << 26,
   maxConstraints: 1 << 26,
-  maxTerms: 1 << 28
+  maxTerms: 1 << 28,
+  allowUnlistedPrime: false
 };
+var CIRCOM_PRIMES = /* @__PURE__ */ new Map([
+  [21888242871839275222246405745257275088548364400416034343698204186575808495617n, "bn128"],
+  [8444461749428370424248824938781546531375899335154063827935233455917409239041n, "bls12377"],
+  [52435875175126190479447740508185965837690552500527637822603658699938581184513n, "bls12381"],
+  [18446744069414584321n, "goldilocks"],
+  [21888242871839275222246405745257275088696311157297823662689037894645226208583n, "grumpkin"],
+  [28948022309329048855892746252171976963363056481941560715954676764349967630337n, "pallas"],
+  [115792089210356248762697446949407573530086143415290314195533631308867097853951n, "secq256r1"],
+  [28948022309329048855892746252171976963363056481941647379679742748393362948097n, "vesta"]
+]);
+function isProbablePrime(n2) {
+  if (n2 < 2n) return false;
+  const small = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n, 41n, 43n, 47n, 53n];
+  for (const q of small) {
+    if (n2 === q) return true;
+    if (n2 % q === 0n) return false;
+  }
+  let d = n2 - 1n, r = 0;
+  while ((d & 1n) === 0n) {
+    d >>= 1n;
+    r++;
+  }
+  const pow = (b, e) => {
+    let out = 1n, x = b % n2;
+    for (; e > 0n; e >>= 1n) {
+      if (e & 1n) out = out * x % n2;
+      x = x * x % n2;
+    }
+    return out;
+  };
+  outer: for (const a of small) {
+    let x = pow(a, d);
+    if (x === 1n || x === n2 - 1n) continue;
+    for (let i = 1; i < r; i++) {
+      x = x * x % n2;
+      if (x === n2 - 1n) continue outer;
+    }
+    return false;
+  }
+  return true;
+}
 function parseR1CS(bytes, limits = {}) {
   const lim = { ...DEFAULT_LIMITS, ...limits };
   if (bytes.byteLength > lim.maxBytes) throw new Error("R1CS exceeds the configured size limit");
@@ -185,7 +229,8 @@ function parseR1CS(bytes, limits = {}) {
   hNeed(fieldBytes);
   const prime = readField(h);
   h += fieldBytes;
-  if (prime < 3n || (prime & 1n) === 0n) throw new Error("Unsupported R1CS modulus");
+  if (!CIRCOM_PRIMES.has(prime) && !(lim.allowUnlistedPrime && prime >= 3n && isProbablePrime(prime)))
+    throw new Error("Unsupported R1CS modulus: not one of the prime fields circom targets");
   hNeed(16 + 8 + 4);
   const nWires = view2.getUint32(h, true);
   h += 4;
@@ -1371,7 +1416,9 @@ var Replay = class {
         e++;
       }
       let z = 2n;
-      while (pw(z, (p - 1n) / 2n, p) !== p - 1n) z++;
+      while (pw(z, (p - 1n) / 2n, p) !== p - 1n) {
+        if (++z > 4096n) return null;
+      }
       let mm = e, cc = pw(z, q, p), t = pw(disc, q, p);
       s = pw(disc, (q + 1n) / 2n, p);
       while (t !== 1n) {
@@ -1379,6 +1426,7 @@ var Replay = class {
         while (t2 !== 1n) {
           t2 = t2 * t2 % p;
           i++;
+          if (i >= mm) return null;
         }
         const bb = pw(cc, 1n << mm - i - 1n, p);
         mm = i;
@@ -1431,12 +1479,8 @@ var Replay = class {
         return "bits: malformed";
       const red = this.reduce(s.k);
       if (red.kind !== "row" || red.row.size !== s.xs.length) return `bits: constraint ${s.k} is not a matching linear row`;
-      let scale;
-      try {
-        scale = BigInt(s.s);
-      } catch {
-        return "bits: bad scale";
-      }
+      if (typeof s.s !== "string" || !/^(0|[1-9][0-9]*)$/.test(s.s)) return "bits: scale must be a decimal string";
+      const scale = BigInt(s.s);
       const weights = [];
       const seen = /* @__PURE__ */ new Set();
       for (let i = 0; i < s.xs.length; i++) {
@@ -1461,12 +1505,8 @@ var Replay = class {
         if (!this.constraintOk(s.rows[i])) return "gauss: bad constraint index";
         const red = this.reduce(s.rows[i]);
         if (red.kind !== "row") return `gauss: constraint ${s.rows[i]} is not a linear row`;
-        let f;
-        try {
-          f = md(BigInt(s.mult[i]), p);
-        } catch {
-          return "gauss: bad multiplier";
-        }
+        if (typeof s.mult[i] !== "string" || !/^(0|[1-9][0-9]*)$/.test(s.mult[i])) return "gauss: multiplier must be a decimal string";
+        const f = md(BigInt(s.mult[i]), p);
         for (const [w, c] of red.row) acc.set(w, md((acc.get(w) ?? 0n) + c * f, p));
       }
       for (const [w, c] of acc) if (c !== 0n && w !== s.x) return `gauss: combination leaves wire ${w}`;
@@ -1569,7 +1609,7 @@ function checkProof(r, steps) {
 }
 function firstViolation(r, w) {
   const p = r.prime;
-  if (w.length !== r.nWires || w[0] !== 1n) return 0;
+  if (w.length !== r.nWires || w[0] !== 1n) return -2;
   const ev = (lc) => {
     let acc = 0n;
     for (let i = 0; i < lc.w.length; i++) acc += lc.c[i] * w[lc.w[i]];
@@ -1586,6 +1626,7 @@ function checkCounterexample(r, a, b) {
     for (const v of w) if (typeof v !== "bigint" || v < 0n || v >= p) return { ok: false, error: "assignment value outside the field", differingOutputs: [] };
   }
   const va = firstViolation(r, a), vb = firstViolation(r, b);
+  if (va === -2 || vb === -2) return { ok: false, error: "the constant wire must be one in both assignments", differingOutputs: [] };
   if (va >= 0) return { ok: false, error: `first assignment violates constraint ${va}`, differingOutputs: [] };
   if (vb >= 0) return { ok: false, error: `second assignment violates constraint ${vb}`, differingOutputs: [] };
   for (let w = 1 + r.nPubOut; w < r.inputEnd; w++)
@@ -2180,15 +2221,15 @@ function analyzeParsed(base, options = {}) {
   const strict = Boolean(options.strict);
   const declaredInputs = base.nPubIn + base.nPrvIn;
   let complete, basis;
-  if (base.inputsAllWired) {
+  if (base.inputLayout !== "label-map") {
+    complete = false;
+    basis = "the R1CS has no wire-to-label map, so its input wires cannot be established";
+  } else if (base.inputsAllWired) {
     complete = true;
     basis = "every declared input has its own wire";
-  } else if (options.inputProvenance === "unsimplified") {
-    complete = true;
-    basis = "declared: compiled without simplification (circom --O0), where an input without a wire is unused";
   } else {
     complete = false;
-    basis = "some declared inputs have no wire and the simplification level is unknown";
+    basis = "some declared inputs have no wire (merged or substituted by compiler simplification)";
   }
   const tProve0 = performance.now();
   const proof = prove(r, options);
@@ -2255,7 +2296,7 @@ function analyzeParsed(base, options = {}) {
   }
   let tCex = 0;
   if (!strict && r.nPubOut > 0 && !complete) {
-    report.reason = `${r.nPubOut - outDet} of ${r.nPubOut} output signal(s) are not shown to be fixed by the inputs. No counterexample search was run: only ${base.nPrvInWires} of ${base.nPrvIn} declared private inputs have a wire, which happens when circom's full simplification (--O2) substitutes inputs. Scan the .circom source, or an R1CS compiled with --O0 or --O1.`;
+    report.reason = `${r.nPubOut - outDet} of ${r.nPubOut} output signal(s) are not shown to be fixed by the inputs. No counterexample search was run: ${basis}. Scan the .circom source, or an R1CS compiled with circom --O0.`;
   }
   if (!strict && r.nPubOut > 0 && complete && options.searchCounterexample !== false) {
     const t0 = performance.now();
@@ -2324,12 +2365,17 @@ function analyzeR1CS(bytes, options = {}) {
 function verifyReport(bytes, report, limits) {
   if (!report || typeof report !== "object" || report.schema !== DETERMINISM_SCHEMA)
     return { ok: false, verdict: "Unknown", error: "unsupported report schema" };
+  if (report.verdict !== "Certified" && report.verdict !== "Broken" && report.verdict !== "Unknown")
+    return { ok: false, verdict: "Unknown", error: "unrecognised verdict" };
+  if (report.verdict !== "Unknown" && report.property !== "output-determinism" && report.property !== "witness-uniqueness")
+    return { ok: false, verdict: "Unknown", error: "unrecognised property" };
   const alias = report.input_alias_wires;
   if (alias !== void 0 && alias !== null && !(Array.isArray(alias) && alias.length === 0))
     return { ok: false, verdict: "Unknown", error: "a report may not declare extra input wires" };
   let base, r;
   try {
     const binary = (report.assumptions?.binary_inputs ?? []).map((b) => b.wire);
+    if (binary.some((w) => !Number.isInteger(w))) throw new Error("assumption wires must be integers");
     base = parseR1CS(bytes, limits);
     r = withAssumptions(base, { binary });
   } catch (e) {
@@ -2350,19 +2396,17 @@ function verifyReport(bytes, report, limits) {
   if (report.verdict === "Broken") {
     const cex = report.counterexample;
     if (!cex || !Array.isArray(cex.witness_a) || !Array.isArray(cex.witness_b)) return { ok: false, verdict: "Unknown", error: "report carries no counterexample" };
-    const declared = report.inputs?.complete === true;
-    if (!base.inputsAllWired && !declared)
-      return { ok: false, verdict: "Unknown", error: "some declared inputs have no wire, so a witness pair is not a counterexample for the circuit" };
-    let a, b;
-    try {
-      a = cex.witness_a.map((v) => BigInt(v));
-      b = cex.witness_b.map((v) => BigInt(v));
-    } catch {
-      return { ok: false, verdict: "Unknown", error: "malformed witness values" };
-    }
+    if (report.property !== "output-determinism")
+      return { ok: false, verdict: "Unknown", error: "a counterexample is a statement about output determinism" };
+    if (base.inputLayout !== "label-map" || !base.inputsAllWired)
+      return { ok: false, verdict: "Unknown", error: "not every declared input has a wire in this R1CS, so a witness pair is not a counterexample for the circuit" };
+    const decimal = (v) => typeof v === "string" && /^(0|[1-9][0-9]*)$/.test(v);
+    if (!cex.witness_a.every(decimal) || !cex.witness_b.every(decimal))
+      return { ok: false, verdict: "Unknown", error: "witness values must be decimal strings" };
+    const a = cex.witness_a.map((v) => BigInt(v)), b = cex.witness_b.map((v) => BigInt(v));
     const out = checkCounterexample(r, a, b);
     if (!out.ok) return { ok: false, verdict: "Unknown", error: out.error };
-    return { ok: true, verdict: "Broken", relies_on_declared_provenance: !base.inputsAllWired };
+    return { ok: true, verdict: "Broken" };
   }
   return { ok: true, verdict: "Unknown" };
 }
@@ -2511,8 +2555,7 @@ function scanCircomFile(file, options = {}) {
       report = analyzeParsed(r, {
         ...options.analyze,
         sym: compiled.sym,
-        assumptions: { binary },
-        inputProvenance: level === "O0" ? "unsimplified" : "unknown"
+        assumptions: { binary }
       });
     } catch (e) {
       if (first) break;
@@ -2544,7 +2587,7 @@ function scanCircomFile(file, options = {}) {
 }
 
 // src/cli.ts
-var VERSION = "0.7.0";
+var VERSION = "0.7.1";
 function usage() {
   console.log(`speedrunpapi ${VERSION}: output-determinism analysis for Circom circuits and R1CS
 
@@ -2576,7 +2619,6 @@ Options:
   --assume-binary <pattern> treat matching input signals as bits, e.g. in, "sel[*]" or "*" (repeatable)
   --strict                  require every signal, not just outputs, to be fixed by the inputs
   --sym <file>              .sym for an .r1cs input
-  --r1cs-level O0           the .r1cs was compiled with --O0 (an input without a wire is then unused)
   --timeout <seconds>       proof search limit (default 600)
   --cex-timeout <seconds>   counterexample search budget (default 15)
   --sarif <file>            write Broken results as SARIF
@@ -2638,12 +2680,7 @@ function scanOne(file, flags) {
         if (!sym) throw new Error("--assume-binary needs signal names; pass --sym");
         return resolveBinaryInputs(parsed, sym, flags.assumeBinary);
       })() : [];
-      const report = analyzeR1CS(bytes, {
-        ...analyze,
-        sym,
-        assumptions: { binary },
-        inputProvenance: flags.r1csLevel === "O0" ? "unsimplified" : "unknown"
-      });
+      const report = analyzeR1CS(bytes, { ...analyze, sym, assumptions: { binary } });
       return {
         file,
         id,
@@ -2858,7 +2895,7 @@ async function main() {
     const bound = report?.binding?.r1cs_sha256;
     let res;
     if (report?.schema !== "colony.determinism/1")
-      res = { ok: false, verdict: "Unknown", error: "not a determinism report (results from versions before 0.7.0 were not proofs and cannot be verified; scan again)" };
+      res = { ok: false, verdict: "Unknown", error: "not a determinism report (results from versions before 0.7.1 were not proofs and cannot be verified; scan again)" };
     else if (bound && bound !== digest)
       res = { ok: false, verdict: "Unknown", error: `report is bound to ${bound}, but ${sourcePath} is ${digest}` };
     else res = verifyReport(bytes, report);
@@ -2870,10 +2907,6 @@ async function main() {
       claimed,
       claim_verified: pass && claimed !== "Unknown",
       r1cs_sha256: digest,
-      ...res.relies_on_declared_provenance ? {
-        relies_on_declared_provenance: true,
-        note: "Some declared inputs have no wire in this R1CS. The counterexample stands for the circuit only if it was compiled at circom --O0, as the report declares."
-      } : {},
       ...res.error ? { error: res.error } : {}
     }, null, 2));
     process.exit(pass ? 0 : 1);
@@ -2899,7 +2932,6 @@ async function main() {
       "--prime",
       "--assume-binary",
       "--sym",
-      "--r1cs-level",
       "--timeout",
       "--cex-timeout"
     ]);
@@ -2927,7 +2959,6 @@ async function main() {
         } else if (arg === "--prime") flags.prime = value;
         else if (arg === "--assume-binary") flags.assumeBinary.push(value);
         else if (arg === "--sym") flags.sym = value;
-        else if (arg === "--r1cs-level") flags.r1csLevel = value;
         else if (arg === "--timeout") flags.timeoutMs = Math.max(1, Number(value)) * 1e3;
         else if (arg === "--cex-timeout") flags.cexTimeoutMs = Math.max(0, Number(value)) * 1e3;
       } else if (arg.startsWith("-")) throw new Error("Unknown scan option: " + arg);

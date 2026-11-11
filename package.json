@@ -1,6 +1,6 @@
 {
   "name": "speedrunpapi",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Output-determinism analysis for Circom circuits and R1CS: checked proofs, checked counterexamples",
   "type": "module",
   "bin": {

@@ -86,7 +86,7 @@ A verdict about a `.circom` file is a verdict about the R1CS that circom emits f
 
 circom `--O0` applies no simplification, so that system describes the circuit exactly. From `--O1` (circom's default) the compiler merges signals, and an input that equals another signal loses its wire without the `.sym` file recording it; at `--O2` inputs can be substituted by linear combinations. A proof of determinism carries over to every level. A counterexample does not, unless every declared input still has a wire.
 
-`scan` therefore analyses the `--O0` system first and accepts its proof or counterexample. If that is `Unknown` it tries `--O1`, and accepts a counterexample there only when all declared inputs are wired. When you scan an `.r1cs` directly and some declared inputs have no wire, the tool can still certify but will not report `Broken`; pass `--r1cs-level O0` if you compiled with `--O0`.
+`scan` therefore analyses the `--O0` system first and accepts its proof or counterexample. If that is `Unknown` it tries `--O1`, and accepts a counterexample there only when all declared inputs are wired. When you scan an `.r1cs` directly and some declared inputs have no wire, the tool can still certify but will not report `Broken`. Scan the `.circom` source, or an R1CS compiled with `--O0`.
 
 ## How it decides
 
@@ -136,7 +136,7 @@ The corpus has 71 circom-compiled cases with known answers. The engine currently
 - Big-integer arithmetic whose uniqueness depends on range bounds across limbs.
 - Alias checks (`Num2Bits_strict`, `AliasCheck`) that compare a bit string against the modulus.
 - Circuits with no outputs.
-- R1CS with custom gates (PLONK custom templates).
+- R1CS with custom gates (PLONK custom templates), or over a field other than the ones circom targets.
 
 For these the report lists each open signal with the condition under which a constraint would fix it, for example `main.xout: fixed by constraint 4 only where (1 + 168696*main.tau) != 0`. Each line is an obligation to discharge by review.
 
@@ -156,7 +156,7 @@ python3 verifiers/determinism/determinism_check.py circuit.r1cs circuit.report.j
 
 ```yaml
 - uses: actions/checkout@v4
-- uses: lmtlssss/speedrunpapi@v0.7.0
+- uses: lmtlssss/speedrunpapi@v0.7.1
   with:
     file: circuits/main.circom
     include: node_modules/circomlib/circuits
@@ -177,11 +177,13 @@ The service signs only `Certified` and `Broken` results that it has itself re-ve
 
 To check a certificate offline, `node verifiers/cert/verify.mjs certificate.json circuit.r1cs` verifies the Ed25519 signature against the pinned public key and that the certificate names the digest of your file. A signature authenticates the issuer's statement; the report is what lets you re-check the claim itself. Credit packs: [colony.technology/packs](https://colony.technology/packs).
 
-## Changes in 0.7.0
+## Changes in 0.7.1
 
-Versions before 0.7.0 classified Circom, Verilog and INT8 sources by template name and keyword. They could report `Certified` for a circuit whose outputs were unconstrained, and the hosted service would sign that verdict. Those results were not proofs.
+(There is no 0.7.0 package: that tag was placed on the wrong commit and was never published.)
 
-0.7.0 replaces that analyzer with the one described above, which reasons about the compiled constraint system. If you relied on a `Certified` result from an earlier version, scan again. Certificates issued before 0.7.0 have been revoked.
+Versions before 0.7.1 classified Circom, Verilog and INT8 sources by template name and keyword. They could report `Certified` for a circuit whose outputs were unconstrained, and the hosted service would sign that verdict. Those results were not proofs.
+
+0.7.1 replaces that analyzer with the one described above, which reasons about the compiled constraint system. If you relied on a `Certified` result from an earlier version, scan again. Certificates issued before 0.7.1 have been revoked.
 
 The Verilog, INT8, ONNX-text and carry-graph classifiers are removed and those inputs return `Unknown`. So are the Bitcoin Script and RV32IM trace adapters: an audit found that the first executed nothing (it accepted scripts that can never complete) and the second only replayed a trace against instruction words the trace itself supplied.
 

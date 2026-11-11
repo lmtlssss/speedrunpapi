@@ -11,11 +11,14 @@ Wires 1..nPubOut are the outputs; the input wires follow them.
   Certified  any two satisfying assignments that agree on every input wire agree
              on every output wire ("output-determinism") or on every wire
              ("witness-uniqueness").  The report carries a derivation: a list of
-             small inference steps.  This program replays it and accepts only if
-             every single step follows from the constraints it cites.
+             small inference steps (lin, fix, bits, gauss, onehot, split; the
+             Replay class says what each one proves and why).  This program
+             replays it and accepts only if every single step follows from the
+             constraints it cites.
   Broken     the report carries two full assignments.  This program accepts only
              if both satisfy every constraint, agree on every input wire and
-             differ on an output wire.
+             differ on an output wire, and only for an R1CS that itself shows a
+             wire for every declared input (see below).
   Unknown    no claim; nothing to verify.
 
 This file shares no code with the engine that writes the reports.  It is written
@@ -41,11 +44,10 @@ Output: one JSON object on stdout.
   outputs            number of output wires in the R1CS
   determined_outputs output wires the replayed derivation shows to be determined
   inputs_all_wired   every private input the R1CS header declares has a wire
-                     (computed from the R1CS; false if the R1CS could not be read)
+                     (computed from the R1CS; false if the R1CS could not be read;
+                     taken from the header alone when input_layout is "header")
   relies_on_declared_provenance
-                     true exactly when a Broken verdict was accepted only because
-                     the report declares the R1CS was compiled without
-                     simplification (see below)
+                     always false; kept so that the output shape is stable
   claimed_verdict    the verdict the report states (null if it states none)
   property           the property the report is about
   assumed_binary_inputs
@@ -60,18 +62,18 @@ What a verified claim is conditional on
   claim is then about the system extended by x * (x - 1) = 0 for each of them,
   and says nothing about callers that break the assumption.  Only input wires
   can be assumed.
-* relies_on_declared_provenance.  circom drops a private input that occurs in no
-  constraint from the witness but still counts it in the header; with
-  simplification (--O1, --O2) it can also merge an input into another signal or
-  substitute it by a combination of other wires.  In the second case two
-  assignments of the R1CS can differ on that input without differing on any
-  input wire, and are then no counterexample for the circuit.  The R1CS cannot
-  tell the cases apart.  So when some declared private input has no wire, a
-  Broken verdict is accepted only if the report declares `inputs.complete: true`
-  (a statement by whoever produced the report that the R1CS was compiled at
-  --O0, where an input without a wire is unused), and the output flags it.  That
-  declaration comes from the report itself and cannot be checked here: a caller
-  who cannot vouch for it must treat such a result as unverified.
+
+When a Broken verdict is refused whatever the witnesses
+-------------------------------------------------------
+A Broken verdict is only accepted when the R1CS itself shows that every
+declared input has a wire: the file must carry its wire-to-label section
+(input_layout "label-map") and every declared private input must have a wire
+(inputs_all_wired; always so for circom --O0 output).  With simplification
+(--O1, --O2) the compiler can merge an input into another signal or substitute
+it by a combination of other wires; two assignments of such a system can differ
+on that input without differing on any input wire, and are then no
+counterexample for the circuit.  Nothing a report says about how the file was
+compiled (`inputs.complete` or anything else) is taken into account.
 
 Standard library only; Python 3.9+.
 """
@@ -298,7 +300,9 @@ def parse_r1cs(data: bytes) -> R1CS:
     # so a wire after the public inputs is a private input exactly when its
     # label is at most nIO.  The range found this way never extends past the
     # range the header itself declares.  Without the map there is only the
-    # header to go by, and every declared private input is taken to be wired.
+    # header to go by, and every declared private input is taken to be wired;
+    # a derivation is still replayed against that range, but a counterexample
+    # is not accepted for such a file (see _judge).
     n_io = n_pub_out + n_pub_in + n_prv_in
     first_prv = 1 + n_pub_out + n_pub_in
     if 3 in sections:
@@ -1268,20 +1272,25 @@ def _judge(data: bytes, report, result: dict) -> str:
     cex = report.get("counterexample")
     if type(cex) is not dict or type(cex.get("witness_a")) is not list or type(cex.get("witness_b")) is not list:
         raise ReportError("report carries no counterexample")
-    if not base.inputs_all_wired:
-        # Some declared private input has no wire.  It may be unused, or the
-        # compiler may have merged it into another signal or substituted it by
-        # a combination of other wires; then two assignments of this system can
-        # differ on that input without differing on any input wire, and are no
-        # counterexample for the circuit.  The R1CS cannot tell which.  The
-        # pair is accepted only on the report's declaration that the R1CS was
-        # compiled without simplification, and the result says so.
-        inputs = report.get("inputs")
-        if type(inputs) is not dict or inputs.get("complete") is not True:
+    if base.input_layout != "label-map" or not base.inputs_all_wired:
+        # Some declared input has no wire, or the file carries no wire-to-label
+        # map to say which wires are inputs.  A missing input may have been
+        # merged into another signal or substituted by a combination of other
+        # wires; then two assignments of this system can differ on that input
+        # without differing on any input wire, and are no counterexample for
+        # the circuit.  The R1CS cannot tell, and a report's own statement
+        # about how the file was compiled cannot be checked, so the pair is
+        # refused.  circom --O0 output always has a wire for every input.
+        if base.input_layout != "label-map":
+            # Without the map the wire count is taken from the header (so it
+            # reads "all wired"); what is missing is the evidence, not a wire.
             raise ReportError(
-                "the R1CS has a wire for only %d of its %d declared private inputs and the report does not declare"
-                " inputs.complete, so a pair of assignments is not a counterexample for the circuit"
-                % (base.n_prv_in_wires, base.n_prv_in))
+                "this R1CS has no wire-to-label section, so it cannot show that every declared input has a wire"
+                " (layout %s), and a pair of assignments is not a counterexample for the circuit" % base.input_layout)
+        raise ReportError(
+            "not every declared input has a wire in this R1CS (%d of %d private inputs, layout %s),"
+            " so a pair of assignments is not a counterexample for the circuit"
+            % (base.n_prv_in_wires, base.n_prv_in, base.input_layout))
     if len(cex["witness_a"]) != r.n_wires or len(cex["witness_b"]) != r.n_wires:
         raise ReportError("assignment length differs from wire count")
     a = _parse_witness(cex["witness_a"], r.prime)
@@ -1289,7 +1298,6 @@ def _judge(data: bytes, report, result: dict) -> str:
     err = check_counterexample(r, a, b)
     if err is not None:
         raise ReportError(err)
-    result["relies_on_declared_provenance"] = not base.inputs_all_wired
     return "Broken"
 
 
