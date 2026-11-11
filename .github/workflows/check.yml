@@ -2,115 +2,124 @@ name: Distribution check
 on:
   push:
   pull_request:
+permissions:
+  contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
       - run: npm pack --dry-run
-      - run: node bin/speedrunpapi.mjs version
-      - run: node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json
-      - run: node bin/speedrunpapi.mjs scan examples/and.circom --json
-      - run: node bin/speedrunpapi.mjs scan examples/compare.circom --json
-      - run: node bin/speedrunpapi.mjs scan examples/mux.circom --json
-      - name: Check compiler R1CS source-bound certificate
-        run: |
-          node bin/speedrunpapi.mjs scan examples/circom_multiplier.r1cs --json > /tmp/r1cs-result.json
-          node bin/speedrunpapi.mjs verify /tmp/r1cs-result.json --source examples/circom_multiplier.r1cs
-      - name: Free R1CS wire remains undecided
-        run: |
-          set +e
-          node bin/speedrunpapi.mjs scan examples/free_wire.r1cs --json > /tmp/free-r1cs.json
-          status=$?
-          set -e
-          test "$status" -eq 3
-          node -e 'let r=require("/tmp/free-r1cs.json");if(r.verdict!=="Unknown")process.exit(1)'
-
-      - name: Native Script, zkVM trace and coupled R1CS source verification
+      - run: node bin/speedrunpapi.mjs version | grep -F "speedrunpapi 0.7.1"
+      - name: Install pinned circom
         run: |
           set -euo pipefail
-          node bin/speedrunpapi.mjs scan examples/native_add.bitvm --json > /tmp/native-script.json
-          node bin/speedrunpapi.mjs verify /tmp/native-script.json --source examples/native_add.bitvm
-          node bin/speedrunpapi.mjs scan examples/native_add_hex.script --json > /tmp/native-bytecode.json
-          node bin/speedrunpapi.mjs verify /tmp/native-bytecode.json --source examples/native_add_hex.script
-          node bin/speedrunpapi.mjs scan examples/rv32im_arithmetic_trace.zkvm --json > /tmp/native-zkvm.json
-          node bin/speedrunpapi.mjs verify /tmp/native-zkvm.json --source examples/rv32im_arithmetic_trace.zkvm
-          node bin/speedrunpapi.mjs scan examples/coupled_rank.r1cs --json > /tmp/native-r1cs.json
-          node bin/speedrunpapi.mjs verify /tmp/native-r1cs.json --source examples/coupled_rank.r1cs
-          set +e
-          node bin/speedrunpapi.mjs scan examples/rv32im_corrupt_trace.zkvm --json > /tmp/invalid-zkvm.json
-          zkvm_status=$?
-          node bin/speedrunpapi.mjs scan examples/coupled_rank_deficient.r1cs --json > /tmp/invalid-r1cs.json
-          rank_status=$?
-          set -e
-          test "$zkvm_status" -eq 3
-          test "$rank_status" -eq 3
-          jq -e '.verdict == "Unknown"' /tmp/invalid-zkvm.json
-          jq -e '.verdict == "Unknown"' /tmp/invalid-r1cs.json
-
-      - name: Exact BitVM, control-flow zkVM and nonlinear R1CS source rechecks
+          mkdir -p "$RUNNER_TEMP/circom-bin"
+          curl -fsSL https://github.com/iden3/circom/releases/download/v2.2.3/circom-linux-amd64 -o "$RUNNER_TEMP/circom-bin/circom"
+          echo "85342c7ff332d948df7c0c50ecf201e6129349aef550ce873f3c811b79fe53a3  $RUNNER_TEMP/circom-bin/circom" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/circom-bin/circom"
+          echo "$RUNNER_TEMP/circom-bin" >> "$GITHUB_PATH"
+      - name: Example verdicts and exit codes
+        run: |
+          set -uo pipefail
+          expect() {
+            want="$1"; code="$2"; shift 2
+            got=0; node bin/speedrunpapi.mjs scan "$@" --json > /tmp/result.json || got=$?
+            verdict=$(jq -r .verdict /tmp/result.json)
+            if [ "$verdict" != "$want" ] || [ "$got" != "$code" ]; then
+              echo "::error::$* gave $verdict (exit $got), expected $want (exit $code)"; head -c 2000 /tmp/result.json; exit 1
+            fi
+          }
+          for f in and mux compare iszero num2bits division-guarded modsum-safe; do expect Certified 0 "examples/$f.circom"; done
+          for f in num2bits254 division decoder modsum-broken; do expect Broken 2 "examples/$f.circom"; done
+          expect Certified 0 examples/circom_multiplier.r1cs
+          expect Certified 0 examples/coupled_rank.r1cs
+          expect Certified 0 examples/nonlinear_square_zero.r1cs
+          expect Broken 2 examples/coupled_rank_deficient.r1cs
+          expect Broken 2 examples/nonlinear_two_roots.r1cs
+          # Output determinism ignores an internal wire that no output depends on; --strict does not.
+          expect Certified 0 examples/free_wire.r1cs
+          expect Unknown 3 examples/free_wire.r1cs --strict
+      - name: A source is never judged by its wording
         run: |
           set -euo pipefail
-          for fixture in native_alt_hash.bitvm native_alt_hash_hex.script rv32im_memory_branch_v2.zkvm nonlinear_square_zero.r1cs; do
-            node bin/speedrunpapi.mjs scan "examples/$fixture" --json > /tmp/extended.json
-            node bin/speedrunpapi.mjs verify /tmp/extended.json --source "examples/$fixture" | grep exact_source_recheck
+          printf '%s\n' 'pragma circom 2.0.0;' \
+            'template BinSum(n, ops) { signal input in[ops][n]; signal output out[n]; for (var i = 0; i < n; i++) { out[i] <-- 0; } }' \
+            'template BigAdd() { signal input a; signal output out; out <-- a * 12345; }' \
+            'component main = BigAdd();' > /tmp/BigAdd.circom
+          set +e; node bin/speedrunpapi.mjs scan /tmp/BigAdd.circom --json > /tmp/bait.json; code=$?; set -e
+          test "$code" -eq 2
+          jq -e '.verdict == "Broken" and .counterexample.differing_outputs[0].name == "main.out"' /tmp/bait.json
+          # Removed input types make no claim.
+          printf 'OP_1 OP_2 OP_ADD\n' > /tmp/add.bitvm
+          printf 'module add8(input [7:0] a, input [7:0] b, output [7:0] sum); assign sum = a + b; endmodule\n' > /tmp/add8.v
+          printf '{"format":"rv32im-trace-v1","steps":[]}\n' > /tmp/trace.zkvm
+          for f in /tmp/add.bitvm /tmp/add8.v /tmp/trace.zkvm; do
+            set +e; node bin/speedrunpapi.mjs scan "$f" --json > /tmp/removed.json; code=$?; set -e
+            test "$code" -eq 3
+            jq -e '.verdict == "Unknown" and .method == "unsupported_input"' /tmp/removed.json
           done
-          set +e
-          node bin/speedrunpapi.mjs scan examples/rv32im_bad_branch_v2.zkvm --json > /tmp/bad-branch.json
-          branch_status=$?
-          node bin/speedrunpapi.mjs scan examples/nonlinear_two_roots.r1cs --json > /tmp/two-roots.json
-          roots_status=$?
-          set -e
-          test "$branch_status" -eq 3
-          test "$roots_status" -eq 3
-          jq -e '.verdict == "Unknown"' /tmp/bad-branch.json
-          jq -e '.verdict == "Unknown"' /tmp/two-roots.json
-      - name: Recheck actual R11 production mathematics offline
+      - name: Reports replay in both checkers and tampering is rejected
         run: |
           set -euo pipefail
-          for name in m02-tap-span m03-affine-inverse m04-two-stage m05-cascade m06-shared-input m07-rank35 m08-signed20 m09-binary-word m10-cyclic-energy m11-lattice-phase m12-damped-horizon m13-affine-cycle m14-taa-cost; do
-            node bin/colony-jobs.mjs check "examples/$name.math" "examples/$name.result.json" | grep '"source_bound": true'
+          mkdir -p /tmp/rep
+          for f in iszero num2bits modsum-safe division-guarded division decoder num2bits254; do
+            node bin/speedrunpapi.mjs scan "examples/$f.circom" --report "/tmp/rep/$f.report.json" > /dev/null || true
+            node bin/speedrunpapi.mjs verify "/tmp/rep/$f.report.json" --source "/tmp/rep/$f.r1cs" | jq -e '.ok == true and .claim_verified == true'
+            python3 verifiers/determinism/determinism_check.py "/tmp/rep/$f.r1cs" "/tmp/rep/$f.report.json" | jq -e '.ok == true and .claim_verified == true'
           done
-          jq '.result.candidate.count = "999"' examples/m02-tap-span.result.json > /tmp/forged-math.json
-          if node bin/colony-jobs.mjs check examples/m02-tap-span.math /tmp/forged-math.json; then
-            echo "Forged mathematical result passed" >&2
-            exit 1
-          fi
-      - name: Machine output stays clean; bibliography is opt-in
+          reject() {
+            if node bin/speedrunpapi.mjs verify "$1" --source "$2" > /dev/null; then echo "::error::JavaScript checker accepted $1"; exit 1; fi
+            if python3 verifiers/determinism/determinism_check.py "$2" "$1" > /dev/null; then echo "::error::Python checker accepted $1"; exit 1; fi
+          }
+          # Certified claimed for an under-constrained circuit.
+          jq '.verdict = "Certified" | .proof = {steps: [], step_count: 0, replayed: true} | del(.counterexample)' /tmp/rep/division.report.json > /tmp/forged-empty.json
+          reject /tmp/forged-empty.json /tmp/rep/division.r1cs
+          jq '.verdict = "Certified" | .proof = {steps: [{t: "lin", k: 0, x: 1}], step_count: 1, replayed: true} | del(.counterexample)' /tmp/rep/division.report.json > /tmp/forged-lin.json
+          reject /tmp/forged-lin.json /tmp/rep/division.r1cs
+          # A derivation with its steps removed, and one moved to another circuit.
+          jq '.proof.steps = []' /tmp/rep/iszero.report.json > /tmp/emptied.json
+          reject /tmp/emptied.json /tmp/rep/iszero.r1cs
+          reject /tmp/rep/iszero.report.json /tmp/rep/division.r1cs
+          # A counterexample whose two witnesses are the same.
+          jq '.counterexample.witness_b = .counterexample.witness_a' /tmp/rep/decoder.report.json > /tmp/same.json
+          reject /tmp/same.json /tmp/rep/decoder.r1cs
+      - name: circomlib templates through --main, includes and an assumption
         run: |
           set -euo pipefail
-          node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json > /tmp/clean-cli.json
-          node bin/speedrunpapi.mjs scan examples/modsum-safe.circom --json --references > /tmp/research-cli.json
-          jq -e '.verdict == "Certified" and .certificate.theorem_ref == null and .certificate.two_stage_count == "76"' /tmp/clean-cli.json
-          jq -e '.verdict == "Certified" and (.certificate.theorem_ref | startswith("DOI "))' /tmp/research-cli.json
-          node bin/speedrunpapi.mjs verify /tmp/clean-cli.json
-          node bin/speedrunpapi.mjs verify /tmp/research-cli.json
-      - name: Warm four-source batch in one Node process
-        run: |
-          node bin/speedrunpapi.mjs scan --batch examples/batch-sources.json --json > /tmp/warm-batch.json
-          jq -e '.version == "0.6.4" and .summary.files == 4 and .summary.Certified == 4 and (.results | map(.source_checksum) | unique | length) == 4' /tmp/warm-batch.json
-      - name: Unsigned Action must fail
-        id: unsigned_action
+          git clone --quiet https://github.com/iden3/circomlib /tmp/circomlib
+          git -C /tmp/circomlib checkout --quiet cff5ab6288b55ef23602221694a6a38a0239dcc0
+          lib=/tmp/circomlib/circuits
+          verdict() { node bin/speedrunpapi.mjs scan "$@" --json > /tmp/lib.json || true; jq -r .verdict /tmp/lib.json; }
+          test "$(verdict $lib/comparators.circom --main 'LessThan(64)' -l $lib)" = Certified
+          test "$(verdict $lib/poseidon.circom --main 'Poseidon(2)' -l $lib)" = Certified
+          test "$(verdict $lib/multiplexer.circom --main 'Multiplexer(2, 4)' -l $lib)" = Certified
+          test "$(verdict $lib/multiplexer.circom --main 'Decoder(4)' -l $lib)" = Broken
+          test "$(verdict $lib/montgomery.circom --main 'MontgomeryAdd()' -l $lib)" = Broken
+          test "$(verdict $lib/babyjub.circom --main 'BabyAdd()' -l $lib)" = Unknown
+          test "$(verdict $lib/pedersen.circom --main 'Pedersen(8)' -l $lib)" = Broken
+          test "$(verdict $lib/pedersen.circom --main 'Pedersen(8)' -l $lib --assume-binary in)" != Broken
+          test "$(verdict $lib/sha256/sha256compression.circom --main 'Sha256compression()' -l $lib)" = Certified
+          jq -e '.circuit.constraints == 202784 and .proof.step_count > 190000 and .binding.flags == ["--r1cs","--sym","--O0"]' /tmp/lib.json
+      - name: Action passes on a deterministic circuit
+        uses: ./
+        with:
+          file: examples/iszero.circom
+      - name: Action fails on an under-constrained circuit
+        id: broken_action
         continue-on-error: true
         uses: ./
         with:
-          file: examples/modsum-safe.circom
-      - name: Enforce signed-CI policy
+          file: examples/division.circom
+      - name: Enforce the failure
         if: always()
         env:
-          ACTION_OUTCOME: ${{ steps.unsigned_action.outcome }}
+          ACTION_OUTCOME: ${{ steps.broken_action.outcome }}
         run: test "$ACTION_OUTCOME" = failure
-      - name: Broken case returns code 2
-        run: |
-          set +e
-          node bin/speedrunpapi.mjs scan examples/modsum-broken.circom --json > /tmp/broken.json
-          status=$?
-          set -e
-          test "$status" -eq 2
-          node -e 'let r=require("/tmp/broken.json"); if(r.verdict!=="Broken" || !r.counterexample) process.exit(1)'
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'

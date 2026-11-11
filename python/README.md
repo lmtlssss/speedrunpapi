@@ -1,9 +1,18 @@
 # speedrunpapi for Python
 
-The Python package supplies the same bundled ᑕ. analyzer as the npm and browser distributions. It requires Node.js 20 or later on `PATH` and works offline for local scans.
+Output-determinism analysis for Circom circuits and R1CS. This package installs the same bundled command-line tool as the npm distribution, plus an independent Python checker for its reports.
 
-Install with `pip install speedrunpapi` for the free scanner and hosted job commands, or `pip install 'speedrunpapi[onnx]'` to include the independent ONNX checker dependencies. Then run `speedrunpapi scan circuit.circom --json` or `speedrunpapi version`. Node.js 20+ must be installed on `PATH`. PyPI uses the repository's trusted publisher. The wheel includes the JavaScript client and the Python independent checker; it does not download executable code at run time.
+```sh
+pip install speedrunpapi
+speedrunpapi scan circuit.circom
+speedrunpapi scan circuit.circom --report circuit.report.json
+python -m speedrunpapi.verifiers.determinism circuit.r1cs circuit.report.json
+```
 
-The default JSON output carries proof data without paper citations. Add `--references` when research provenance is needed; source rechecking supports both forms.
+The scanner needs Node.js 20 or later on `PATH`, and the circom compiler for `.circom` input. The checker (`speedrunpapi.verifiers.determinism`) needs only the Python standard library: it parses the R1CS itself and replays the derivation or re-evaluates the counterexample without the scanner.
 
-Local scans and independent replay are free. Hosted jobs require a funded Colony API key. The v0.6.2 client checks nine bounded mathematical operators, including the M-06 shared-input masked carry counter. The repository includes four source-bound production mathematical result bundles with independently checked evidence. Replay them with `speedrunpapi check examples/m02-tap-span.math examples/m02-tap-span.result.json` and the matching M-03/M-04/M-06 files. Use `speedrunpapi quote model.onnx`, then `speedrunpapi optimize model.onnx --out candidate.onnx --proof-dir proof`, then `speedrunpapi verify-onnx proof/source.onnx proof/artifacts` to check the delivered candidate offline. A paid signed certificate requires a Colony API key. Native Bitcoin Script assembly/bytecode supports alternate-stack transfer and hash opcodes; RV32IM v2 records branches, jumps, aligned word loads and stores. BN254 R1CS v1 checks coupled full-rank linear constraints and exact square-zero elimination. Use `speedrunpapi verify result.json --source input.file` for an independent source recheck. Unsupported code and rank-deficient systems return `Unknown`.
+Full documentation: https://github.com/lmtlssss/speedrunpapi
+
+Versions before 0.7.1 classified sources by template name and keyword and could report `Certified` for a circuit whose outputs were unconstrained. Those results were not proofs. If you relied on one, scan again.
+
+`pip install 'speedrunpapi[onnx]'` adds the dependencies of the separate ONNX checker used by the hosted optimization jobs.

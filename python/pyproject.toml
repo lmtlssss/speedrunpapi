@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "speedrunpapi"
-version = "0.6.4"
-description = "ᑕ. exact arithmetic circuit verification; Python entry to the shared Node engine"
+version = "0.7.1"
+description = "Output-determinism analysis for Circom circuits and R1CS; Python entry to the shared Node engine, with an independent Python checker"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [{name = "Colony Technology"}]
 license-files = ["LICENSE.md"]
-keywords = ["circom", "r1cs", "bitvm", "zkvm", "verilog", "state contraction"]
+keywords = ["circom", "r1cs", "zero-knowledge", "under-constrained", "formal verification", "determinism"]
 classifiers = ["Programming Language :: Python :: 3", "Environment :: Console"]
 
 [project.urls]
@@ -25,7 +25,7 @@ speedrunpapi = "speedrunpapi.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["speedrunpapi", "speedrunpapi.verifiers", "speedrunpapi.verifiers.onnx"]
+packages = ["speedrunpapi", "speedrunpapi.verifiers", "speedrunpapi.verifiers.onnx", "speedrunpapi.verifiers.determinism"]
 
 [tool.setuptools.package-data]
 speedrunpapi = ["speedrunpapi.mjs", "colony-jobs.mjs"]

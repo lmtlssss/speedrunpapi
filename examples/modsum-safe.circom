@@ -1,17 +1,36 @@
 pragma circom 2.0.0;
-include "../lib/circomlib/bitify.circom";
 
-// Correct ModSum(n=4): a,b < 2^4 claimed via Num2Bits on a+b.
-// Ground truth: UNIQUE (sum,carry) for any field a,b that fit in n bits when
-// the n+1 bit decomposition is enforced. Picus public inputs: a,b.
-template ModSumSafe(n) {
+template Bits(n) {
+    signal input in;
+    signal output out[n];
+    var lc = 0;
+    var e2 = 1;
+    for (var i = 0; i < n; i++) {
+        out[i] <-- (in >> i) & 1;
+        out[i] * (out[i] - 1) === 0;
+        lc += out[i] * e2;
+        e2 = e2 + e2;
+    }
+    lc === in;
+}
+
+// a + b is decomposed into n + 1 bits; sum and carry are read off those
+// bits. Certified.
+template ModSum(n) {
     signal input a;
     signal input b;
     signal output sum;
     signal output carry;
-    component n2b = Num2Bits(n + 1);
-    n2b.in <== a + b;
-    carry <== n2b.out[n];
-    sum <== a + b - carry * (1 << n);
+    component d = Bits(n + 1);
+    d.in <== a + b;
+    var lc = 0;
+    var e2 = 1;
+    for (var i = 0; i < n; i++) {
+        lc += d.out[i] * e2;
+        e2 = e2 + e2;
+    }
+    sum <== lc;
+    carry <== d.out[n];
 }
-component main {public [a, b]} = ModSumSafe(4);
+
+component main = ModSum(4);

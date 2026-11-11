@@ -1,74 +1,119 @@
-name: 'ᑕ. Certified source check'
-description: 'Scan one or more source files and require an independently verified Ed25519 certificate for each result'
+name: 'speedrunpapi circuit determinism check'
+description: 'Check Circom circuits or R1CS files for under-constrained outputs. Fails on a checked counterexample.'
+branding:
+  icon: check-circle
+  color: gray-dark
 inputs:
   file:
-    description: 'Single source path. Use batch_manifest for multiple sources.'
+    description: 'A .circom or .r1cs path. Use batch_manifest for several files.'
     required: false
   batch_manifest:
-    description: 'JSON file array or newline-separated list of source paths. All files run in one warm process.'
+    description: 'JSON array or newline-separated list of paths.'
     required: false
+  main:
+    description: 'Instantiate this template as main, for example "LessThan(64)". For library files.'
+    required: false
+  include:
+    description: 'circom library directories, one per line.'
+    required: false
+  assume_binary:
+    description: 'Input signal patterns to treat as bits, one per line.'
+    required: false
+  fail_on_unknown:
+    description: 'Fail unless every file is Certified.'
+    required: false
+    default: 'false'
+  circom_version:
+    description: 'circom release to install when circom is not already on PATH.'
+    required: false
+    default: 'v2.2.3'
   api_key:
-    description: 'Funded Colony API key required to issue independently verifiable certificates'
-    required: true
+    description: 'Optional Colony API key. When set, a signed certificate is requested for every Certified or Broken result.'
+    required: false
   public:
-    description: 'Publish signed verdicts to the public registry'
+    description: 'Publish signed verdicts to the public registry.'
     required: false
     default: 'false'
 outputs:
   verdict:
-    description: 'Certified only when every source received a valid signed certificate'
+    description: 'Certified, Broken or Unknown (the worst result across all files).'
     value: ${{ steps.scan.outputs.verdict }}
   certificate_id:
-    description: 'Certificate ID for a single source, or empty for a batch'
+    description: 'Certificate ID for a single signed result, otherwise empty.'
     value: ${{ steps.scan.outputs.certificate_id }}
 runs:
   using: composite
   steps:
-    - name: Check every source and signature
+    - name: Install circom
+      shell: bash
+      env:
+        CIRCOM_VERSION: ${{ inputs.circom_version }}
+      run: |
+        set -euo pipefail
+        if command -v circom >/dev/null 2>&1; then circom --version; exit 0; fi
+        case "$(uname -s)-$(uname -m)" in
+          Linux-x86_64) asset=circom-linux-amd64 ;;
+          Darwin-x86_64|Darwin-arm64) asset=circom-macos-amd64 ;;
+          *) echo "::error::Install circom before this step on $(uname -s)-$(uname -m)"; exit 1 ;;
+        esac
+        mkdir -p "$RUNNER_TEMP/circom-bin"
+        curl -fsSL "https://github.com/iden3/circom/releases/download/${CIRCOM_VERSION}/${asset}" -o "$RUNNER_TEMP/circom-bin/circom"
+        # The default release is pinned by digest. Other versions are the caller's choice.
+        if [ "$CIRCOM_VERSION" = v2.2.3 ]; then
+          case "$asset" in
+            circom-linux-amd64) want=85342c7ff332d948df7c0c50ecf201e6129349aef550ce873f3c811b79fe53a3 ;;
+            circom-macos-amd64) want=e006332b3fe225f11c3b87bd2debbf5d7f568d6efbde25e5a6a12cd6988c8ecb ;;
+          esac
+          got=$( (sha256sum "$RUNNER_TEMP/circom-bin/circom" 2>/dev/null || shasum -a 256 "$RUNNER_TEMP/circom-bin/circom") | cut -d' ' -f1)
+          if [ "$got" != "$want" ]; then echo "::error::circom ${CIRCOM_VERSION} ${asset} digest mismatch"; exit 1; fi
+        fi
+        chmod +x "$RUNNER_TEMP/circom-bin/circom"
+        echo "$RUNNER_TEMP/circom-bin" >> "$GITHUB_PATH"
+        "$RUNNER_TEMP/circom-bin/circom" --version
+    - name: Scan
       id: scan
       shell: bash
       env:
         COLONY_SOURCE: ${{ inputs.file }}
         COLONY_BATCH_MANIFEST: ${{ inputs.batch_manifest }}
+        COLONY_MAIN: ${{ inputs.main }}
+        COLONY_INCLUDE: ${{ inputs.include }}
+        COLONY_ASSUME_BINARY: ${{ inputs.assume_binary }}
+        COLONY_FAIL_ON_UNKNOWN: ${{ inputs.fail_on_unknown }}
         COLONY_ACTION_PATH: ${{ github.action_path }}
         COLONY_API_KEY: ${{ inputs.api_key }}
         COLONY_CERT_PUBLIC: ${{ inputs.public }}
       run: |
-        set -euo pipefail
-        if [ -z "$COLONY_API_KEY" ]; then
-          echo "::error::A funded API key is required for a signed CI verdict"
-          exit 1
-        fi
-        if [ -n "$COLONY_BATCH_MANIFEST" ]; then
-          node "$COLONY_ACTION_PATH/bin/speedrunpapi.mjs" scan --batch "$COLONY_BATCH_MANIFEST" --json --require-signed > colony-analysis.json
-        elif [ -n "$COLONY_SOURCE" ]; then
-          node "$COLONY_ACTION_PATH/bin/speedrunpapi.mjs" scan "$COLONY_SOURCE" --json --require-signed > colony-analysis.json
-        else
-          echo "::error::Set file or batch_manifest"
-          exit 1
-        fi
-        jq -e 'if .results then all(.results[]; .verdict == "Certified" and .signed == true and .signature_algorithm == "Ed25519") else .verdict == "Certified" and .signed == true and .signature_algorithm == "Ed25519" end' colony-analysis.json > /dev/null
-        mkdir -p colony-certificates
-        jq -c 'if .results then .results[] else . end' colony-analysis.json | while IFS= read -r record; do
-          cert_id=$(jq -r '.certificate_id // empty' <<< "$record")
-          source_file=$(jq -r '.file // empty' <<< "$record")
-          if [ -z "$cert_id" ] || [ -z "$source_file" ]; then
-            echo "::error::Unsigned or unbound source result"
-            exit 1
-          fi
-          curl -fLsS "https://api.colony.technology/v1/cert/$cert_id" -o "colony-certificates/$cert_id.json"
-          node "$COLONY_ACTION_PATH/verifiers/cert/verify.mjs" "colony-certificates/$cert_id.json" "$source_file"
-        done
-        echo 'verdict=Certified' >> "$GITHUB_OUTPUT"
-        if [ -z "$COLONY_BATCH_MANIFEST" ]; then
-          echo "certificate_id=$(jq -r '.certificate_id' colony-analysis.json)" >> "$GITHUB_OUTPUT"
-        fi
-    - name: Upload analysis and certificates
+        set -uo pipefail
+        args=()
+        if [ -n "$COLONY_BATCH_MANIFEST" ]; then args+=(--batch "$COLONY_BATCH_MANIFEST")
+        elif [ -n "$COLONY_SOURCE" ]; then args+=("$COLONY_SOURCE")
+        else echo "::error::Set file or batch_manifest"; exit 1; fi
+        if [ -n "$COLONY_MAIN" ]; then args+=(--main "$COLONY_MAIN"); fi
+        while IFS= read -r dir; do [ -n "$dir" ] && args+=(--include "$dir"); done <<< "$COLONY_INCLUDE"
+        while IFS= read -r pat; do [ -n "$pat" ] && args+=(--assume-binary "$pat"); done <<< "$COLONY_ASSUME_BINARY"
+        if [ -n "$COLONY_API_KEY" ]; then args+=(--require-signed); fi
+        mkdir -p colony-reports
+        if [ -n "$COLONY_BATCH_MANIFEST" ]; then args+=(--report colony-reports); else args+=(--report colony-reports/result.report.json); fi
+        node "$COLONY_ACTION_PATH/bin/speedrunpapi.mjs" scan "${args[@]}" --json > colony-analysis.json
+        status=$?
+        jq -r '(if .results then .results[] else . end) | "\(.verdict)  \(.file)" + (if .reason then "  (" + .reason + ")" else "" end) + (if .counterexample then "  differs: " + ([.counterexample.differing_outputs[].name] | .[0:4] | join(", ")) else "" end)' colony-analysis.json || true
+        case "$status" in
+          0) verdict=Certified ;;
+          2) verdict=Broken ;;
+          3) verdict=Unknown ;;
+          *) echo "::error::speedrunpapi failed (exit $status)"; cat colony-analysis.json || true; exit 1 ;;
+        esac
+        echo "verdict=$verdict" >> "$GITHUB_OUTPUT"
+        echo "certificate_id=$(jq -r 'if .results then "" else (.certificate_id // "") end' colony-analysis.json)" >> "$GITHUB_OUTPUT"
+        if [ "$verdict" = Broken ]; then echo "::error::An output signal is not fixed by the inputs. See the counterexample in colony-analysis.json."; exit 1; fi
+        if [ "$verdict" = Unknown ] && [ "$COLONY_FAIL_ON_UNKNOWN" = true ]; then echo "::error::Not every circuit was Certified."; exit 1; fi
+    - name: Upload analysis and reports
       if: always()
       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
       with:
-        name: colony-certified-evidence
+        name: speedrunpapi-determinism
         path: |
           colony-analysis.json
-          colony-certificates/
+          colony-reports/
         if-no-files-found: warn
