@@ -1,6 +1,6 @@
 # Arithmetic compilers
 
-Builds `a * b`, `a * a`, `floor(sqrt(a))` and `floor(sqrt(a*a + b*b))` as 6-input LUT networks, with proofs.
+Builds `a * b`, `a * a`, `a / b` with remainder, `floor(sqrt(a))` and `floor(sqrt(a*a + b*b))` as 6-input LUT networks, with proofs.
 
 ## Method
 
@@ -12,6 +12,7 @@ Each block size is built as a leaf and as a split; the smaller network is kept.
 
 Square root: non-restoring rows `r' = 4r + pair + 3 + 4 (Q xnor s)`, with `s` the sign of `r`. One expression covers the add row and the subtract row, and each bit of a row is one LUT. The top LUT of a row emits the root bit. The last row builds carries only.
 Hypotenuse: two squarers, one addition, then the square-root rows.
+Divider: non-restoring rows on a growing word. Row `j` keeps the remainder mod `2^(j+1)`; its sign is `[b >= 2^j]` or the top bit. A 64-bit divider uses 2,144 row LUTs where a full-width array uses 4,160.
 
 ## Results
 
@@ -23,6 +24,7 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL arithmetic bench
 | `square`, 64-bit | 2894 LUT-6, 192 levels | 2497 LUT-6, 127 levels | `epfl/square.blif` |
 | `sqrt`, 128-bit | 2958 LUT-6 | 2174 LUT-6 | `epfl/sqrt.blif` |
 | `hyp`, 128-bit sides | 36451 LUT-6 | 24898 LUT-6 | `epfl/hyp.blif.gz` |
+| `div`, 64 / 64 | 3082 LUT-6 | 2287 LUT-6 | `epfl/div.blif` |
 
 ## Run
 
@@ -36,7 +38,9 @@ python3 hyp_compiler.py --n 128 --out out/
 python3 independent_sqrt_checker.py --netlist epfl/sqrt.blif --derivation epfl/sqrt.derivation.json
 gunzip -k epfl/hyp.blif.gz epfl/hyp.derivation.json.gz
 python3 independent_sqrt_checker.py --netlist epfl/hyp.blif --derivation epfl/hyp.derivation.json
-python3 test_mul.py && python3 test_sqrt.py
+python3 div_compiler.py --n 64 --out out/
+python3 independent_div_checker.py --netlist epfl/div.blif --derivation epfl/div.derivation.json
+python3 test_mul.py && python3 test_sqrt.py && python3 test_div.py
 ```
 
 ## Proof
@@ -50,6 +54,8 @@ python3 test_mul.py && python3 test_sqrt.py
 The 64 x 64 multiplier checks in 0.5 s and the 64-bit squarer in 0.3 s on an Apple M1.
 `independent_sqrt_checker.py` proves the square root and the hypotenuse. Its header states the recurrence and the three-line argument that it yields `Q^2 <= X < (Q+1)^2`. For each row it rebuilds the row's polynomial from the netlist and compares it with the recurrence; for the hypotenuse it first proves the radicand word equals `(a*a + b*b) mod 2^256` by the block replay above. Run time: 0.3 s and 6 s.
 `test_sqrt.py` checks the recurrence against `isqrt` for every operand up to 18 bits, simulates small circuits exhaustively and removes minterms one at a time.
+
+`independent_div_checker.py` proves the divider the same way: every row's polynomial equals the recurrence in its header, every quotient LUT is the stated NOR over `b_j .. b_63`, and the remainder row equals `r + s*b`. `test_div.py` checks the recurrence against integer division for every operand pair up to 8 bits.
 
 `test_mul.py` runs exhaustive simulation at small widths and removes minterms one at a time: 191 altered 8-bit netlists, none accepted with a wrong product.
 
