@@ -1,4 +1,4 @@
-# udiv · unsigned divider
+# udiv, udivf · unsigned dividers
 
 `udiv.v`: `q = a / b`, `r = a % b`, combinational, any `WIDTH`. `b = 0` gives `q` = all ones and `r = a`.
 
@@ -31,10 +31,29 @@ Xilinx 7-series, synthesis (`synth_xilinx`):
 
 The LUT-only form of the same recurrence is the EPFL `div` netlist in `../multiplier/` at 2287 LUT-6; the published best is 3082.
 
+## udivf
+
+`udivf32.v`, `udivf64.v`: the same function at lower delay. `python3 udivf_gen.py WIDTH > udivfWIDTH.v` writes any width from 12 bits.
+
+Normalise the divisor: `dn = b << lzc(b)`. A table read from the top 12 bits of `dn` gives `m` with `m * dn` in `(2^P - 2^(P-10), 2^P]`. Let `eps = 2^P - m * dn`.
+`t * 2^P = t * (m * dn) + t * eps`. The top field `t` of the running value `m * a << lzc(b)` is removed and `t * eps` is added: 8 quotient bits per step.
+The quotient is the sum of the fields. `a - q * b` lies in `[0, 3b)` and selects the result.
+
+Lattice ECP5, placed and routed, same flow:
+
+| Width | `/` and `%` | `udiv` | `udivf` |
+| --- | --- | --- | --- |
+| 32 | 139.7 ns, 2196 cells | 121.8 ns, 1417 cells | 87.0 ns, 2950 cells, 15 MULT18X18D |
+| 64 | 393.7 ns, 12246 cells | 292.4 ns, 4889 cells | 181.2 ns, 5161 cells, 49 MULT18X18D |
+
+`sh prove_udivf.sh` proves `udivf` equal to `/` and `%` at widths 8, 10 and 12 (steps of 2, 3 and 4 bits) with Yosys's SAT solver. Widths 16, 32 and 64 are simulated against the operators on 3,000 vectors each.
+`../multiplier/FoldDivision.lean` proves the step, the bound on the running value and the final selection for every width.
+
 ## Use
 
 ```verilog
 udiv #(.WIDTH(32)) u (.a(a), .b(b), .q(q), .r(r));
+udivf64 f (.a(a), .b(b), .q(q), .r(r));
 ```
 
 ## Proof
