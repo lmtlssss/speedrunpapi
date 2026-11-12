@@ -10,6 +10,7 @@ s = [r < 0], pair = next two bits:
 For s = 0 the added term is -(4Q+1); for s = 1 it is +(4Q+3).  Both give r' = X' - (2Q+1)^2, so
     r >= 0  =>  r = X - Q^2,          r < 0  =>  r = X - (Q+1)^2,          -(2Q+1) <= r <= 2Q
 is kept by every row; hence Q^2 <= X < (Q+1)^2 after the last row.  |r'| < 2^(k+1) fits k+2 bits.
+RetainedSignSqrt.lean proves this for every width in Lean 4 (theorem sqrt_correct).
 
 This program checks that the netlist is that recurrence.  Per row it rebuilds, from the netlist,
 the polynomial of sum 2^c r'_c over the row's operand wires (mod 2^(k+2)) and compares it with the

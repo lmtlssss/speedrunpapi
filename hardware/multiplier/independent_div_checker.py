@@ -10,6 +10,7 @@ Without the modulus this is non-restoring division: r_j = 2 r_{j-1} + a_bit - b 
 s = 1, with -b <= r_j < b, and r_j >= 0 exactly when the j-th quotient bit is 1.  If b >= 2^j then
 b > A_j, the quotient prefix is 0 and r_j < 0.  If b < 2^j then |r_j| < 2^j, so j+1 bits hold r_j and
 its top bit is the sign.  The kept word is always r_j mod 2^(j+1), which is all the next row reads.
+GrowingWordDivision.lean proves this for every width in Lean 4 (theorems div_correct, div_zero).
 remainder = r_n + (s_n ? b : 0)  (mod 2^n).  For b = 0 no row goes negative.
 
 This program checks that the netlist is that recurrence: per row, the polynomial of the row's outputs
