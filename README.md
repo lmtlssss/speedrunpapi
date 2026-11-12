@@ -206,6 +206,7 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | `sqrt`, size | 2958 LUT-6 | 2174 LUT-6 |
 | `hyp`, size | 36451 LUT-6 | 24898 LUT-6 |
 | `div`, size | 3082 LUT-6 | 2287 LUT-6 |
+| `div`, depth | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 |
 
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
 Every netlist has an independent checker; the division and square-root recurrences are proved in Lean 4.
