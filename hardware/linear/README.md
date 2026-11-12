@@ -16,22 +16,29 @@ Wide bus, variable length. One network computes the register after the whole bus
 
 ## Results
 
-CRC-32, polynomial `0x04C11DB7`, register after one bus word. LUT-6 counts. Yosys 0.70 `synth_xilinx` on the XOR equations.
+CRC-32, polynomial `0x04C11DB7`, register after one bus word. LUT-6 counts.
+Yosys: 0.70 `synth_xilinx` on the XOR equations. ISE: Xilinx ISE 14.6 on the XOR equations, Virtex-7, as printed in Závodník, Kekely, Puš, "CRC Based Hashing in FPGA Using DSP Blocks" (CESNET), Table I.
 
-| Bus | Yosys | This compiler | `--depth` at the minimum |
+| Bus | Yosys | ISE | This compiler | `--depth` at the minimum |
+| --- | --- | --- | --- | --- |
+| 64 bits | 378 | | 171, 5 levels | 181, 3 levels |
+| 128 bits | 687 | 347 | 270, 5 levels | 265, 4 levels |
+| 256 bits | 1223 | 711 | 439, 5 levels | 442, 4 levels |
+| 512 bits | 2344 | 1314 | 731, 5 levels | 803, 4 levels |
+| 1024 bits | 4662 | 2433 | 1280, 6 levels | 1296, 5 levels |
+
+CRC-32 of a bus with any number of valid bytes (`crc_gen.py`). The bytes past the valid ones arrive as zero.
+Reference: Zhang et al., Electronics 13(22):4399, 2024, Table 2, their design on Virtex UltraScale+ with Vivado 2020.2; that module contains its data shifters.
+
+| Bus | Zhang et al. | `crc_gen.py` | File |
 | --- | --- | --- | --- |
-| 64 bits | 378 | 171, 5 levels | 181, 3 levels |
-| 128 bits | 687 | 270, 5 levels | 265, 4 levels |
-| 256 bits | 1223 | 439, 5 levels | 442, 4 levels |
-| 512 bits | 2344 | 731, 5 levels | 803, 4 levels |
-| 1024 bits | 4662 | 1280, 6 levels | 1296, 5 levels |
+| 8 bytes | 510 LUT | 390 LUT-6, 15 levels | `crc32/crc32_b8.v` |
+| 16 bytes | 818 | 592, 19 levels | |
+| 32 bytes | 1550 | 865, 23 levels | |
+| 64 bytes | 3519 | 1256, 27 levels | `crc32/crc32_b64.v` |
+| 128 bytes | 5981 | 1907, 32 levels | |
 
-CRC-32 of a bus with any number of valid bytes:
-
-| Bus | One CRC per length and a select, Yosys | `crc_gen.py` | Files |
-| --- | --- | --- | --- |
-| 8 bytes | 1679 LUT-6 | 390 LUT-6, 15 levels | `crc32/crc32_b8.v` |
-| 64 bytes | | 1256 LUT-6, 27 levels | `crc32/crc32_b64.v` |
+One CRC per length followed by a select, 8-byte bus, under Yosys: 1679 LUT-6.
 
 Reed-Solomon (544,514) over GF(2^10), encoder register update for 4 symbols per clock, 300 outputs of 340 inputs: Yosys 2576 LUT-6, this compiler 971 (`rs/`).
 
