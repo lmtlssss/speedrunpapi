@@ -69,6 +69,8 @@ The 64 x 64 multiplier checks in 0.5 s and the 64-bit squarer in 0.3 s on an App
 
 `independent_depth_checker.py` proves the depth builds in two steps: the two rows left by the counters sum to `a*b` (polynomial identity rebuilt from the netlist), and the final adder equals a ripple adder of those rows (ABC `cec`). Under one second each; needs `yosys-abc` on the path.
 
+The two recurrences themselves are proved in Lean 4 for every width, core library only: `GrowingWordDivision.lean` (`Colony.div_correct`: the rows return `a / b` and `a % b`; `Colony.div_zero`) and `RetainedSignSqrt.lean` (`Colony.sqrt_correct`: `Q*Q <= X < (Q+1)*(Q+1)`). Run `lean GrowingWordDivision.lean`; each checks in under three seconds. The netlist checkers prove every row equals its recurrence, and these files prove the recurrence.
+
 `test_mul.py` runs exhaustive simulation at small widths and removes minterms one at a time: 191 altered 8-bit netlists, none accepted with a wrong product.
 
 ## Paid evaluation
