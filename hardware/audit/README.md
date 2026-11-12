@@ -18,6 +18,18 @@ Every row below has a reproducer that fits on one line.
 | OpenCores `double_fpu` | div | 20,000 | 903 | |
 | OpenCores `fpu` (single) | add, sub, mul, div | 80,000 | 7 | no maintained upstream |
 | [openrisc/or1200](https://github.com/openrisc/or1200) | `or1200_fpu_arith` | 80,000 | 152 | |
+| [stnolting/neorv32](https://github.com/stnolting/neorv32) | Zfinx FPU, five rounding modes | 987,401 | 1,004 | [#1689](https://github.com/stnolting/neorv32/issues/1689) |
+| stnolting/neorv32 | multiply/divide unit, serial and fast | 2,000,000 per variant | 0 | |
+| [chipsalliance/Cores-VeeR-EH2](https://github.com/chipsalliance/Cores-VeeR-EH2) | 1/2/3/4-bit dividers, XLEN 64 | 1,000,000 each | 12,200 to 13,600 each | [#60](https://github.com/chipsalliance/Cores-VeeR-EH2/issues/60) |
+| chipsalliance/Cores-VeeR-EH2 | all five dividers at XLEN 32, legacy at XLEN 64 | 4,000,000 each | 0 | |
+| chipsalliance/Cores-VeeR-EL2 | all five dividers, with cancels | 4,000,000 each | 0 | |
+| chipsalliance/Cores-VeeR-EH1 | divider, fast path on and off | 4,000,000 each | 0 | |
+| [BrunoLevy/learn-fpga](https://github.com/BrunoLevy/learn-fpga) | PetitBateau FPU: FCVT.S.WU | 54,099 | 19,340 | [#185](https://github.com/BrunoLevy/learn-fpga/issues/185) |
+| BrunoLevy/learn-fpga | PetitBateau: FEQ, FLT, FLE | 77,717 | 513 | #185 |
+| BrunoLevy/learn-fpga | PetitBateau: add, sub, mul, fused, FCVT.W[U].S, min/max, sign injection | 1,200,000 | 0 | reference follows the documented deviations |
+| [YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) | `picorv32_pcpi_fast_mul`, `EXTRA_INSN_FFS = 1` | 1,000,000 | 702,633 | repository archived |
+| YosysHQ/picorv32 | `picorv32_pcpi_div`, `picorv32_pcpi_mul`, `picorv32_pcpi_fast_mul` at its defaults | 2,000,000 each | 0 | |
+| ultraembedded/biriscv, ultraembedded/riscv | divider, multiplier | 2,000,000 each | 0 | |
 | T-Head E906 | `pa_fpu_top`: div, sqrt, mul, add, sub, fused multiply-add, conversions | 1,100,000 per operation, five rounding modes; 10 to 20 million more for each of div, sqrt, mul, add | 0 values | underflow flag, reported |
 | T-Head C906 | `aq_vpu_top`: the same operations in double, single and half | 1,100,000 per operation and format | 0 values | underflow flag, not reported for C906 |
 | T-Head C910 | `ct_vfdsu_top`: div, sqrt in double, single and half | 1,100,000 per operation and format; 30 million more in double and single | 0 values | underflow flag, reported |
@@ -66,6 +78,37 @@ mul  0x46ffffff * 0x8000001f    IEEE 0x800f8000    core 0x800001f0
 div  0x00717f69 / 0xff40f8f5    IEEE 0x80000000    core 0x80969150    45 of 20,000 with a subnormal dividend
 mul  0xb4800000 * 0x0b7fffff    IEEE 0x80800000    core 0x80000000    rounds up to the smallest normal
 ```
+
+**neorv32 Zfinx FPU.** The float-to-integer path drops the mantissa bit shifted out for inputs in (0.5, 1), so 0.5 + 1 ulp looks like a tie. In round-down mode the zero sum of two zeros takes the wrong sign.
+
+```
+fcvt.w.s  0x3f000001 (0.5 + 2^-24)    expected 1     core 0
+fsub.s    (+0) - (+0), round down     expected -0    core +0
+```
+
+**VeeR EH2, XLEN 64.** The leading-sign count of an all-ones operand is 0 in the 64-bit table (31 in the 32-bit one), so a divisor of -1 skips too many iterations. RV64 on EH2 is in progress upstream.
+
+```
+DIV  0x0000000000000010 / 0xffffffffffffffff    expected 0xfffffffffffffff0    1-bit divider 0xfffffffffffffffd
+DIV  0x8000000000000000 / 0xffffffffffffffff    expected 0x8000000000000000    4-bit divider 0x00000000000008ff
+```
+
+**FemtoRV PetitBateau.**
+
+```
+fcvt.s.wu  0x80000000         expected 0x4f000000 (2^31)    core 0x4f800000 (2^32)
+feq(+0, -0)                   expected 1                    core 0
+0x00800000 / 0x00800006       expected about 0x3f7ffff4     core 0x3ffffff4, twice the quotient
+0x3f000000 / 0x7f7fffff       expected 0 (flushed)          core 0x7f800000 (inf)
+```
+
+**picorv32 `picorv32_pcpi_fast_mul`, `EXTRA_INSN_FFS = 1`.** The registered instruction-valid stays high one clock after `pcpi_valid` drops; the multiplier restarts on stale operands. The core's own instance uses the defaults, which are right.
+
+```
+mul x5, 3, 5; mul x6, 7, 11; mul x7, 3, 11    expected 15, 77, 33    core 15, 15, 33
+```
+
+Fix: `EXTRA_INSN_FFS ? (pcpi_insn_valid_q && pcpi_valid) : pcpi_insn_valid` at line 2354. 0 wrong of 1,000,000 after.
 
 **T-Head E906, C906, C910.** Values are right in every run. The underflow flag is not raised when a tiny inexact result rounds up to the smallest normal number.
 
