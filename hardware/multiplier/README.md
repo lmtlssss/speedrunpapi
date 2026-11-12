@@ -13,6 +13,7 @@ Each block size is built as a leaf and as a split; the smaller network is kept.
 Square root: non-restoring rows `r' = 4r + pair + 3 + 4 (Q xnor s)`, with `s` the sign of `r`. One expression covers the add row and the subtract row, and each bit of a row is one LUT. The top LUT of a row emits the root bit. The last row builds carries only.
 Hypotenuse: two squarers, one addition, then the square-root rows.
 Depth builds (`mul_depth.py`): level 1 is the recoded row bits, or three folded products per counter for the squarer. Counters then cut every column to a common target height per level, so no carry waits for a later level. The last stage is a radix-3 prefix adder whose final carry combine sits inside the sum LUTs.
+Fold divider (`div_fold.py`): the divisor is normalised and a table value `M` puts `D = M * dn` just below a power of two, `eps = 2^P - D`. The top field `T` of the running value then folds back as `T * eps`, because `T * 2^P = T * D + T * eps`. The value stays in two rows and `T` is their pair of top fields, read as radix-4 digits of `eps` and `3 eps`: one fold is 4 LUT levels and retires 8 quotient bits, with no digit selection inside the loop. `a - Q * b` runs in a second heap on the same fields and ends below `3b`.
 Divider: non-restoring rows on a growing word. Row `j` keeps the remainder mod `2^(j+1)`; its sign is `[b >= 2^j]` or the top bit. A 64-bit divider uses 2,144 row LUTs where a full-width array uses 4,160.
 
 ## Results
@@ -33,6 +34,7 @@ Depth builds, against the EPFL best depth results:
 | --- | --- | --- | --- |
 | `multiplier`, 64 x 64 | 25 levels, 6381 LUT-6 | 11 levels, 5178 LUT-6 | `epfl/multiplier_depth.blif` |
 | `square`, 64-bit | 10 levels, 3690 LUT-6 | 10 levels, 3358 LUT-6 | `epfl/square_depth.blif` |
+| `div`, 64 / 64 | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 | `epfl/div_depth.blif.gz` |
 
 ## Run
 
@@ -50,7 +52,11 @@ python3 div_compiler.py --n 64 --out out/
 python3 mul_depth.py --n 64 --out out/ && python3 mul_depth.py --n 64 --square --out out/
 python3 independent_depth_checker.py --netlist epfl/multiplier_depth.blif --derivation epfl/multiplier_depth.derivation.json
 python3 independent_div_checker.py --netlist epfl/div.blif --derivation epfl/div.derivation.json
-python3 test_mul.py && python3 test_sqrt.py && python3 test_div.py && python3 test_depth.py
+python3 div_fold.py --n 64 --b 8 --out out/
+gunzip -k epfl/div_depth.blif.gz epfl/div_depth.derivation.json.gz
+python3 independent_fold_checker.py --netlist epfl/div_depth.blif --derivation epfl/div_depth.derivation.json
+lean FoldDivision.lean
+python3 test_mul.py && python3 test_sqrt.py && python3 test_div.py && python3 test_depth.py && python3 test_fold.py
 ```
 
 ## Proof
@@ -68,6 +74,8 @@ The 64 x 64 multiplier checks in 0.5 s and the 64-bit squarer in 0.3 s on an App
 `independent_div_checker.py` proves the divider the same way: every row's polynomial equals the recurrence in its header, every quotient LUT is the stated NOR over `b_j .. b_63`, and the remainder row equals `r + s*b`. `test_div.py` checks the recurrence against integer division for every operand pair up to 8 bits.
 
 `independent_depth_checker.py` proves the depth builds in two steps: the two rows left by the counters sum to `a*b` (polynomial identity rebuilt from the netlist), and the final adder equals a ripple adder of those rows (ABC `cec`). Under one second each; needs `yosys-abc` on the path.
+
+`independent_fold_checker.py` proves the fold divider from the netlist: the leading-zero count against a counter (ABC `cec`); every shifter LUT as a 4:1 select; the table on all 2,048 readings, with `0 <= 2^75 - M * dn < 2^65` for every `dn` under each reading; each heap as a polynomial identity over its wires, exact for the folds; each adder against a ripple adder (ABC `cec`); the bound `W' < 3 * 2^p` after each fold; the output selection. 4 s for 64 bits. `FoldDivision.lean` proves the fold step, the bound, `Q*b <= a < Q*b + 3b` after the last field and the selection among `R, R - b, R - 2b` for all integers. `test_fold.py` checks 8- and 9-bit builds on every input and removes minterms one at a time: 120 altered netlists, none accepted with a wrong result.
 
 The two recurrences themselves are proved in Lean 4 for every width, core library only: `GrowingWordDivision.lean` (`Colony.div_correct`: the rows return `a / b` and `a % b`; `Colony.div_zero`) and `RetainedSignSqrt.lean` (`Colony.sqrt_correct`: `Q*Q <= X < (Q+1)*(Q+1)`). Run `lean GrowingWordDivision.lean`; each checks in under three seconds. The netlist checkers prove every row equals its recurrence, and these files prove the recurrence.
 
