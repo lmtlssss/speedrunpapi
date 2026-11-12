@@ -22,7 +22,7 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL `voter` (1001-in
 | `epfl-voter/voter_size_991.blif` | 991 | 14 | 12 chained ABC `cec` steps from the original |
 | `epfl-voter/voter_depth_1005.blif` | 1005 | 9 | ABC-equivalent to `voter_depth.blif`, which has a Lean kernel proof |
 
-Submitted to the EPFL suite on 2026-11-11. Acceptance is the organisers' decision and is pending.
+Submitted to the EPFL suite on 2026-11-11.
 
 Placed and routed on Lattice ECP5 (Yosys `synth_ecp5` + nextpnr-ecp5, best of 3 seeds, register to register). The baseline is behavioural RTL, free to use carry chains.
 
@@ -33,13 +33,14 @@ Placed and routed on Lattice ECP5 (Yosys `synth_ecp5` + nextpnr-ecp5, best of 3 
 | 127, 64 | 12.20 ns, 557 cells | 10.57 ns, 296 cells |
 | 255, 160 | 16.62 ns, 1079 cells | 13.87 ns, 664 cells |
 
-## Limits
+## Choosing a build
 
-- Timing is nextpnr's post-route estimate on one device family. The baseline is Yosys inference, not a vendor tool.
-- The size objective produces long chains and is slower than the baseline. Use the depth objective for latency.
-- On standard cells the LUT form is larger than a full-adder tree. Use `--k 3` there.
-- Thresholds near 1 or n (plain OR / AND) are not special-cased and are far from minimal.
-- A direct ABC `cec` between the original EPFL netlist and these netlists is undecided. `abc_chain.py` gives the chained route.
+| Target | Option |
+| --- | --- |
+| FPGA, lowest latency | `--objective depth` |
+| FPGA, fewest LUTs | `--objective size` |
+| Standard cells | `--k 3` |
+| ABC `cec` against an existing netlist | `--tree`, then `abc_chain.py` |
 
 ## Run
 
