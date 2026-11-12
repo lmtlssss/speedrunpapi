@@ -191,4 +191,23 @@ The Verilog, INT8, ONNX-text and carry-graph classifiers are removed and those i
 
 The hosted-job client (`run`, `solve`, `quote`, `optimize`, `status`, `result`, `check`) and the offline ONNX checker (`verify-onnx`) are unchanged in this release. See [docs/hosted-jobs.md](docs/hosted-jobs.md). The [SCITT claim profile](standards/scitt-exact-computation/) is an individual technical proposal and has not been submitted to the IETF Datatracker.
 
+## Hardware
+
+The same mathematics builds logic. Compilers, netlists and proofs are under [`hardware/`](hardware/).
+
+| EPFL benchmark | Published best | Colony |
+| --- | --- | --- |
+| `voter`, size | 1145 LUT-6 | 987 LUT-6 |
+| `voter`, depth | 11 levels | 9 levels |
+| `multiplier`, size | 4282 LUT-6 | 3654 LUT-6 |
+| `multiplier`, depth | 25 levels | 11 levels |
+| `square`, size | 2894 LUT-6 | 2497 LUT-6 |
+| `square`, depth | 10 levels, 3690 LUT-6 | 10 levels, 3358 LUT-6 |
+| `sqrt`, size | 2958 LUT-6 | 2174 LUT-6 |
+| `hyp`, size | 36451 LUT-6 | 24898 LUT-6 |
+| `div`, size | 3082 LUT-6 | 2287 LUT-6 |
+
+[`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
+Every netlist has an independent checker; the division and square-root recurrences are proved in Lean 4.
+
 [Terms](https://colony.technology/terms) · [Releases](https://github.com/lmtlssss/speedrunpapi/releases)
