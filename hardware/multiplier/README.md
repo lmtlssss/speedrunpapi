@@ -1,6 +1,6 @@
-# Multiplier and squarer compiler
+# Arithmetic compilers
 
-Builds `a * b` and `a * a` as 6-input LUT networks, with a proof.
+Builds `a * b`, `a * a`, `floor(sqrt(a))` and `floor(sqrt(a*a + b*b))` as 6-input LUT networks, with proofs.
 
 ## Method
 
@@ -10,6 +10,9 @@ Leaves are unsigned radix-4 rows over `X`, `2X` and one shared `3X` word. Square
 Every addition is one LUT per bit. The carry into a column is recovered from the previous column's wires and its sum bit, so no carry wire exists.
 Each block size is built as a leaf and as a split; the smaller network is kept.
 
+Square root: non-restoring rows `r' = 4r + pair + 3 + 4 (Q xnor s)`, with `s` the sign of `r`. One expression covers the add row and the subtract row, and each bit of a row is one LUT. The top LUT of a row emits the root bit. The last row builds carries only.
+Hypotenuse: two squarers, one addition, then the square-root rows.
+
 ## Results
 
 Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL arithmetic benchmarks, lsils/benchmarks best size results, 2026.
@@ -18,6 +21,8 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL arithmetic bench
 | --- | --- | --- | --- |
 | `multiplier`, 64 x 64 | 4282 LUT-6, 229 levels | 3654 LUT-6, 131 levels | `epfl/multiplier.blif` |
 | `square`, 64-bit | 2894 LUT-6, 192 levels | 2497 LUT-6, 127 levels | `epfl/square.blif` |
+| `sqrt`, 128-bit | 2958 LUT-6 | 2174 LUT-6 | `epfl/sqrt.blif` |
+| `hyp`, 128-bit sides | 36451 LUT-6 | 24898 LUT-6 | `epfl/hyp.blif.gz` |
 
 ## Run
 
@@ -26,7 +31,12 @@ python3 mul_compiler.py --n 64 --out out/
 python3 mul_compiler.py --n 64 --square --out out/
 python3 independent_mul_checker.py --netlist epfl/multiplier.blif --derivation epfl/multiplier.derivation.json
 python3 independent_mul_checker.py --netlist epfl/square.blif --derivation epfl/square.derivation.json
-python3 test_mul.py
+python3 sqrt_compiler.py --m 64 --out out/
+python3 hyp_compiler.py --n 128 --out out/
+python3 independent_sqrt_checker.py --netlist epfl/sqrt.blif --derivation epfl/sqrt.derivation.json
+gunzip -k epfl/hyp.blif.gz epfl/hyp.derivation.json.gz
+python3 independent_sqrt_checker.py --netlist epfl/hyp.blif --derivation epfl/hyp.derivation.json
+python3 test_mul.py && python3 test_sqrt.py
 ```
 
 ## Proof
@@ -38,6 +48,9 @@ python3 test_mul.py
 3. The last word is the output vector. Its polynomial must be `a*b`.
 
 The 64 x 64 multiplier checks in 0.5 s and the 64-bit squarer in 0.3 s on an Apple M1.
+`independent_sqrt_checker.py` proves the square root and the hypotenuse. Its header states the recurrence and the three-line argument that it yields `Q^2 <= X < (Q+1)^2`. For each row it rebuilds the row's polynomial from the netlist and compares it with the recurrence; for the hypotenuse it first proves the radicand word equals `(a*a + b*b) mod 2^256` by the block replay above. Run time: 0.3 s and 6 s.
+`test_sqrt.py` checks the recurrence against `isqrt` for every operand up to 18 bits, simulates small circuits exhaustively and removes minterms one at a time.
+
 `test_mul.py` runs exhaustive simulation at small widths and removes minterms one at a time: 191 altered 8-bit netlists, none accepted with a wrong product.
 
 ## Paid evaluation

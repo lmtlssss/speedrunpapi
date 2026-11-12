@@ -216,6 +216,64 @@ def bounds(p):
     return lo, hi
 
 
+def replay(polys, words, blocks, used, modular=None):
+    """Replays the blocks.  Returns an error dict, or None with words/values filled in.
+    modular names one block whose word is the value mod 2^width instead of the value."""
+    values, lengths, last = {}, {}, None
+    for blk in blocks:
+        bid, width, out = blk["id"], blk["width"], blk["out"]
+        if bid in words or type(width) is not int or width < 1 or len(out) != width:
+            return {"ok": False, "reason": "block shape " + str(bid)}
+        mod = 1 << width
+        ops, syms = [], []
+        for op in blk["operands"]:
+            src, lo, hi = op["word"], op["lo"], op["hi"]
+            if src not in words or not (0 <= lo < hi <= len(words[src])):
+                return {"ok": False, "reason": "operand of " + bid}
+            ops.append(words[src][lo:hi])
+            syms.append({((src, lo, hi),): 1})
+        r = BitPoly(mod)
+        limit = 64 * (len(blk["luts"]) + width * width + 64)
+        for c, a in enumerate(out):
+            for mono, k in atom_poly(a).items():
+                r.add(mono, k << c)
+        for name in reversed(blk["luts"]):
+            if name not in polys or name in used:
+                return {"ok": False, "reason": "LUT list of " + bid}
+            used.add(name)
+            r.substitute(name, polys[name])
+            if len(r.terms) > limit:
+                return {"ok": False, "reason": "block %s: polynomial does not close" % bid}
+        expect, value = {}, {}
+        for coeff, idx in blk["expr"]:
+            if type(coeff) is not int or not idx or len(idx) > 2 or any(not (0 <= i < len(ops)) for i in idx):
+                return {"ok": False, "reason": "expression of " + bid}
+            t, v = {frozenset(): 1}, {(): 1}
+            for i in idx:
+                t = bit_mul(t, word_bits(ops[i]), mod)
+                v = wp_mul(v, syms[i])
+            for mono, k in t.items():
+                expect[mono] = (expect.get(mono, 0) + coeff * k) % mod
+            value = wp_add(value, v, coeff)
+        expect = {m: k for m, k in expect.items() if k}
+        if r.terms != expect:
+            return {"ok": False, "reason": "block %s: netlist polynomial differs from the declared expression" % bid}
+        value = merge_slices(value, values, lengths)
+        lo, hi = bounds(value)
+        if bid == modular:
+            pass                                   # this word is defined as the value mod 2^width
+        elif lo < 0 or hi >= mod:
+            return {"ok": False, "reason": "block %s: value range [%d, %d] outside the word" % (bid, lo, hi)}
+        words[bid], values[bid] = out, value
+        eff = width
+        while eff and out[eff - 1] is None:
+            eff -= 1
+        lengths[bid] = eff
+        last = bid
+    replay.values, replay.last = values, last
+    return None
+
+
 def verify(raw, cert):
     try:
         if cert.get("schema") != "colony.lut-mul.v1":
@@ -233,55 +291,11 @@ def verify(raw, cert):
         words = {"A": ["a[%d]" % i for i in range(n)]}
         if not square:
             words["B"] = ["b[%d]" % i for i in range(n)]
-        values, lengths, used, last = {}, {}, set(), None
-        for blk in cert["blocks"]:
-            bid, width, out = blk["id"], blk["width"], blk["out"]
-            if bid in words or type(width) is not int or width < 1 or len(out) != width:
-                return {"ok": False, "reason": "block shape " + str(bid)}
-            mod = 1 << width
-            ops, syms = [], []
-            for op in blk["operands"]:
-                src, lo, hi = op["word"], op["lo"], op["hi"]
-                if src not in words or not (0 <= lo < hi <= len(words[src])):
-                    return {"ok": False, "reason": "operand of " + bid}
-                ops.append(words[src][lo:hi])
-                syms.append({((src, lo, hi),): 1})
-            r = BitPoly(mod)
-            limit = 64 * (len(blk["luts"]) + width * width + 64)
-            for c, a in enumerate(out):
-                for mono, k in atom_poly(a).items():
-                    r.add(mono, k << c)
-            for name in reversed(blk["luts"]):
-                if name not in polys or name in used:
-                    return {"ok": False, "reason": "LUT list of " + bid}
-                used.add(name)
-                r.substitute(name, polys[name])
-                if len(r.terms) > limit:
-                    return {"ok": False, "reason": "block %s: polynomial does not close" % bid}
-            expect, value = {}, {}
-            for coeff, idx in blk["expr"]:
-                if type(coeff) is not int or not idx or len(idx) > 2 or any(not (0 <= i < len(ops)) for i in idx):
-                    return {"ok": False, "reason": "expression of " + bid}
-                t, v = {frozenset(): 1}, {(): 1}
-                for i in idx:
-                    t = bit_mul(t, word_bits(ops[i]), mod)
-                    v = wp_mul(v, syms[i])
-                for mono, k in t.items():
-                    expect[mono] = (expect.get(mono, 0) + coeff * k) % mod
-                value = wp_add(value, v, coeff)
-            expect = {m: k for m, k in expect.items() if k}
-            if r.terms != expect:
-                return {"ok": False, "reason": "block %s: netlist polynomial differs from the declared expression" % bid}
-            value = merge_slices(value, values, lengths)
-            lo, hi = bounds(value)
-            if lo < 0 or hi >= mod:
-                return {"ok": False, "reason": "block %s: value range [%d, %d] outside the word" % (bid, lo, hi)}
-            words[bid], values[bid] = out, value
-            eff = width
-            while eff and out[eff - 1] is None:
-                eff -= 1
-            lengths[bid] = eff
-            last = bid
+        used = set()
+        err = replay(polys, words, cert["blocks"], used)
+        if err:
+            return err
+        values, last = replay.values, replay.last
         if used != set(tables):
             return {"ok": False, "reason": "netlist has logic outside the derivation"}
         if words[last] != want_out:
