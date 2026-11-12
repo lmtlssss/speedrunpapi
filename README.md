@@ -209,6 +209,7 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | `div`, depth | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 |
 
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
+`udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
 Every netlist has an independent checker; the division and square-root recurrences are proved in Lean 4.
 
 [Terms](https://colony.technology/terms) · [Releases](https://github.com/lmtlssss/speedrunpapi/releases)
