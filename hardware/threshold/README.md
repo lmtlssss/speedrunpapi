@@ -65,7 +65,8 @@ Three checks, sharing no code:
 
 1. `independent_threshold_checker.py` replays the derivation: every node identity on all rows, then integer bookkeeping.
 2. `lean_proof.py` emits a Lean 4 file (core Lean, no Mathlib) ending in
-   `theorem correct (x : Nat → Bool) : w_maj x = decide (popcount x n ≥ T)`. Checked by the Lean kernel for n up to 255.
+   `theorem correct (x : Nat → Bool) : w_maj x = decide (popcount x n ≥ T)`.
+   `epfl-voter/voter_size.lean` is that proof for the 1001-input voter (`voter_size.blif`, 993 LUT-6). Run `lean epfl-voter/voter_size.lean`: Lean 4.33.1 checks it in 26 s on an Apple M1.
 3. `bdd_threshold_check.cpp` compares canonical BDDs without any certificate. Completes for n up to 127.
 
 Python 3.9+, standard library only. Licence: see `LICENSE.md` at the repository root.

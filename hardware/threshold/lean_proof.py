@@ -24,6 +24,21 @@ theorem popcount_le (x : Nat → Bool) : ∀ n, popcount x n ≤ n
       have b : (x n).toNat ≤ 1 := Bool.toNat_le _
       show popcount x n + (x n).toNat ≤ n + 1
       omega
+def pc (x : Nat → Bool) (a : Nat) : Nat → Nat
+  | 0 => 0
+  | n + 1 => pc x a n + (x (a + n)).toNat
+theorem pc_add (x : Nat → Bool) (a m : Nat) : ∀ n, pc x a (m + n) = pc x a m + pc x (a + m) n
+  | 0 => rfl
+  | n + 1 => by
+      have ih := pc_add x a m n
+      show pc x a (m + n) + (x (a + (m + n))).toNat = pc x a m + (pc x (a + m) n + (x (a + m + n)).toNat)
+      rw [ih, Nat.add_assoc, Nat.add_assoc]
+theorem popcount_eq_pc (x : Nat → Bool) : ∀ n, popcount x n = pc x 0 n
+  | 0 => rfl
+  | n + 1 => by
+      have ih := popcount_eq_pc x n
+      show popcount x n + (x n).toNat = pc x 0 n + (x (0 + n)).toNat
+      rw [ih, Nat.zero_add]
 theorem add_eq {a b c d : Nat} (h1 : a = b) (h2 : c = d) : a + c = b + d := by subst h1; subst h2; rfl
 theorem of_iff (o : Bool) (p : Prop) [Decidable p] (h : o.toNat = 1 ↔ p) : o = decide p := by
   cases o <;> simp_all
@@ -64,6 +79,7 @@ def emit(raw, cert, chunk=12):
     n, T, m, C = cert["n"], cert["threshold"], cert["result_column"], cert["constant"]
     tabs = parse_blif(raw)
     nodes = cert["nodes"]
+    trace = cert.get("tree_trace")
     L = [PRELUDE]
     generic = {}
     letters = "abcdef"
@@ -180,7 +196,7 @@ def emit(raw, cert, chunk=12):
             L.append("theorem %s_lt (x : Nat → Bool) : %s x < %d := Nat.mod_lt _ (by decide)" % (res, res, 1 << fl))
             rhs_pairs = [(1, "%s x" % res)] + rhs_pairs
         L.append("theorem u%d (x : Nat → Bool) : %s = %s := %s %s" % (k, act_sum, term(rhs_pairs), g, us))
-        raw_in = [w for w in ins if w.startswith("A[") and column[w] == 0]
+        raw_in = [] if trace else [w for w in ins if w.startswith("A[") and column[w] == 0]
         cons = {w: column[w] for w in ins if w not in raw_in}
         consumed_inputs.update(raw_in)
         prod = {}
@@ -188,11 +204,52 @@ def emit(raw, cert, chunk=12):
             column[o] = unit + d
             prod[o] = unit + d
         e = {"cons": cons, "prod": prod, "adds": [add << unit] if add else [], "res": [(unit, res)] if res else [],
-             "lem": "e%d" % k, "raw": raw_in, "bundle": None}
+             "lem": "e%d" % k, "raw": raw_in, "bundle": None, "k": k}
         lhs, rhs = scaled(e)
         L.append("theorem e%d (x : Nat → Bool) : %s = %s := by\n  have h := u%d x\n  omega" % (k, lhs, rhs, k))
         eqs.append(e)
 
+    root_seg = None
+    if trace:
+        by_k = {e["k"]: e for e in eqs}
+        blk, segs = [], []
+        for i, t in enumerate(trace):
+            own = [by_k[k] for k in range(t["nodes"][0], t["nodes"][1]) if k in by_k]
+            if "inputs" in t:
+                ins_ = sorted(t["inputs"])
+                assert ins_ == list(range(ins_[0], ins_[0] + len(ins_))), "leaf blocks must be contiguous"
+                body = " + ".join(["0"] + ["(x %d).toNat" % j for j in ins_])
+                L.append("def I_b%d (x : Nat → Bool) : Nat := %s" % (i, body))
+                bundles.append("I_b%d" % i)
+                L.append("theorem b%d (x : Nat → Bool) : I_b%d x = %s := by\n  unfold I_b%d\n  omega" % (
+                    i, i, " + ".join("(x %d).toNat" % j for j in ins_), i))
+                base = {"cons": {}, "prod": {"A[%d]" % j: 0 for j in ins_}, "adds": [], "res": [], "lem": "b%d" % i,
+                        "raw": [], "bundle": "I_b%d" % i}
+                e = merge([base] + own, "t%d" % i)
+                sg = [(ins_[0], len(ins_))]
+                L.append("theorem s%d (x : Nat → Bool) : %s x = pc x %d %d := rfl" % (i, e["bundle"], sg[0][0], sg[0][1]))
+            else:
+                l, r = t["children"]
+                e = merge([blk[l], blk[r]] + own, "t%d" % i)
+                parts = sorted(segs[l] + segs[r])
+                out, haves = [], ["  have hl := s%d x" % l, "  have hr := s%d x" % r]
+                for a, m in parts:
+                    if out and out[-1][0] + out[-1][1] == a:
+                        a0, m0 = out[-1]
+                        haves.append("  have : pc x %d %d = pc x %d %d + pc x %d %d := pc_add x %d %d %d" % (a0, m0 + m, a0, m0, a, m, a0, m0, m))
+                        out[-1] = (a0, m0 + m)
+                    else:
+                        out.append((a, m))
+                sg = out
+                L.append("theorem s%d (x : Nat → Bool) : %s x = %s := by\n%s\n  unfold %s\n  omega" % (
+                    i, e["bundle"], " + ".join("pc x %d %d" % p for p in sg), "\n".join(haves), e["bundle"]))
+            blk.append(e)
+            segs.append(sg)
+        root = len(trace) - 1
+        assert segs[root] == [(0, n)], segs[root]
+        root_seg = (blk[root]["bundle"], "s%d" % root)
+        end = trace[root]["nodes"][1]
+        eqs = [blk[root]] + [e for e in eqs if e["k"] >= end]
     level, cnt = eqs, 0
     while len(level) > 1:
         nxt = []
@@ -210,7 +267,17 @@ def emit(raw, cert, chunk=12):
          "  apply of_iff",
          "  have hp : popcount x %d = %s := by\n    show 0 + %s = _\n    rw [Nat.zero_add]" % (n, explicit, explicit),
          "  have hle := popcount_le x %d" % n]
-    if top is not None:
+    if top is not None and root_seg:
+        chain = [b for b in bundles[bundles.index(root_seg[0]) + 1:]]
+        P = ["theorem correct (x : Nat → Bool) : w_maj x = decide (popcount x %d ≥ %d) := by" % (n, T),
+             "  apply of_iff",
+             "  have hle := popcount_le x %d" % n,
+             "  have ht := %s x" % top["lem"],
+             "  have hI : %s x = popcount x %d := by\n%s    rw [%s x]\n    exact (popcount_eq_pc x %d).symm" % (
+                 top["bundle"], n, ("    simp only [%s]\n" % ", ".join(chain)) if chain else "", root_seg[1], n),
+             "  rw [hI] at ht"]
+        dropped_in = []
+    elif top is not None:
         lp, rp, _ = sides(top)
         dz = [(1, "%s.toNat" % ref(w)) for w, _ in dropped_in]
         rest = [(c, e) for c, e in lp if not e.startswith("I_")]

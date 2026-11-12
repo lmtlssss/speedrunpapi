@@ -66,7 +66,7 @@ class Net:
         lvl = 1 + max(self.level[w] for w in ins)
         for d in range(f, vmax.bit_length()):
             col = low + d
-            if col > self.m + (8 if f == 0 else 0):     # value-preserving nodes may carry a bound-only digit
+            if col > self.m + 8:     # a digit above the result column is zero on every input; the bound is a theorem
                 raise ValueError("overflow past result column")
             tt = 0
             for row in range(1 << len(ins)):
@@ -331,18 +331,29 @@ def build_tree(n, threshold, tree, policy=("size",), cut=None, k=6, tail=26, bea
             height[b] = 0 if b not in split else 1 + max(ht(c) for c in split[b])
         return height[b]
 
+    net.trace = []
+
     def redundant(b):
         if b not in split:
             names = ["A[%d]" % i for i in b]
             for w in names:
                 net.heap[0].remove(w)
-            return to_binary(net, {0: names})
+            n0 = len(net.nodes)
+            res = to_binary(net, {0: names})
+            net.trace.append({"inputs": list(b), "nodes": [n0, len(net.nodes)],
+                              "alive": [[w, c] for c, ws in sorted(res.items()) for w in ws]})
+            return res, len(net.trace) - 1
         l, r = split[b]
-        return _merge(net, redundant(l), redundant(r), policy)
+        (hl, il), (hr, ir) = redundant(l), redundant(r)
+        n0 = len(net.nodes)
+        res = _merge(net, hl, hr, policy)
+        net.trace.append({"children": [il, ir], "nodes": [n0, len(net.nodes)],
+                          "alive": [[w, c] for c, ws in sorted(res.items()) for w in ws]})
+        return res, len(net.trace) - 1
 
     def binary(b):
         if cut is None or ht(b) <= cut:
-            return to_binary(net, redundant(b))
+            return to_binary(net, redundant(b)[0])
         l, r = split[b]
         x, y = binary(l), binary(r)
         return to_binary(net, {c: x.get(c, []) + y.get(c, []) for c in set(x) | set(y)})
@@ -350,7 +361,8 @@ def build_tree(n, threshold, tree, policy=("size",), cut=None, k=6, tail=26, bea
     import sys
     sys.setrecursionlimit(100000)
     root = tuple(tree["root"])
-    res = redundant(root) if cut is None else binary(root)
+    res = redundant(root)[0] if cut is None else binary(root)
+    net.tree_nodes_end = len(net.nodes)
     if any(net.heap.get(c) for c in net.heap):
         raise RuntimeError("inputs outside the tree")
     for c, ws in res.items():
@@ -562,6 +574,8 @@ def compile_threshold(n, threshold, k=6, tail=26, objective="size", wallace=4, b
             "lut_count": len(net.luts), "levels": net.level[out],
             "netlist_digest": digest(data), "nodes": nodes,
             "independent_verifier": "colony.lut-threshold-independent.v1"}
+    if tree is not None and cut is None and getattr(net, "trace", None):
+        cert["tree_trace"] = json.loads(json.dumps(net.trace).replace('"%s"' % out, '"maj"'))
     return data, cert
 
 
