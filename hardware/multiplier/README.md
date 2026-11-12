@@ -12,6 +12,7 @@ Each block size is built as a leaf and as a split; the smaller network is kept.
 
 Square root: non-restoring rows `r' = 4r + pair + 3 + 4 (Q xnor s)`, with `s` the sign of `r`. One expression covers the add row and the subtract row, and each bit of a row is one LUT. The top LUT of a row emits the root bit. The last row builds carries only.
 Hypotenuse: two squarers, one addition, then the square-root rows.
+Depth builds (`mul_depth.py`): level 1 is the recoded row bits, or three folded products per counter for the squarer. Counters then cut every column to a common target height per level, so no carry waits for a later level. The last stage is a radix-3 prefix adder whose final carry combine sits inside the sum LUTs.
 Divider: non-restoring rows on a growing word. Row `j` keeps the remainder mod `2^(j+1)`; its sign is `[b >= 2^j]` or the top bit. A 64-bit divider uses 2,144 row LUTs where a full-width array uses 4,160.
 
 ## Results
@@ -26,6 +27,13 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL arithmetic bench
 | `hyp`, 128-bit sides | 36451 LUT-6 | 24898 LUT-6 | `epfl/hyp.blif.gz` |
 | `div`, 64 / 64 | 3082 LUT-6 | 2287 LUT-6 | `epfl/div.blif` |
 
+Depth builds, against the EPFL best depth results:
+
+| Benchmark | EPFL best depth | This compiler | Netlist |
+| --- | --- | --- | --- |
+| `multiplier`, 64 x 64 | 25 levels, 6381 LUT-6 | 11 levels, 5178 LUT-6 | `epfl/multiplier_depth.blif` |
+| `square`, 64-bit | 10 levels, 3690 LUT-6 | 10 levels, 3358 LUT-6 | `epfl/square_depth.blif` |
+
 ## Run
 
 ```sh
@@ -39,8 +47,10 @@ python3 independent_sqrt_checker.py --netlist epfl/sqrt.blif --derivation epfl/s
 gunzip -k epfl/hyp.blif.gz epfl/hyp.derivation.json.gz
 python3 independent_sqrt_checker.py --netlist epfl/hyp.blif --derivation epfl/hyp.derivation.json
 python3 div_compiler.py --n 64 --out out/
+python3 mul_depth.py --n 64 --out out/ && python3 mul_depth.py --n 64 --square --out out/
+python3 independent_depth_checker.py --netlist epfl/multiplier_depth.blif --derivation epfl/multiplier_depth.derivation.json
 python3 independent_div_checker.py --netlist epfl/div.blif --derivation epfl/div.derivation.json
-python3 test_mul.py && python3 test_sqrt.py && python3 test_div.py
+python3 test_mul.py && python3 test_sqrt.py && python3 test_div.py && python3 test_depth.py
 ```
 
 ## Proof
@@ -56,6 +66,8 @@ The 64 x 64 multiplier checks in 0.5 s and the 64-bit squarer in 0.3 s on an App
 `test_sqrt.py` checks the recurrence against `isqrt` for every operand up to 18 bits, simulates small circuits exhaustively and removes minterms one at a time.
 
 `independent_div_checker.py` proves the divider the same way: every row's polynomial equals the recurrence in its header, every quotient LUT is the stated NOR over `b_j .. b_63`, and the remainder row equals `r + s*b`. `test_div.py` checks the recurrence against integer division for every operand pair up to 8 bits.
+
+`independent_depth_checker.py` proves the depth builds in two steps: the two rows left by the counters sum to `a*b` (polynomial identity rebuilt from the netlist), and the final adder equals a ripple adder of those rows (ABC `cec`). Under one second each; needs `yosys-abc` on the path.
 
 `test_mul.py` runs exhaustive simulation at small widths and removes minterms one at a time: 191 altered 8-bit netlists, none accepted with a wrong product.
 
