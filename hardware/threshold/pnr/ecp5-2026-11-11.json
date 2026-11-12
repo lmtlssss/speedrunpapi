@@ -1,0 +1,94 @@
+[
+ {
+  "n": 36,
+  "T": 32,
+  "baseline_rtl": {
+   "fmax_mhz": 131.48,
+   "period_ns": 7.606,
+   "comb_cells": 155
+  },
+  "colony_k4_size": {
+   "fmax_mhz": 78.05,
+   "period_ns": 12.812,
+   "comb_cells": 65,
+   "luts": 65,
+   "levels": 18
+  },
+  "colony_k4_depth": {
+   "fmax_mhz": 150.97,
+   "period_ns": 6.624,
+   "comb_cells": 70,
+   "luts": 70,
+   "levels": 6
+  }
+ },
+ {
+  "n": 64,
+  "T": 56,
+  "baseline_rtl": {
+   "fmax_mhz": 77.72,
+   "period_ns": 12.867,
+   "comb_cells": 271
+  },
+  "colony_k4_size": {
+   "fmax_mhz": 43.99,
+   "period_ns": 22.732,
+   "comb_cells": 141,
+   "luts": 141,
+   "levels": 30
+  },
+  "colony_k4_depth": {
+   "fmax_mhz": 114.19,
+   "period_ns": 8.757,
+   "comb_cells": 139,
+   "luts": 139,
+   "levels": 8
+  }
+ },
+ {
+  "n": 127,
+  "T": 64,
+  "baseline_rtl": {
+   "fmax_mhz": 81.97,
+   "period_ns": 12.2,
+   "comb_cells": 557
+  },
+  "colony_k4_size": {
+   "fmax_mhz": 24.64,
+   "period_ns": 40.584,
+   "comb_cells": 305,
+   "luts": 305,
+   "levels": 57
+  },
+  "colony_k4_depth": {
+   "fmax_mhz": 94.61,
+   "period_ns": 10.57,
+   "comb_cells": 296,
+   "luts": 296,
+   "levels": 9
+  }
+ },
+ {
+  "n": 255,
+  "T": 160,
+  "baseline_rtl": {
+   "fmax_mhz": 60.16,
+   "period_ns": 16.622,
+   "comb_cells": 1079
+  },
+  "colony_k4_size": {
+   "fmax_mhz": 12.44,
+   "period_ns": 80.386,
+   "comb_cells": 670,
+   "luts": 670,
+   "levels": 115
+  },
+  "colony_k4_depth": {
+   "fmax_mhz": 72.11,
+   "period_ns": 13.868,
+   "comb_cells": 664,
+   "luts": 664,
+   "levels": 11
+  }
+ }
+]
