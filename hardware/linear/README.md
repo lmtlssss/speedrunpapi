@@ -9,7 +9,8 @@ Uses: CRC, scramblers, encoders and syndrome logic of block codes, constant mult
 
 A set of signals that occurs in several rows of `M` is built once.
 The set starts as the most frequent pair and takes one signal at a time while `(size - 1) * (rows containing it)` grows. It becomes one LUT and replaces itself in those rows.
-When no set occurs twice, each row is closed with a tree, earliest signals first.
+A set is kept only if it saves LUTs in the rows that hold it; the build is run with and without that test and the smaller network is used.
+When no set is left, each row is closed with a tree, earliest signals first.
 `--depth` limits the LUT levels: shared sets are then taken from signals below a level cap.
 
 Wide bus, variable length. One network computes the register after the whole bus, `F(s, d)`. A zero byte advances the register by a fixed map `A^8`, so with `e` empty bytes at the end the register after the valid bytes is `A^(-8e) F(s, d)`. `A^(-8e)` is one conditional stage per bit of `e`: `x' = x ^ (e_j & (U_j + I) x)`, with `U_j = A^(-8 * 2^j)`.
@@ -21,26 +22,28 @@ Yosys: 0.70 `synth_xilinx` on the XOR equations. ISE: Xilinx ISE 14.6 on the XOR
 
 | Bus | Yosys | ISE | This compiler | `--depth` at the minimum |
 | --- | --- | --- | --- | --- |
-| 64 bits | 378 | | 171, 5 levels | 181, 3 levels |
-| 128 bits | 687 | 347 | 270, 5 levels | 265, 4 levels |
-| 256 bits | 1223 | 711 | 439, 5 levels | 442, 4 levels |
-| 512 bits | 2344 | 1314 | 731, 5 levels | 803, 4 levels |
-| 1024 bits | 4662 | 2433 | 1280, 6 levels | 1296, 5 levels |
+| 64 bits | 378 | | 147, 4 levels | 151, 3 levels |
+| 128 bits | 687 | 347 | 237, 5 levels | 238, 4 levels |
+| 256 bits | 1223 | 711 | 397, 4 levels | 397, 4 levels |
+| 512 bits | 2344 | 1314 | 685, 5 levels | 701, 4 levels |
+| 1024 bits | 4662 | 2433 | 1214, 5 levels | 1214, 5 levels |
 
 CRC-32 of a bus with any number of valid bytes (`crc_gen.py`). The bytes past the valid ones arrive as zero.
 Reference: Zhang et al., Electronics 13(22):4399, 2024, Table 2, their design on Virtex UltraScale+ with Vivado 2020.2; that module contains its data shifters.
 
 | Bus | Zhang et al. | `crc_gen.py` | File |
 | --- | --- | --- | --- |
-| 8 bytes | 510 LUT | 390 LUT-6, 15 levels | `crc32/crc32_b8.v` |
-| 16 bytes | 818 | 592, 19 levels | |
-| 32 bytes | 1550 | 865, 23 levels | |
-| 64 bytes | 3519 | 1256, 27 levels | `crc32/crc32_b64.v` |
-| 128 bytes | 5981 | 1907, 32 levels | |
+| 8 bytes | 510 LUT | 348 LUT-6, 13 levels | `crc32/crc32_b8.v` |
+| 16 bytes | 818 | 533, 16 levels | |
+| 32 bytes | 1550 | 791, 21 levels | |
+| 64 bytes | 3519 | 1172, 24 levels | `crc32/crc32_b64.v` |
+| 128 bytes | 5981 | 1798, 28 levels | |
 
 One CRC per length followed by a select, 8-byte bus, under Yosys: 1679 LUT-6.
 
-Reed-Solomon (544,514) over GF(2^10), encoder register update for 4 symbols per clock, 300 outputs of 340 inputs: Yosys 2576 LUT-6, this compiler 971 (`rs/`).
+Reed-Solomon (544,514) over GF(2^10), encoder register update for 4 symbols per clock, 300 outputs of 340 inputs: Yosys 2576 LUT-6, this compiler 783 at 4 levels (`rs/`).
+
+Other blocks, Yosys against this compiler: CRC-64/ECMA over 512 bits 4929 and 1552; CRC-32C over 512 bits 2379 and 736; CRC-16/CCITT over 256 bits 574 and 214; AES MixColumns 40 and 36.
 
 Lattice ECP5, 64-bit bus, placed and routed (Yosys `synth_ecp5` + nextpnr-ecp5, registers on both sides, best of 3 seeds): the XOR equations take 531 cells and 5.64 ns; the LUT-4 build takes 227 cells and 5.70 ns.
 
@@ -60,7 +63,8 @@ python3 test_linear.py
 ```
 
 `--matrix` takes any GF(2) matrix: one row per line as a hex mask over the inputs.
-The plain Verilog output is one expression per LUT. Synthesis tools rebuild XOR expressions; the `--family` output instantiates the LUTs and keeps the network (390 stays 390 through `synth_xilinx`).
+The plain Verilog output is one expression per LUT. Synthesis tools rebuild XOR expressions; the `--family` output instantiates the LUTs and keeps the network through `synth_xilinx`.
+`crc_gen.py --pipeline` also writes a module with a register after the full-bus network and after each stage; the 8-byte LUT-4 build runs at 177 MHz on ECP5, placed and routed.
 
 ## Proof
 

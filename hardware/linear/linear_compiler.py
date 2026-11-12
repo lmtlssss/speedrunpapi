@@ -18,7 +18,7 @@ except AttributeError:                                       # Python < 3.10
     pc = lambda v: bin(v).count("1")
 
 
-def build(rows, nin, k=6, cap=10 ** 9, tries=24):
+def build(rows, nin, k=6, cap=10 ** 9, tries=24, guard=False):
     """rows: list of int masks over the inputs.  Returns (nodes, outs, levels): nodes[j] = fan-in ids of
     signal nin + j; outs[i] = signal id of row i, or None for a zero row."""
     import heapq
@@ -51,11 +51,12 @@ def build(rows, nin, k=6, cap=10 ** 9, tries=24):
             out.append(low.bit_length() - 1)
             mask ^= low
         return out
+    skip = set()
     while heap:
         cands, seen = [], set()
         while heap and len(cands) < tries:                    # the best pairs whose counts are current
             f, a, b = heapq.heappop(heap)
-            if (a, b) in seen:
+            if (a, b) in seen or (a, b) in skip:
                 continue
             if a not in col or b not in col or level[a] >= cap or level[b] >= cap:
                 continue
@@ -92,6 +93,15 @@ def build(rows, nin, k=6, cap=10 ** 9, tries=24):
             if pick is None or score > pick[0]:
                 pick = (score, g, rm)
         score, g, rm = pick
+        if guard:                                             # keep the set only if it saves LUTs in its rows now
+            need = lambda n: 0 if n <= 1 else -(-(n - 1) // (k - 1))
+            saved = sum(need(len(members[i])) - need(len(members[i]) - len(g) + 1) for i in rows_of(rm))
+            if saved <= 1:
+                skip.add(tuple(sorted(g[:2])))
+                for f0, a, b in cands:
+                    if tuple(sorted((a, b))) not in skip:
+                        heapq.heappush(heap, (-f0, a, b))
+                continue
         for f0, a, b in cands:                                # return the candidates; stale counts are fixed on pop
             heapq.heappush(heap, (-f0, a, b))
         nid = nin + len(nodes)
@@ -112,6 +122,7 @@ def build(rows, nin, k=6, cap=10 ** 9, tries=24):
         for v, f in cnt.items():                              # pairs of the new signal
             if f >= 2:
                 heapq.heappush(heap, (-f, v, nid))
+    build.shared = len(nodes)                                 # nodes built before the rows are closed
     outs = []
     for i in range(nrows):
         cur = sorted(members[i], key=lambda v: (level[v], v))
@@ -132,11 +143,12 @@ def compile_linear(rows, nin, k=6, depth=None, effort=(24, 60, 150)):
     caps = [10 ** 9] if depth is None else list(range(depth, 0, -1))
     for cap in caps:
         for tries in effort:
-            res = build(rows, nin, k, cap, tries)
-            if depth is not None and res[2] > depth:
-                continue
-            if best is None or (len(res[0]), res[2]) < (len(best[0]), best[2]):
-                best = res
+            for guard in (False, True):
+                res = build(rows, nin, k, cap, tries, guard)
+                if depth is not None and res[2] > depth:
+                    continue
+                if best is None or (len(res[0]), res[2]) < (len(best[0]), best[2]):
+                    best = res
     if best is None:
         raise ValueError("depth %d cannot be met" % depth)
     return best
