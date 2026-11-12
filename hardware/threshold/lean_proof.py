@@ -88,6 +88,7 @@ def emit(raw, cert, chunk=12):
         return term([(1 << i, "%s.toNat" % a) for i, a in enumerate(args)])
 
     bundles = []
+    prefix_mode = not trace
 
     def in_terms(e):
         """Raw inputs of a node equation, or the opaque bundle of a merged one."""
@@ -118,13 +119,42 @@ def emit(raw, cert, chunk=12):
             prod.update(e["prod"])
             adds += e["adds"]
             res += e["res"]
-        out = {"cons": cons, "prod": prod, "adds": adds, "res": res, "lem": name, "bundle": None}
+        out = {"cons": cons, "prod": prod, "adds": adds, "res": res, "lem": name, "bundle": None, "segs": None}
         unfold = ""
         if ins_all:
             out["bundle"] = "I_%s" % name
             bundles.append(out["bundle"])
             L.append("def %s (x : Nat → Bool) : Nat := %s" % (out["bundle"], term(ins_all)))
             unfold = "unfold %s; " % out["bundle"]
+            if prefix_mode:
+                parts, haves, ok = [], [], True
+                for e in group:
+                    if e.get("bundle"):
+                        if e.get("segs") is None:
+                            ok = False
+                        else:
+                            parts += e["segs"]
+                            haves.append("  have := %s x" % e["slem"])
+                    else:
+                        idx = [int(w[2:-1]) for w in e.get("raw", [])]
+                        parts += [(j, 1) for j in idx]
+                if ok:
+                    acc = []
+                    for a, m in sorted(parts):
+                        if acc and acc[-1][0] + acc[-1][1] == a:
+                            a0, m0 = acc[-1]
+                            if m == 1:
+                                haves.append("  have : pc x %d %d = pc x %d %d + (x %d).toNat := rfl" % (a0, m0 + 1, a0, m0, a))
+                            else:
+                                haves.append("  have : pc x %d %d = pc x %d %d + pc x %d %d := pc_add x %d %d %d" % (a0, m0 + m, a0, m0, a, m, a0, m0, m))
+                            acc[-1] = (a0, m0 + m)
+                        else:
+                            if m == 1:
+                                haves.append("  have : pc x %d 1 = (x %d).toNat := by show 0 + (x (%d + 0)).toNat = _; rw [Nat.zero_add]" % (a, a, a))
+                            acc.append((a, m))
+                    out["segs"], out["slem"] = acc, "s_%s" % name
+                    L.append("theorem s_%s (x : Nat → Bool) : %s x = %s := by\n%s\n  unfold %s\n  omega" % (
+                        name, out["bundle"], " + ".join("pc x %d %d" % p for p in acc), "\n".join(haves), out["bundle"]))
         lp, rp, ex = sides(out, inner)
         assert lp and rp
         P = ["theorem %s (x : Nat → Bool) : %s = %s := by" % (name, term(lp), term(rp))]
@@ -250,6 +280,16 @@ def emit(raw, cert, chunk=12):
         root_seg = (blk[root]["bundle"], "s%d" % root)
         end = trace[root]["nodes"][1]
         eqs = [blk[root]] + [e for e in eqs if e["k"] >= end]
+    if prefix_mode:
+        reach = {"A[%d]" % i: i for i in range(n)}
+        keyed = []
+        for e in eqs:
+            nd = nodes[e["k"]]
+            r_ = max(reach[w] for w, _ in nd["in"])
+            for o, _ in nd["out"]:
+                reach[o] = r_
+            keyed.append((r_, e["k"], e))
+        eqs = [e for _, _, e in sorted(keyed, key=lambda t: (t[0], t[1]))]
     level, cnt = eqs, 0
     while len(level) > 1:
         nxt = []
@@ -277,6 +317,13 @@ def emit(raw, cert, chunk=12):
                  top["bundle"], n, ("    simp only [%s]\n" % ", ".join(chain)) if chain else "", root_seg[1], n),
              "  rw [hI] at ht"]
         dropped_in = []
+    elif top is not None and prefix_mode and top.get("segs") == [(0, n)] and not dropped_in:
+        P = ["theorem correct (x : Nat → Bool) : w_maj x = decide (popcount x %d ≥ %d) := by" % (n, T),
+             "  apply of_iff",
+             "  have hle := popcount_le x %d" % n,
+             "  have ht := %s x" % top["lem"],
+             "  have hI : %s x = popcount x %d := by\n    rw [%s x]\n    exact (popcount_eq_pc x %d).symm" % (top["bundle"], n, top["slem"], n),
+             "  rw [hI] at ht"]
     elif top is not None:
         lp, rp, _ = sides(top)
         dz = [(1, "%s.toNat" % ref(w)) for w, _ in dropped_in]

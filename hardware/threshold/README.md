@@ -18,9 +18,9 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL `voter` (1001-in
 | --- | --- | --- | --- |
 | EPFL best size, 2026 | 1145 | 33 | published |
 | EPFL best depth, 2026 | 1325 | 11 | published |
-| `epfl-voter/voter_size_987.blif` | 987 | 12 | derivation replay |
+| `epfl-voter/voter_size_987.blif` | 987 | 12 | derivation replay; Lean kernel proof |
 | `epfl-voter/voter_size_991.blif` | 991 | 14 | 12 chained ABC `cec` steps from the original |
-| `epfl-voter/voter_depth_1005.blif` | 1005 | 9 | ABC-equivalent to `voter_depth.blif`, which has a derivation |
+| `epfl-voter/voter_depth_1005.blif` | 1005 | 9 | ABC-equivalent to `voter_depth.blif`, which has a Lean kernel proof |
 
 Submitted to the EPFL suite on 2026-11-11. Acceptance is the organisers' decision and is pending.
 
@@ -66,7 +66,9 @@ Three checks, sharing no code:
 1. `independent_threshold_checker.py` replays the derivation: every node identity on all rows, then integer bookkeeping.
 2. `lean_proof.py` emits a Lean 4 file (core Lean, no Mathlib) ending in
    `theorem correct (x : Nat → Bool) : w_maj x = decide (popcount x n ≥ T)`.
-   `epfl-voter/voter_size.lean` is that proof for the 1001-input voter (`voter_size.blif`, 993 LUT-6). Run `lean epfl-voter/voter_size.lean`: Lean 4.33.1 checks it in 26 s on an Apple M1.
+   All three 1001-input voter netlists have one, checked by Lean 4.33.1 on an Apple M1:
+   `epfl-voter/voter_size.lean` (993 LUT-6) in 26 s, `epfl-voter/voter_depth.lean` (9 levels) in 91 s, `epfl-voter/voter_size_987.lean` (987 LUT-6) in 105 s.
+   Run `lean epfl-voter/voter_depth.lean`.
 3. `bdd_threshold_check.cpp` compares canonical BDDs without any certificate. Completes for n up to 127.
 
 Python 3.9+, standard library only. Licence: see `LICENSE.md` at the repository root.
