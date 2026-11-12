@@ -46,6 +46,14 @@ Lattice ECP5, placed and routed, same flow:
 | 32 | 139.7 ns, 2196 cells | 121.8 ns, 1417 cells | 87.0 ns, 2950 cells, 15 MULT18X18D |
 | 64 | 393.7 ns, 12246 cells | 292.4 ns, 4889 cells | 181.2 ns, 5161 cells, 49 MULT18X18D |
 
+Intel Cyclone V `5CGXFC9E7F35C8`, Quartus Prime Lite 21.1.1, map, fit and timing analysis at default effort, register to register, slow corner, 64 bits:
+
+| | Delay | ALMs | DSP blocks |
+| --- | --- | --- | --- |
+| `/` and `%` | 248.1 ns | 5094 | 0 |
+| `udiv` | 261.1 ns | 1350 | 0 |
+| `udivf64` | 159.7 ns | 1866 | 35 |
+
 `sh prove_udivf.sh` proves `udivf` equal to `/` and `%` at widths 8, 10 and 12 (steps of 2, 3 and 4 bits) with Yosys's SAT solver. Widths 16, 32 and 64 are simulated against the operators on 3,000 vectors each.
 `../multiplier/FoldDivision.lean` proves the step, the bound on the running value and the final selection for every width.
 
