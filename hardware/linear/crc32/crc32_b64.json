@@ -1,1 +1,1 @@
-{"bytes": 64, "k": 6, "levels": 27, "lut_count": 1256, "netlist_digest": "sha256:e590133a65432ad9fdfd45e2328834df62346266b65079ca91b9df00fc9d63d1", "poly": 79764919, "schema": "colony.lut-crc.v1", "width": 32}
+{"bytes": 64, "k": 6, "levels": 24, "lut_count": 1172, "netlist_digest": "sha256:14f95496f5f224c295d49b82395f89b8f09c293a8429aea0bba18ff89c963630", "poly": 79764919, "schema": "colony.lut-crc.v1", "width": 32}

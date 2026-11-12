@@ -54,7 +54,9 @@ def generate(poly, width, nbytes, k=6, depth=None):
     for q, fan in enumerate(nodes):
         names.append(add("f%d" % q, [names[v] for v in fan], parity(len(fan))))
     x = [names[o] for o in outs]
+    cuts = []
     for j in range(ebits):
+        cuts.append((len(luts), list(x)))
         U = invert(advance(poly, width, 8 << j), width)
         rows = [U[i] ^ (1 << i) for i in range(width)]
         sk = k - 2 if k >= 5 else k
@@ -91,6 +93,8 @@ def generate(poly, width, nbytes, k=6, depth=None):
                     tt |= 1 << r
             nx.append(add("x%d_%d" % (j, i), src, tt))
         x = nx
+    cuts.append((len(luts), list(x)))
+    generate.cuts = cuts                                     # (index into luts, register vector there)
     for i in range(width):
         add("o[%d]" % i, [x[i]], 0b10)
     return luts, max(level["o[%d]" % i] for i in range(width)) - 1, ebits
@@ -130,6 +134,43 @@ def verilog(luts, width, nbytes, ebits, module, family=None):
     return "\n".join(V) + "\n"
 
 
+def verilog_pipelined(luts, cuts, width, nbytes, ebits, module, family=None):
+    """One register stage after the full-bus network and after each conditional stage.
+    Latency: len(cuts) clocks.  e is delayed alongside."""
+    V = ["// CRC register after the first (%d - e) bytes of d; bytes past them must be zero.  Latency %d clocks." % (nbytes, len(cuts)),
+         "module %s (input clk, input [%d:0] s, input [%d:0] d, %soutput [%d:0] o);" % (
+             module, width - 1, 8 * nbytes - 1, "input [%d:0] e, " % (ebits - 1) if ebits else "", width - 1)]
+    ren, ecur = {}, "e"
+    at = {pos: vec for pos, vec in cuts}
+    stage = 0
+    for q, (name, src, tt) in enumerate(luts):
+        if q in at:
+            stage += 1
+            vec = at[q]
+            V.append("  reg [%d:0] r%d;" % (width - 1, stage))
+            V.append("  always @(posedge clk) r%d <= {%s};" % (stage, ", ".join(ren.get(v, v) for v in reversed(vec))))
+            for i, v in enumerate(vec):
+                ren[v] = "r%d[%d]" % (stage, i)
+            if ebits:
+                V.append("  reg [%d:0] e%d; always @(posedge clk) e%d <= %s;" % (ebits - 1, stage, stage, ecur))
+                ecur = "e%d" % stage
+        n = len(src)
+        ins = [(ecur + v[1:]) if v.startswith("e[") else ren.get(v, v) for v in src]
+        if name.startswith("o["):
+            V.append("  assign %s = %s;" % (name, ins[0]))
+        elif family == "xilinx":
+            V.append("  wire %s; LUT%d #(.INIT(%d'h%x)) i_%s (.O(%s), %s);" % (name, n, 1 << n, tt, name, name, ", ".join(".I%d(%s)" % (t, v) for t, v in enumerate(ins))))
+        elif family == "ecp5":
+            assert n <= 4
+            init = sum(((tt >> (r & ((1 << n) - 1))) & 1) << r for r in range(16))
+            pins = ins + ["1'b0"] * (4 - n)
+            V.append("  wire %s; LUT4 #(.INIT(16'h%04x)) i_%s (.Z(%s), .A(%s), .B(%s), .C(%s), .D(%s));" % ((name, init, name, name) + tuple(pins)))
+        else:
+            V.append("  wire %s = %d'h%x >> {%s};" % (name, 1 << n, tt, ", ".join(reversed(ins))))
+    V.append("endmodule")
+    return "\n".join(V) + "\n"
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--poly", default="0x04C11DB7")
@@ -138,6 +179,7 @@ if __name__ == "__main__":
     ap.add_argument("--k", type=int, default=6)
     ap.add_argument("--depth", type=int)
     ap.add_argument("--family", choices=["xilinx", "ecp5"])
+    ap.add_argument("--pipeline", action="store_true", help="also write crc_pipe.v with a register after each stage")
     ap.add_argument("--out", type=Path)
     a = ap.parse_args()
     poly = int(a.poly, 0)
@@ -148,6 +190,8 @@ if __name__ == "__main__":
         a.out.mkdir(parents=True, exist_ok=True)
         (a.out / "crc.blif").write_bytes(data)
         (a.out / "crc.v").write_text(verilog(luts, a.width, a.bytes, ebits, "crc%d_b%d" % (a.width, a.bytes), a.family))
+        if a.pipeline:
+            (a.out / "crc_pipe.v").write_text(verilog_pipelined(luts, generate.cuts, a.width, a.bytes, ebits, "crc%d_b%d_pipe" % (a.width, a.bytes), a.family))
         (a.out / "crc.json").write_text(json.dumps({"schema": "colony.lut-crc.v1", "poly": poly, "width": a.width, "bytes": a.bytes, "k": a.k,
                                                     "lut_count": count, "levels": lev, "netlist_digest": "sha256:" + hashlib.sha256(data).hexdigest()}, sort_keys=True) + "\n")
     print(json.dumps({"bytes": a.bytes, "k": a.k, "lut_count": count, "levels": lev}))
