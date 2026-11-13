@@ -1,0 +1,15 @@
+--- a/lib/gaisler/noelv/core/nanofpunv.vhd
++++ b/lib/gaisler/noelv/core/nanofpunv.vhd
+@@ -2642,6 +2642,12 @@
+       v.wen       := '0';
+       v.flags_wen := '0';
+       v.last_unissued := true;
++      -- Stop the multiplier pipeline too. nf_idle clears the accumulator, but the next instruction can be
++      -- issued in the very next cycle, and a pending accumulate would then land in its nf_flopr.
++      v.mulen     := '0';
++      v.accen     := '0';
++      v.shftpl    := '0';
++      v.shftpl2   := '0';
+     end if;
+ 
+     -- Generate flow control flags

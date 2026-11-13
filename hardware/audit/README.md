@@ -59,6 +59,9 @@ Every row below has a reproducer that fits on one line.
 | T-Head E906 | `pa_fpu_top`: div, sqrt, mul, add, sub, fused multiply-add, conversions | 1,100,000 per operation, five rounding modes; 10 to 20 million more for each of div, sqrt, mul, add | 0 values | underflow flag, reported |
 | T-Head C906 | `aq_vpu_top`: the same operations in double, single and half | 1,100,000 per operation and format | 0 values | underflow flag, not reported for C906 |
 | T-Head C910 | `ct_vfdsu_top`: div, sqrt in double, single and half | 1,100,000 per operation and format; 30 million more in double and single | 0 values | underflow flag, reported |
+| [GRLIB](https://www.gaisler.com/grlib-ip-library) NOEL-V, 2026.3-b4301 | `nanofpunv` at its issue and commit interface: 29 F and D operations, single and double, five rounding modes | 4,384,000 | 24, all double fused multiply-add | reported to Gaisler, [cause and fix](noelv) |
+| GRLIB NOEL-V | `nanofpunv`: an instruction issued in the cycle after an unissue | 43,008 aimed pairs; 30,000 random pairs | 1,600; 43 | reported, [cause and fix](noelv) |
+| GRLIB NOEL-V | the whole core `cpucorenv`, HP, GP and GP-lite: a multiply or fused multiply-add at the target of a mispredicted branch | one program, [`flush.S`](noelv/flush.S) | wrong in each configuration | same report |
 
 ## Reproducers
 
@@ -216,6 +219,16 @@ Fix: three patches in [`cva5/`](cva5), with a bit-true model of the square-root 
 ```
 fdiv.s  0x00ffffff / 0x40000000    result 0x00800000    IEEE flags UF|NX    core flags NX
 ```
+
+**NOEL-V, GRLIB 2026.3-b4301.** Two defects in the float unit `nanofpunv`. A double fused multiply-add that subtracts a product ending in a run of ones from a larger addend is rounded as exact. And when an instruction is unissued while the multiplier runs and the next one is issued a cycle later, a partial product of the first stays in the accumulator; on the whole core that is a multiply behind a mispredicted branch and a multiply or fused multiply-add at the target.
+
+```
+fnmsub.d, round up    16 - (1 + 2^-52) * (1 - 2^-52)                     expected 402e000000000001      core 402e000000000000
+at a branch target    fmul.d   3.0 * 5.0, round up                       expected 402e000000000000      core 402e000000000001, NX
+at a branch target    fmsub.d  3.0 * 5.0 - 15.0, round to nearest        expected 0                     core 3affff0000000000 (1.65e-24), no flags
+```
+
+Fix: two patches in [`noelv/`](noelv), with the two programs and a testbench for the whole core in GHDL. 0 wrong after them.
 
 ## Your block
 
