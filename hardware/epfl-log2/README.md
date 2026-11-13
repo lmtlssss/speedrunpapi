@@ -70,6 +70,25 @@ The same three heaps, arranged for depth.
 
 Tables 2, then 1 + 4, 1 + 5, 1 + 5 and 4: 23 levels and 8,364 LUTs. ABC `&satlut`, `mfs2` and `&mfs` took the count to 7,978 without adding a level.
 
+## On an FPGA
+
+The two netlists and the two published ones went through the same flow on a Lattice ECP5-85F.
+Yosys maps a netlist to the device's four-input LUTs and wide-function multiplexers, and nextpnr places and routes it between two register banks.
+The delay is the best of three seeds.
+
+| Netlist | Logic cells | Register to register |
+| --- | --- | --- |
+| Smallest published | 21,715 | 269.5 ns |
+| `log2_size_2027.blif` | 14,636 | 207.5 ns |
+| Shallowest published | 24,254 | 105.9 ns |
+| `log2_depth_2027.blif` | 21,171 | 47.8 ns |
+
+```
+python3 pnr.py depth log2_depth_2027.blif
+```
+
+[`pnr.py`](pnr.py) is the flow. The numbers are from Yosys 0.70 and nextpnr 0.11.
+
 ## Check
 
 [`check.c`](check.c) simulates the benchmark, the formula and the netlist on every input and counts the inputs where they differ. It needs a C compiler and nothing else.

@@ -49,6 +49,10 @@ Every row below has a reproducer that fits on one line.
 | [openhwgroup/cvfpu](https://github.com/openhwgroup/cvfpu) | `fpnew_top`: DIV on FP16ALT, five rounding modes | 5,000,000 | 9,752; flags only on 24,577 more | [#169](https://github.com/openhwgroup/cvfpu/issues/169), cause and fix |
 | openhwgroup/cvfpu | merged ADDMUL unit: ADDS into a format with a narrower exponent, eight format pairs | 80,000,000 | 11,602,774 | [#195](https://github.com/openhwgroup/cvfpu/issues/195) |
 | openhwgroup/cvfpu | fused multiply-add, add, sub, mul in both ADDMUL units and every format pair; DIV, SQRT in FP64, FP32, FP16; conversions, compares, min/max, sign injection, classify; five formats | 1,900,000,000; 691,564,032 more that cover small formats completely | 0 | |
+| [openhwgroup/cva5](https://github.com/openhwgroup/cva5) | `fp_unit`: div and sqrt, single and double, requests issued back to back | 1,000,000 each | no answer to 67,439 and 37,932 divisions, 54,971 and 39,437 square roots | [#34](https://github.com/openhwfoundation/cva5/issues/34) |
+| openhwgroup/cva5 | `fp_unit`: FSQRT.D on operands whose root is a 29-bit number plus less than 2^-55 of it, five rounding modes | 5,000,000 | 556,146; flags only on 2,224,584 more | [#35](https://github.com/openhwfoundation/cva5/issues/35) |
+| openhwgroup/cva5 | `fp_unit`: FMUL.S and FCLASS.S on registers that are not NaN-boxed | 288,000; 518,400 | 140, flags only on 560 more; 14,400 | [#36](https://github.com/openhwfoundation/cva5/issues/36) |
+| openhwgroup/cva5 | `fp_unit`: add, sub, fused multiply-add, FMUL.D, div and FSQRT.S one at a time, conversions, compares, min/max, sign injection, moves | 5,000,000 per operation and precision | 0 | |
 | T-Head E906 | `pa_fpu_top`: div, sqrt, mul, add, sub, fused multiply-add, conversions | 1,100,000 per operation, five rounding modes; 10 to 20 million more for each of div, sqrt, mul, add | 0 values | underflow flag, reported |
 | T-Head C906 | `aq_vpu_top`: the same operations in double, single and half | 1,100,000 per operation and format | 0 values | underflow flag, not reported for C906 |
 | T-Head C910 | `ct_vfdsu_top`: div, sqrt in double, single and half | 1,100,000 per operation and format; 30 million more in double and single | 0 values | underflow flag, reported |
@@ -183,6 +187,17 @@ Fix: two lines. 0 wrong of 20,000,000 after. The patch, a vector generator and a
 ```
 ADDS FP64 to FP32    (+0) + 0x37e0000000000000 (2^-129)    expected 0x00100000    core 0x7f000000 (2^127), no flags
 ```
+
+**CVA5 `fp_unit`.** The divider and the square-root unit accept a request in the cycle the previous result is acknowledged, and in that cycle the acknowledge clears the flag that a zero, infinity or NaN result needs to complete. The square-root core's working registers are two bits narrower than its last steps need.
+
+```
+fdiv.d   3.0 / 2.0, then 0.0 / 2.0 in the first free cycle    expected 1.5, 0.0                          core 1.5, then no answer
+fsqrt.d  0x400ffffff6000001                                   expected 0x3ffffffffb000000 NX,            core 0x3ffffffffb000000, no flags, every mode
+                                                              toward +inf 0x3ffffffffb000001 NX
+fclass.s 0x0000000000000000 (not NaN-boxed)                   expected 0x200                             core 0x220
+```
+
+Fix: three patches in [`cva5/`](cva5), with a bit-true model of the square-root core. No missing answer and 0 wrong after them.
 
 **T-Head E906, C906, C910.** Values are right in every run. The underflow flag is not raised when a tiny inexact result rounds up to the smallest normal number.
 
