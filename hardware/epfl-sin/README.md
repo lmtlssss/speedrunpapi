@@ -6,7 +6,7 @@ The suite keeps a list of the smallest known LUT-6 implementations.
 | | LUT-6 | Levels |
 | --- | --- | --- |
 | Smallest published, `best_results/size/sin_size_2026.blif` | 994 | 115 |
-| [`sin_size_2027.blif`](sin_size_2027.blif) | 744 | 66 |
+| [`sin_size_2027.blif`](sin_size_2027.blif) | 735 | 66 |
 
 The counts are `nd` and `lev` from ABC `print_stats`. The netlist gives the benchmark's output on all 16,777,216 inputs.
 
@@ -34,7 +34,7 @@ The benchmark equals the cosine rounded to nearest on 15,613,364 inputs and is o
 ## The netlist
 
 It is built from the formula: the fold of the argument, the three tables, radix-4 rows for the two products, and one LUT per bit in every addition, with the carry recovered from the column below.
-ABC `mfs2`, `lutpack` and `&satlut` then took it from 798 to 744.
+In the two additions whose low bits are thrown away, the low columns produce only their carry. ABC `mfs2`, `lutpack` and `&satlut` then took it from 787 to 735.
 
 ## Check
 
@@ -46,7 +46,7 @@ python3 check.py <arithmetic/sin.aig of lsils/benchmarks>
 
 ```
 formula: 0 of 16777216 inputs differ from the benchmark
-netlist: 744 nodes, at most 6 inputs each, 0 of 16777216 inputs differ from the benchmark
+netlist: 735 nodes, at most 6 inputs each, 0 of 16777216 inputs differ from the benchmark
 benchmark against the cosine rounded to nearest: equal on 15613364 inputs, one off on 1163852, further off on 0
 ```
 
