@@ -1,13 +1,13 @@
 # EPFL sixteen, twenty, twentythree
 
-The three largest circuits of the [EPFL combinational benchmark suite](https://github.com/lsils/benchmarks), 16 to 23 million AND gates each, as LUT-6 netlists of 13,000 LUTs.
+The three largest circuits of the [EPFL combinational benchmark suite](https://github.com/lsils/benchmarks), 16 to 23 million AND gates each, as LUT-6 netlists of 12,700 LUTs.
 Each netlist is proven equivalent to the EPFL original. The proof uses no solver and runs in minutes.
 
 | Circuit | Inputs | Outputs | Original, AND gates | EPFL best LUT-6, 2026 | LUT-6 here | Levels |
 | --- | --- | --- | --- | --- | --- | --- |
-| sixteen | 117 | 50 | 16,216,836 | 3,282,958 | 13,092 | 134 |
-| twenty | 137 | 60 | 20,732,893 | 4,166,467 | 13,079 | 134 |
-| twentythree | 153 | 68 | 23,339,737 | 470,892 | 13,104 | 138 |
+| sixteen | 117 | 50 | 16,216,836 | 3,282,958 | 12,691 | 134 |
+| twenty | 137 | 60 | 20,732,893 | 4,166,467 | 12,719 | 133 |
+| twentythree | 153 | 68 | 23,339,737 | 470,892 | 12,744 | 135 |
 
 The LUT and level counts are `nd` and `lev` from ABC `print_stats` on [`sixteen.blif`](sixteen.blif), [`twenty.blif`](twenty.blif), [`twentythree.blif`](twentythree.blif).
 The originals are the AIGER files of `EPFL_complete.tar.gz`, Zenodo record 2572934.
@@ -47,7 +47,7 @@ The proof does not assume the rule. It reads X and Y off the original netlist as
 
 ## The netlists
 
-**x half, 4,870 LUTs in sixteen.** x = 384 a + b. One table holds F(384 a) and F(384 a - 1), one holds F(b) and F(b+1) for b < 384, and
+**x half, 4,704 LUTs in sixteen.** x = 384 a + b. One table holds F(384 a) and F(384 a - 1), one holds F(b) and F(b+1) for b < 384, and
 
 ```
 F(384 a + b) = F(384 a) F(b+1) + F(384 a - 1) F(b)
@@ -55,17 +55,18 @@ F(384 a + b) = F(384 a) F(b+1) + F(384 a - 1) F(b)
 
 takes two multipliers. F(384 a) is a multiple of 512 and F(384 a - 1) is 1 more than a multiple of 256, so the multipliers are 55 and 56 bits wide.
 
-**Index, 1,398 LUTs.** A row of Y is found from the low bits of A, or of B when A is zero.
+**Index, 1,342 LUTs.** A row of Y is found from the low bits of A, or of B when A is zero.
 Mod 2^k the Fibonacci numbers repeat with period 3·2^(k-1), so 19 low bits of F(m) give m below 196,608 once m mod 12 is known.
 When A and B are both non-zero their three low bits give m mod 12.
 When one of them is zero there are up to three candidates, and a table addressed by slices of the non-zero word says which one.
 The 14 remaining bits of the index come from two 2,048-entry tables, a 7-bit subtraction and a 7-bit multiplication.
 
-**Check, 6,824 LUTs.** F(i-1), F(i) and F(i+1) are computed from the index with the same two tables and three multipliers.
+**Check, 6,645 LUTs.** F(i-1), F(i) and F(i+1) are computed from the index with the same two tables and three multipliers.
 The y term is on only if A equals s(F(i)) and B equals s(F(i-1)) bit for bit and i <= N-3. Its word is s(F(i+1)).
 The points (0,0) and (0,1) are separate terms.
 
 The multipliers are radix-4 Booth with one LUT per partial-product bit and 6:3 counters. One LUT per output joins the two halves.
+A last pass merges a LUT into its only reader wherever the merged LUT still has six inputs or fewer.
 
 **The 9-level netlists** are the two tables written out. Every output bit of the x term is a lookup over the 17 x inputs: 6-input leaves under 4:1 multiplexers, 7 levels. Every point of Y is an AND of 6-bit patterns of (A,B), 3 levels. Every output is the OR of its points in five trees of at most 5 levels, and one LUT joins the five trees and the x term.
 
@@ -98,7 +99,7 @@ Output for sixteen:
 ```
 sixteen: original = ( X(x) OR Y(A,B) ); 950216 x products, 919725 y products (1 not a single point), 37334 table points
    the Fibonacci rule (N = 100000, n = 50) gives the same two tables: True
-   netlist: 13092 LUTs
+   netlist: 12691 LUTs
 1. output LUTs of the form p(x side) OR q(y side): 50 of 50, 0 constant
 2. all 131072 x patterns equal the original: True
 3. cut values enumerated: 262144; products checked: 14334961 (largest sum 2, 262144 with free bits); failures: 0
@@ -115,7 +116,7 @@ cd proof
 
 It needs a C compiler and Python 3. The three circuits take about nine minutes on one core of an Apple M1.
 
-For a 9-level netlist, unpack it and call the script on it:
+For a 9-level netlist, unpack it and call the script on it (`run.sh` has built the tools by then):
 
 ```
 gunzip sixteen_depth.blif.gz
