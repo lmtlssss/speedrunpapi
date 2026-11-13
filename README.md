@@ -210,6 +210,9 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | `sixteen`, size | 3282958 LUT-6 | 13092 LUT-6 |
 | `twenty`, size | 4166467 LUT-6 | 13079 LUT-6 |
 | `twentythree`, size | 470892 LUT-6 | 13104 LUT-6 |
+| `sixteen`, depth | 14 levels, 3387001 LUT-6 | 9 levels, 407332 LUT-6 |
+| `twenty`, depth | 14 levels, 4381634 LUT-6 | 9 levels, 419071 LUT-6 |
+| `twentythree`, depth | 15 levels, 4913996 LUT-6 | 9 levels, 468313 LUT-6 |
 
 [`hardware/epfl-mtm/`](hardware/epfl-mtm/) holds `sixteen`, `twenty` and `twentythree`, the 16 to 23 million gate circuits of the suite. They are the truth table of a Fibonacci loop in 64-bit integers; the netlists compute it, and each is proven equivalent to the original in minutes without a solver.
 

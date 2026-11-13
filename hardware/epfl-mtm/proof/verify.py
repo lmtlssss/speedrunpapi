@@ -172,15 +172,16 @@ def main():
     # ---- 3. on only at table points ------------------------------------------------------
     cut = [f"cut_t{i}" for i in range(14)] + [f"cut_r{i}" for i in range(4)]
     kept = [b for b in blocks[1:] if b.split("\n")[0].split()[-1] not in cut]
-    assert len(blocks) - 1 - len(kept) == NCUT
-    head = re.sub(r"(?m)^(\.inputs .*)$", lambda mm: mm.group(1) + " " + " ".join(cut), blocks[0])
+    ncut = len(blocks) - 1 - len(kept)
+    assert ncut in (0, NCUT)                 # a table-form netlist has no index wires: one case, nothing cut
+    head = re.sub(r"(?m)^(\.inputs .*)$", lambda mm: mm.group(1) + (" " + " ".join(cut) if ncut else ""), blocks[0])
     open(T + "_cut.blif", "w").write(head + "".join(kept))
     run(py, os.path.join(HERE, "blif2aig.py"), T + "_cut.blif", T + "_cut.aig", NX, 2 * n, pol)
     M = (1 << 64) - 1
     with open(T + "_pts.bin", "wb") as g:
         for (a, b), wv in ytab.items():
             g.write(struct.pack("<6Q", a & M, a >> 64, b & M, b >> 64, wv & M, wv >> 64))
-    r = run(os.path.join(HERE, "cutprove"), T + "_cut.aig", NX, n, NCUT, X0, 0, T + "_pts.bin")
+    r = run(os.path.join(HERE, "cutprove"), T + "_cut.aig", NX, n, ncut, X0, 0, T + "_pts.bin")
     print("3. " + "; ".join(r.stdout.strip().splitlines()) + (" " + r.stderr.strip()[:300] if r.stderr.strip() else ""))
     ok &= r.returncode == 0
 
