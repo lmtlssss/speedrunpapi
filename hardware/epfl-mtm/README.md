@@ -112,3 +112,11 @@ It needs a C compiler and Python 3. The three circuits take about nine minutes o
 | `proof/blif2aig.py` | LUT netlist to AND/OR gates through exact covers |
 | `proof/cutprove.c` | step 3 |
 | `proof/verify.py`, `proof/run.sh` | the whole proof |
+
+## Your block
+
+One table, ROM or netlist of yours taken apart this way: 2,500 USD, fixed.
+
+You send the netlist or the table. You receive the rule behind it if it has one, the LUT netlist built from that rule, and the proof of equivalence with the tools to rerun it.
+
+Pay: https://buy.stripe.com/9B614m4Ls2kf6s277R6c004 · Questions: lmtlssss@colony.technology
