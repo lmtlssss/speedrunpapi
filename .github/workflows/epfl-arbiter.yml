@@ -1,0 +1,32 @@
+name: EPFL arbiter
+on:
+  push:
+    paths:
+      - 'hardware/epfl-arbiter/**'
+      - '.github/workflows/epfl-arbiter.yml'
+  pull_request:
+    paths:
+      - 'hardware/epfl-arbiter/**'
+      - '.github/workflows/epfl-arbiter.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Benchmark circuit at a pinned commit
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/lsils/benchmarks/82d8cc6910419298e713a46644ed59fd3df53038/random_control/arbiter.aig" -o arbiter.aig
+          echo "0eacc0a97717bbc91f732ce6814bbfcdefa8a0b65b13ade6f002e35d0e585d82  arbiter.aig" | sha256sum -c -
+      - name: The netlist is what build.py writes
+        run: |
+          set -euo pipefail
+          python3 hardware/epfl-arbiter/build.py built.blif
+          cmp built.blif hardware/epfl-arbiter/arbiter_size_2027.blif
+      - name: Every output against the benchmark, as decision diagrams
+        run: |
+          set -euo pipefail
+          python3 hardware/epfl-arbiter/check.py arbiter.aig

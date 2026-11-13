@@ -220,6 +220,8 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 
 [`hardware/epfl-sin/`](hardware/epfl-sin/) holds the EPFL `sin` benchmark as 735 LUT-6 where the smallest published netlist has 994, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 16,777,216 inputs.
 
+[`hardware/epfl-arbiter/`](hardware/epfl-arbiter/) holds the EPFL round-robin `arbiter` as 256 LUT-6 where the smallest published netlist has 259, with the equations it is built from. ABC proves it equal to the benchmark in under a second.
+
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
 `udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
 [`hardware/linear/`](hardware/linear/) builds XOR logic: CRC-32 over a 512-bit bus in 701 LUT-6 at 4 levels, where Yosys takes 2,344; with any number of valid bytes, 1,172.
