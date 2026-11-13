@@ -7,9 +7,11 @@ The suite keeps a list of the smallest known LUT-6 implementations.
 | --- | --- | --- |
 | Smallest published, `best_results/size/log2_size_2026.blif` | 5,986 | 300 |
 | [`log2_size_2027.blif`](log2_size_2027.blif) | 4,099 | 138 |
+| Shallowest published, `best_results/depth/log2_depth_2026.blif` | 9,391 | 51 |
+| [`log2_depth_2027.blif`](log2_depth_2027.blif) | 7,978 | 23 |
 
-The first row is the suite's table. The second is `nd` and `lev` from ABC `print_stats`; `&get -m; &ps` gives the same two numbers.
-The netlist gives the benchmark's output on all 4,294,967,296 inputs.
+The published rows are the suite's tables. The others are `nd` and `lev` from ABC `print_stats`; `&get -m; &ps` gives the same numbers.
+Both netlists give the benchmark's output on all 4,294,967,296 inputs.
 
 ## What the benchmark computes
 
@@ -43,7 +45,7 @@ Bit 31 does not enter the tables. With bit 31 clear the output is the cubic of s
 
 On 16,777,216 random inputs with bit 31 set, the output lies between 1.40 below and 0.47 above the true value, in units of the last bit, and equals the true value rounded down on 13,599,903 of them.
 
-## The netlist
+## The small netlist
 
 It is built from the formula, one bit heap per line of it.
 
@@ -56,6 +58,18 @@ It is built from the formula, one bit heap per line of it.
 
 This gives 4,142 LUTs. ABC `mfs2`, `lutpack`, `&satlut` and `&mfs` then took it to 4,099.
 
+## The shallow netlist
+
+The same three heaps, arranged for depth.
+
+- U and V are never added up. A stage ends in two rows, and the next stage multiplies both rows by x. The rows are radix-4 Booth rows with their digits taken from x, which is an input, so a row costs one level whatever it multiplies.
+- A word is the sum of its two rows, the carry out of the columns under the cut, and a wrap of the two-row sum. The wrap is read from the two top bits of the rows, because the top bits of U are 11 and those of V are 00. It enters the next product as one more bit of a row.
+- The carry out of the low columns takes a prefix network of three levels. Its row, the carry times x, joins the next heap at the fourth pass, when the heap's own counters have reached its level.
+- Counters with six inputs halve a heap per level: four levels for the first heap of 15 rows, five each for the other two of 36 rows. The columns under a cut start shorter and are taken down ahead of the others, which brings their carry one level forward.
+- One prefix adder at the end, four levels.
+
+Tables 2, then 1 + 4, 1 + 5, 1 + 5 and 4: 23 levels and 8,364 LUTs. ABC `&satlut`, `mfs2` and `&mfs` took the count to 7,978 without adding a level.
+
 ## Check
 
 [`check.c`](check.c) simulates the benchmark, the formula and the netlist on every input and counts the inputs where they differ. It needs a C compiler and nothing else.
@@ -63,6 +77,7 @@ This gives 4,142 LUTs. ABC `mfs2`, `lutpack`, `&satlut` and `&mfs` then took it 
 ```
 cc -O3 -o check check.c -lpthread
 ./check <arithmetic/log2.aig of lsils/benchmarks> log2_size_2027.blif tables.json 8
+./check <arithmetic/log2.aig of lsils/benchmarks> log2_depth_2027.blif tables.json 8
 ```
 
 ```
@@ -72,5 +87,7 @@ formula against benchmark: 0 differ
 netlist against benchmark: 0 differ
 ```
 
-The last argument is the number of threads. The run takes 21 minutes on seven threads of an Apple M1.
-The same check runs on each change to this folder, in sixteen parts, against `log2.aig` of lsils/benchmarks commit `82d8cc6` ([workflow](../../.github/workflows/epfl-log2.yml)).
+The second command prints 7978 LUTs and the same two zero lines.
+
+The last argument is the number of threads. On seven threads of an Apple M1 the run takes 21 minutes for the small netlist and 33 minutes for the shallow one.
+The same check runs on each change to this folder, in sixteen parts per netlist, against `log2.aig` of lsils/benchmarks commit `82d8cc6` ([workflow](../../.github/workflows/epfl-log2.yml)).
