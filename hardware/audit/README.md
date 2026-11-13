@@ -46,6 +46,9 @@ Every row below has a reproducer that fits on one line.
 | [YosysHQ/picorv32](https://github.com/YosysHQ/picorv32) | `picorv32_pcpi_fast_mul`, `EXTRA_INSN_FFS = 1` | 1,000,000 | 702,633 | repository archived |
 | YosysHQ/picorv32 | `picorv32_pcpi_div`, `picorv32_pcpi_mul`, `picorv32_pcpi_fast_mul` at its defaults | 2,000,000 each | 0 | |
 | ultraembedded/biriscv, ultraembedded/riscv | divider, multiplier | 2,000,000 each | 0 | |
+| [openhwgroup/cvfpu](https://github.com/openhwgroup/cvfpu) | `fpnew_top`: DIV on FP16ALT, five rounding modes | 5,000,000 | 9,752; flags only on 24,577 more | [#169](https://github.com/openhwgroup/cvfpu/issues/169), cause and fix |
+| openhwgroup/cvfpu | merged ADDMUL unit: ADDS into a format with a narrower exponent, eight format pairs | 80,000,000 | 11,602,774 | [#195](https://github.com/openhwgroup/cvfpu/issues/195) |
+| openhwgroup/cvfpu | fused multiply-add, add, sub, mul in both ADDMUL units and every format pair; DIV, SQRT in FP64, FP32, FP16; conversions, compares, min/max, sign injection, classify; five formats | 1,900,000,000; 691,564,032 more that cover small formats completely | 0 | |
 | T-Head E906 | `pa_fpu_top`: div, sqrt, mul, add, sub, fused multiply-add, conversions | 1,100,000 per operation, five rounding modes; 10 to 20 million more for each of div, sqrt, mul, add | 0 values | underflow flag, reported |
 | T-Head C906 | `aq_vpu_top`: the same operations in double, single and half | 1,100,000 per operation and format | 0 values | underflow flag, not reported for C906 |
 | T-Head C910 | `ct_vfdsu_top`: div, sqrt in double, single and half | 1,100,000 per operation and format; 30 million more in double and single | 0 values | underflow flag, reported |
@@ -166,6 +169,20 @@ mul x5, 3, 5; mul x6, 7, 11; mul x7, 3, 11    expected 15, 77, 33    core 15, 15
 ```
 
 Fix: `EXTRA_INSN_FFS ? (pcpi_insn_valid_q && pcpi_valid) : pcpi_insn_valid` at line 2354. 0 wrong of 1,000,000 after.
+
+**CVFPU `fpnew_top`, DIV on FP16ALT.** In the vendored C910 divider the skip threshold for FP16ALT is the binary32 constant, `12'hf6a` where `12'hf7a` belongs, and the default entry of the FP16ALT subnormal table is zero. A quotient below 2^-134 returns zero without flags.
+
+```
+0x0d00 / 0x5080 (2^-135)    expected 0x0000 UF|NX, toward +inf 0x0001 UF|NX    core 0x0000, no flags, every mode
+```
+
+Fix: two lines. 0 wrong of 20,000,000 after. The patch, a vector generator and a testbench are in [`cvfpu/`](cvfpu).
+
+**CVFPU merged ADDMUL unit, ADDS into a narrower format.** The addend exponent, rebiased for the destination, goes below 1 and is truncated into the exponent field (`fpnew_fma_multi.sv`, line 777).
+
+```
+ADDS FP64 to FP32    (+0) + 0x37e0000000000000 (2^-129)    expected 0x00100000    core 0x7f000000 (2^127), no flags
+```
 
 **T-Head E906, C906, C910.** Values are right in every run. The underflow flag is not raised when a tiny inexact result rounds up to the smallest normal number.
 
