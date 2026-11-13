@@ -1,0 +1,30 @@
+--- a/lib/gaisler/noelv/core/nanofpunv.vhd
++++ b/lib/gaisler/noelv/core/nanofpunv.vhd
+@@ -2602,10 +2602,9 @@
+         else
+           v.op2.mant(0) := v.op2.mant(0) or not all_0(r.s2(r.accbot'high + 2 downto 0));
+         end if;
+-        -- If we had an add, any out-shifted bits must go into sticky.
+-        if r.addneg = '0' then
+-          v.op2.mant(0) := v.op2.mant(0) or r.inexact;
+-        end if;
++        -- Out-shifted bits go into sticky for an add and for a subtract: the borrow taken for them in
++        -- nf_muladd_xaddsub3 leaves the difference below the true value by less than one unit.
++        v.op2.mant(0) := v.op2.mant(0) or r.inexact;
+         -- Adjust so that the implicit 1 is at the expected position.
+         v.s         := nf_round;
+ 
+@@ -2618,10 +2617,9 @@
+ 
+       when nf_muladd_xaddsub9 =>
+         v.op2.mant  := r.op2.mant or adjusted.mant;
+-        -- If we had an add, any out-shifted bits must go into sticky.
+-        if r.addneg = '0' then
+-          v.op2.mant(0) := v.op2.mant(0) or r.inexact;
+-        end if;
++        -- Out-shifted bits go into sticky for an add and for a subtract: the borrow taken for them in
++        -- nf_muladd_xaddsub3 leaves the difference below the true value by less than one unit.
++        v.op2.mant(0) := v.op2.mant(0) or r.inexact;
+         -- Adjust so that the implicit 1 is at the expected position.
+         v.s         := nf_round;
+ 
