@@ -17,6 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        netlist: [log2_size_2027.blif, log2_depth_2027.blif]
         part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -31,4 +32,4 @@ jobs:
           cc -O3 -o check hardware/epfl-log2/check.c -lpthread
           first=$(( ${{ matrix.part }} * 524288 ))
           last=$(( first + 524288 ))
-          ./check log2.aig hardware/epfl-log2/log2_size_2027.blif hardware/epfl-log2/tables.json 4 "$first" "$last"
+          ./check log2.aig "hardware/epfl-log2/${{ matrix.netlist }}" hardware/epfl-log2/tables.json 4 "$first" "$last"

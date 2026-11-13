@@ -199,14 +199,18 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | --- | --- | --- |
 | `voter`, size | 1145 LUT-6 | 987 LUT-6 |
 | `voter`, depth | 11 levels | 9 levels |
-| `multiplier`, size | 4282 LUT-6 | 3654 LUT-6 |
+| `multiplier`, size | 4282 LUT-6 | 3420 LUT-6 |
 | `multiplier`, depth | 25 levels | 11 levels |
-| `square`, size | 2894 LUT-6 | 2497 LUT-6 |
+| `square`, size | 2894 LUT-6 | 2421 LUT-6 |
 | `square`, depth | 10 levels, 3690 LUT-6 | 10 levels, 3358 LUT-6 |
 | `sqrt`, size | 2958 LUT-6 | 2174 LUT-6 |
-| `hyp`, size | 36451 LUT-6 | 24898 LUT-6 |
+| `hyp`, size | 36451 LUT-6 | 24436 LUT-6 |
 | `div`, size | 3082 LUT-6 | 2287 LUT-6 |
 | `div`, depth | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 |
+| `sin`, size | 994 LUT-6 | 685 LUT-6 |
+| `log2`, size | 5986 LUT-6 | 4099 LUT-6 |
+| `log2`, depth | 51 levels, 9391 LUT-6 | 23 levels, 7978 LUT-6 |
+| `arbiter`, size | 259 LUT-6 | 256 LUT-6 |
 | `sixteen`, size | 3282958 LUT-6 | 12691 LUT-6 |
 | `twenty`, size | 4166467 LUT-6 | 12719 LUT-6 |
 | `twentythree`, size | 470892 LUT-6 | 12744 LUT-6 |
@@ -218,9 +222,9 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 
 [`hardware/iwls/`](hardware/iwls/) holds the rules behind twenty functions of the IWLS 2026 contest, which gives them as truth tables only. For ten of them the circuit built from the rule is smaller than the smallest of the twelve teams: 519 to 683 AND nodes where the contest has 2,868 to 8,383, and 1,067 to 2,056 where it has 1,573 to 21,553.
 
-[`hardware/epfl-sin/`](hardware/epfl-sin/) holds the EPFL `sin` benchmark as 735 LUT-6 where the smallest published netlist has 994, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 16,777,216 inputs.
+[`hardware/epfl-sin/`](hardware/epfl-sin/) holds the EPFL `sin` benchmark as 685 LUT-6 where the smallest published netlist has 994, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 16,777,216 inputs.
 
-[`hardware/epfl-log2/`](hardware/epfl-log2/) holds the EPFL `log2` benchmark as 4,099 LUT-6 where the smallest published netlist has 5,986, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 4,294,967,296 inputs.
+[`hardware/epfl-log2/`](hardware/epfl-log2/) holds the EPFL `log2` benchmark as 4,099 LUT-6 where the smallest published netlist has 5,986, a second netlist of 23 levels where the shallowest published has 51, and the arithmetic the benchmark computes, which the suite does not describe. All three are checked against the benchmark on all 4,294,967,296 inputs.
 
 [`hardware/epfl-arbiter/`](hardware/epfl-arbiter/) holds the EPFL round-robin `arbiter` as 256 LUT-6 where the smallest published netlist has 259, with the equations it is built from. ABC proves it equal to the benchmark in under a second.
 

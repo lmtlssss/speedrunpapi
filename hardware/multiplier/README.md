@@ -22,11 +22,13 @@ Counts are ABC `print_stats` on LUT-6 netlists. Reference: EPFL arithmetic bench
 
 | Benchmark | EPFL best size | This compiler | Netlist |
 | --- | --- | --- | --- |
-| `multiplier`, 64 x 64 | 4282 LUT-6, 229 levels | 3654 LUT-6, 131 levels | `epfl/multiplier.blif` |
-| `square`, 64-bit | 2894 LUT-6, 192 levels | 2497 LUT-6, 127 levels | `epfl/square.blif` |
+| `multiplier`, 64 x 64 | 4282 LUT-6, 229 levels | 3420 LUT-6, 129 levels | `epfl/multiplier.blif` |
+| `square`, 64-bit | 2894 LUT-6, 192 levels | 2421 LUT-6, 127 levels | `epfl/square.blif` |
 | `sqrt`, 128-bit | 2958 LUT-6 | 2174 LUT-6 | `epfl/sqrt.blif` |
-| `hyp`, 128-bit sides | 36451 LUT-6 | 24898 LUT-6 | `epfl/hyp.blif.gz` |
+| `hyp`, 128-bit sides | 36451 LUT-6 | 24436 LUT-6 | `epfl/hyp.blif.gz` |
 | `div`, 64 / 64 | 3082 LUT-6 | 2287 LUT-6 | `epfl/div.blif` |
+
+The `multiplier`, `square` and `hyp` netlists come from the next revision of the leaf rows and of the heap reduction. A row forms 3X itself: a digit of 3 takes the carry of X + 2X from the row bit below, so no leaf builds an adder for 3X. The reduction leaves exactly two wires in every column for the last adder. `mul_compiler.py` in this folder builds the previous netlists, 3654, 2497 and 24898 LUT-6. The checkers here replay the derivations of both.
 
 Depth builds, against the EPFL best depth results:
 
