@@ -1,0 +1,45 @@
+--- a/src/fpnew_fma_multi.sv
++++ b/src/fpnew_fma_multi.sv
+@@ -238,6 +238,17 @@
+   // | MUL      | \c 0        | MUL: Set operand C to +0.0 or -0.0 depending on the rounding mode
+   // | *others* | \c -        | *invalid*
+   // \note \c op_mod_q always inverts the sign of the addend.
++  // Symmetric add (ADDS) into a destination format with a smaller exponent range: an addend below the
++  // destination's normal range gets a rebiased exponent < 1, which the addend-anchored path cannot
++  // denormalize. Both addends are in the source format, so the one with the larger exponent is put on
++  // the product side (op B, multiplied by 1.0); the sum is then always product-anchored and that path
++  // denormalizes correctly.
++  logic adds_swap;
++  assign adds_swap = (inp_pipe_op_q[NUM_INP_REGS] == fpnew_pkg::ADDS)
++                     && (fpnew_pkg::bias(src_fmt_q) > fpnew_pkg::bias(dst_fmt_q))
++                     && (({1'b0, fmt_exponent[src2_fmt_q][2]} + info_q[src2_fmt_q][2].is_subnormal)
++                         > ({1'b0, fmt_exponent[src_fmt_q][1]} + info_q[src_fmt_q][1].is_subnormal));
++
+   always_comb begin : op_select
+ 
+     // Default assignments - packing-order-agnostic
+@@ -251,6 +262,14 @@
+     // op_mod_q inverts sign of operand C
+     operand_c.sign = operand_c.sign ^ inp_pipe_op_mod_q[NUM_INP_REGS];
+ 
++    if (adds_swap) begin
++      operand_b = {fmt_sign[src2_fmt_q][2] ^ inp_pipe_op_mod_q[NUM_INP_REGS],
++                   fmt_exponent[src2_fmt_q][2], fmt_mantissa[src2_fmt_q][2]};
++      operand_c = {fmt_sign[src_fmt_q ][1], fmt_exponent[src_fmt_q ][1], fmt_mantissa[src_fmt_q ][1]};
++      info_b    = info_q[src2_fmt_q][2];
++      info_c    = info_q[src_fmt_q ][1];
++    end
++
+     unique case (inp_pipe_op_q[NUM_INP_REGS])
+       fpnew_pkg::FMADD:  ; // do nothing
+       fpnew_pkg::FNMSUB: operand_a.sign = ~operand_a.sign; // invert sign of product
+@@ -695,6 +714,9 @@
+       end else begin
+         // Cap the shift distance to align mantissa with minimum exponent
+         norm_shamt          = unsigned'(signed'(PRECISION_BITS + 2 + exponent_product_q));
++        // Product exponent below -(p+2): the shift distance would be negative (it wraps in the unsigned
++        // shift amount). The whole sum lies below the round bit, so leave it in the sticky bits.
++        if (exponent_product_q < -signed'(EXP_WIDTH'(PRECISION_BITS + 2))) norm_shamt = '0;
+         normalized_exponent = 0; // subnormals encoded as 0
+         // Fix exponent in case of a normal number accidentally being classified as subnormal due
+         // to LZA over-prediction (LZA could be 1 larger than actual LZC)
