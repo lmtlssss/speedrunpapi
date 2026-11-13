@@ -218,6 +218,8 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 
 [`hardware/iwls/`](hardware/iwls/) holds the rules behind twenty functions of the IWLS 2026 contest, which gives them as truth tables only. For ten of them the circuit built from the rule is smaller than the smallest of the twelve teams: 519 to 683 AND nodes where the contest has 2,868 to 8,383, and 1,067 to 2,056 where it has 1,573 to 21,553.
 
+[`hardware/epfl-sin/`](hardware/epfl-sin/) holds the EPFL `sin` benchmark as 744 LUT-6 where the smallest published netlist has 994, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 16,777,216 inputs.
+
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
 `udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
 [`hardware/linear/`](hardware/linear/) builds XOR logic: CRC-32 over a 512-bit bus in 701 LUT-6 at 4 levels, where Yosys takes 2,344; with any number of valid bytes, 1,172.

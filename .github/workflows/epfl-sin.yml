@@ -1,0 +1,28 @@
+name: EPFL sin
+on:
+  push:
+    paths:
+      - 'hardware/epfl-sin/**'
+      - '.github/workflows/epfl-sin.yml'
+  pull_request:
+    paths:
+      - 'hardware/epfl-sin/**'
+      - '.github/workflows/epfl-sin.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Benchmark circuit at a pinned commit
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/lsils/benchmarks/82d8cc6910419298e713a46644ed59fd3df53038/arithmetic/sin.aig" -o sin.aig
+          echo "e1a649d2eca27337787cb4aed79abe120f49597975beaed8bffd6a329c2664b3  sin.aig" | sha256sum -c -
+      - name: Formula and netlist against the benchmark on every input
+        run: |
+          set -euo pipefail
+          python3 -m pip install --quiet numpy
+          python3 hardware/epfl-sin/check.py sin.aig
