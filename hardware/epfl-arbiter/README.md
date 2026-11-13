@@ -38,14 +38,22 @@ With one priority bit set, the first request at or above it gets the grant, wrap
 
 ## Check
 
-ABC proves the netlist equal to the benchmark in under a second.
+[`check.py`](check.py) builds the reduced ordered decision diagram of every output of both circuits, with the variables ordered `priority[0]`, `req[0]`, `priority[1]`, `req[1]` and so on, and compares them. Equal functions end in the same node. It needs Python only and takes six seconds.
 
 ```
-abc -c "cec -n <random_control/arbiter.aig of lsils/benchmarks> arbiter_size_2027.blif"
+python3 check.py <random_control/arbiter.aig of lsils/benchmarks>
 ```
 
 ```
+netlist: 256 LUTs. outputs: 129. decision diagram nodes built: 2086563
+outputs that differ from the benchmark: 0 of 129
+```
+
+ABC gives the same verdict in under a second:
+
+```
+abc -c "cec -n arbiter.aig arbiter_size_2027.blif"
 Networks are equivalent.
 ```
 
-The same command runs on each change to this folder against `arbiter.aig` of lsils/benchmarks commit `82d8cc6` ([workflow](../../.github/workflows/epfl-arbiter.yml)).
+The first check runs on each change to this folder against `arbiter.aig` of lsils/benchmarks commit `82d8cc6`, after the netlist has been rebuilt from `build.py` and compared byte for byte ([workflow](../../.github/workflows/epfl-arbiter.yml)).

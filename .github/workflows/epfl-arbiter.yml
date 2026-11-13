@@ -26,10 +26,7 @@ jobs:
           set -euo pipefail
           python3 hardware/epfl-arbiter/build.py built.blif
           cmp built.blif hardware/epfl-arbiter/arbiter_size_2027.blif
-      - name: ABC proves the netlist equal to the benchmark
+      - name: Every output against the benchmark, as decision diagrams
         run: |
           set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq berkeley-abc
-          berkeley-abc -c "cec -n arbiter.aig hardware/epfl-arbiter/arbiter_size_2027.blif" | tee cec.log
-          grep -q "Networks are equivalent" cec.log
+          python3 hardware/epfl-arbiter/check.py arbiter.aig
