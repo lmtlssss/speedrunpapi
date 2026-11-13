@@ -207,6 +207,11 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | `hyp`, size | 36451 LUT-6 | 24898 LUT-6 |
 | `div`, size | 3082 LUT-6 | 2287 LUT-6 |
 | `div`, depth | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 |
+| `sixteen`, size | 3282958 LUT-6 | 13092 LUT-6 |
+| `twenty`, size | 4166467 LUT-6 | 13079 LUT-6 |
+| `twentythree`, size | 470892 LUT-6 | 13104 LUT-6 |
+
+[`hardware/epfl-mtm/`](hardware/epfl-mtm/) holds `sixteen`, `twenty` and `twentythree`, the 16 to 23 million gate circuits of the suite. They are the truth table of a Fibonacci loop in 64-bit integers; the netlists compute it, and each is proven equivalent to the original in minutes without a solver.
 
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
 `udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
