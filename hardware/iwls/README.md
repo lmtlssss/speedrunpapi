@@ -6,6 +6,7 @@ The functions come without a description.
 
 This folder holds the rule behind twenty of them, `ex280` to `ex299`, and one circuit per function built from its rule.
 For `ex290` to `ex299` the circuit here is smaller than the smallest in the contest, by a factor of 1.4 to 14.8.
+The floating-point functions of the 2025 contest, `ex160` to `ex185`, are in [`2025/`](2025/).
 
 | Function | Inputs | Smallest in the contest, AND nodes | Here, AND nodes | Levels here |
 | --- | --- | --- | --- | --- |
