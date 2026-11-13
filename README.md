@@ -216,6 +216,8 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 
 [`hardware/epfl-mtm/`](hardware/epfl-mtm/) holds `sixteen`, `twenty` and `twentythree`, the 16 to 23 million gate circuits of the suite. They are the truth table of a Fibonacci loop in 64-bit integers; the netlists compute it, and each is proven equivalent to the original in minutes without a solver.
 
+[`hardware/iwls/`](hardware/iwls/) holds the rules behind fifteen functions of the IWLS 2026 contest, which gives them as truth tables only. For five of them the smallest circuit of the twelve teams has 2,868 to 8,383 AND nodes; built from the rule they take 519 to 683.
+
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
 `udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
 [`hardware/linear/`](hardware/linear/) builds XOR logic: CRC-32 over a 512-bit bus in 701 LUT-6 at 4 levels, where Yosys takes 2,344; with any number of valid bytes, 1,172.
