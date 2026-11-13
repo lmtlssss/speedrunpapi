@@ -22,6 +22,18 @@ Every row below has a reproducer that fits on one line.
 | openrisc/mor1kx | `pfpu32`: int to float, float to int, 13 compares | 8,000,000 each; 1,000,000 compares | 0 | |
 | [openrisc/or1k_marocchino](https://github.com/openrisc/or1k_marocchino) | `pfpu_marocchino`: add, sub, mul, div, single and double, four rounding modes | 8,000,000 each | single as mor1kx; double 129,338, 128,898, 176,716, 255,254 | [#30](https://github.com/openrisc/or1k_marocchino/issues/30) |
 | openrisc/or1k_marocchino | `pfpu_marocchino`: all operations interleaved | 15,680,000 | 56,402 after a division by zero | [#29](https://github.com/openrisc/or1k_marocchino/issues/29) |
+| [bespoke-silicon-group/basejump_stl](https://github.com/bespoke-silicon-group/basejump_stl) | `bsg_fpu_add_sub`: add, sub, single and double | 2,080,000 each | 68,280, 68,308; 66,020, 65,835 | [#765](https://github.com/bespoke-silicon-group/basejump_stl/pull/765) |
+| bespoke-silicon-group/basejump_stl | `bsg_fpu_mul`, `bsg_fpu_f2i`, single and double | 3,120,000; 2,080,000 | 0 values; overflow and invalid flags in three cases | offered in #765 |
+| bespoke-silicon-group/basejump_stl | `bsg_fpu_i2f`, `bsg_fpu_cmp`, `bsg_fpu_classify`, sticky, leading zeros | 2,080,000 each | 0 | |
+| [lowRISC/muntjac](https://github.com/lowRISC/muntjac) | FPU: add, sub, single and double, five rounding modes | 10,000,000 each | 1,205, 1,295; 1,455, 1,330 | [#8](https://github.com/lowRISC/muntjac/issues/8) |
+| lowRISC/muntjac | FPU: fused multiply-add family, single and double | 400,000 each | 2,220 to 3,439 | #8 |
+| lowRISC/muntjac | FPU: mul | 10,000,000 each | 0 values; underflow flag 53,406 and 69,672 | #8 |
+| lowRISC/muntjac | FPU: div, sqrt; `muntjac_mul`, `muntjac_mul_fast`, `muntjac_div` | 400,000 each; about 500,000 per integer operation | 0 | |
+| [rsd-devel/rsd](https://github.com/rsd-devel/rsd) | develop: FMA, add, sub, mul, div, sqrt, conversions, compares, five rounding modes, flags | 162,240,000 | 0 | |
+| rsd-devel/rsd | master: FMUL | 3,120,000 | 22,818 | upstream #92, fixed on develop |
+| [bluespec/Flute](https://github.com/bluespec/Flute) | FBox, checked-in RV64 Verilog: add, sub, mul, single and double, five rounding modes | 10,000,000 each | 339,869 to 698,070 | Bluespec library fix bsc #808 is later than the checked-in Verilog |
+| bluespec/Flute | FBox: fused multiply-add, conversions, min/max | 40,000 per operation | see below | Flute #64, #65; Piccolo #23, #25, #26; bsc #1183 |
+| bluespec/Flute | integer multiply/divide box, RV64 and RV32 | about 500,000 per operation | 0 | |
 | [stnolting/neorv32](https://github.com/stnolting/neorv32) | Zfinx FPU, five rounding modes | 987,401 | 1,004 | [#1689](https://github.com/stnolting/neorv32/issues/1689) |
 | stnolting/neorv32 | multiply/divide unit, serial and fast | 2,000,000 per variant | 0 | |
 | [chipsalliance/Cores-VeeR-EH2](https://github.com/chipsalliance/Cores-VeeR-EH2) | 1/2/3/4-bit dividers, XLEN 64 | 1,000,000 each | 12,200 to 13,600 each | [#60](https://github.com/chipsalliance/Cores-VeeR-EH2/issues/60) |
@@ -99,6 +111,30 @@ mul 3.0 * 2.0    expected 0x40c00000    core 0x7f800000 (inf), DZF
 ```
 
 Fix: `s0o_div_dbz <= div_rdy_i & div_dbz_i;`. 0 wrong of 15,680,000 after both fixes.
+
+**BaseJump STL `bsg_fpu_add_sub`.** A zero operand is given a hidden 1 (line 117); the zero flags of the preprocess module are wired and never read. An exact zero sum takes the sign of the first operand.
+
+```
+add  0x00000000 + 0x00000000    IEEE 0x00000000    core 0x00800000 (smallest normal)
+add  0x0c7fffff + 0x80000000    IEEE 0x0c7fffff    core 0x0c7ffffe
+add  0xbf800000 + 0x3f800000    IEEE 0x00000000    core 0x80000000 (-0)
+```
+
+**lowRISC muntjac FPU.** A zero operand is decoded with a placeholder magnitude, and the sum computed from it can cancel against the other operand. The double-precision fused multiply-add has no guard bits under the 106-bit product.
+
+```
+fadd.d   0 + 0x8008000000000000                                           expected 0x8008000000000000    core 0x8000000000000000
+fmadd.d  0x3fefffffffffffff * 0x3fefffffffffffff + 0xbff0000000000000     expected 0xbcb0000000000000    core 0xbcafffffffffffff
+fmul.d   0x3ff0000000000001 * 0x000fffffffffffff                          flags expected NX              core UF|NX
+```
+
+**Bluespec Flute FBox**, the Verilog checked into the repository. Round to nearest, ties away, rounds every inexact result away from zero. The double-precision fused multiply-add rounds the product before the add.
+
+```
+fadd.d   RMM  0x3ff0000000000000 + 0x3c80000000000000 (1 + 2^-55)                     expected 0x3ff0000000000000    core 0x3ff0000000000001
+fmadd.d  RNE  0x3ff0000000000001 * 0x3ff0000000000001 + 0xbff0000000000002            expected 0x3970000000000000 (2^-104)    core 0x3c90000000000000 (2^-54)
+fcvt.w.d RMM  0x4006000000000000 (2.75)                                               expected 3                     core 2
+```
 
 **neorv32 Zfinx FPU.** The float-to-integer path drops the mantissa bit shifted out for inputs in (0.5, 1), so 0.5 + 1 ulp looks like a tie. In round-down mode the zero sum of two zeros takes the wrong sign.
 
