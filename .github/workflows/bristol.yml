@@ -1,0 +1,47 @@
+name: Bristol Fashion circuits
+on:
+  push:
+    paths:
+      - 'hardware/bristol/**'
+      - '.github/workflows/bristol.yml'
+  pull_request:
+    paths:
+      - 'hardware/bristol/**'
+      - '.github/workflows/bristol.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Published circuits at pinned commits
+        run: |
+          set -euo pipefail
+          mkdir published
+          for n in FP-add FP-mul FP-div FP-sqrt FP-eq FP-lt FP-f2i FP-i2f FP-floor FP-ceil mult64 mult2_64 udivide64 divide64; do
+            curl -fsSL "https://raw.githubusercontent.com/NigelSmart/nigelsmart.github.io/8c15a1fa532a8f2e05e517fd94613529f0c02df7/MPC-Circuits/$n.txt" -o "published/$n.txt"
+          done
+          for n in ModAdd512 LSSS_to_GC; do
+            curl -fsSL "https://raw.githubusercontent.com/KULeuven-COSIC/SCALE-MAMBA/c111516e3ebc1efd12a2bd47dd2122b160e13d1e/Circuits/Bristol/$n.txt" -o "published/$n.txt"
+          done
+          cd published && sha256sum -c ../hardware/bristol/published.sha256
+      - name: Circuits against the published ones and the rules
+        run: python3 hardware/bristol/check.py published 100000
+      - name: Four float circuits against the arithmetic of the processor
+        run: |
+          set -euo pipefail
+          python3 hardware/bristol/bf2c.py native
+          cc -O1 -ffp-contract=off -I native -o native/native hardware/bristol/native.c -lm
+          for op in add mul div sqrt; do ./native/native $op 20000000 1; done
+      - name: Equivalence proofs with ABC
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq yosys
+          python3 hardware/bristol/check.py bench published bench
+          for n in FP-add FP-eq FP-lt FP-f2i FP-i2f FP-floor FP-ceil ModAdd512 LSSS_to_GC; do
+            yosys-abc -c "cec bench/$n.published.bench bench/$n.here.bench" | tee "bench/$n.log"
+            grep -q "Networks are equivalent" "bench/$n.log"
+          done

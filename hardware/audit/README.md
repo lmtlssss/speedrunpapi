@@ -25,6 +25,9 @@ Every row below has a reproducer that fits on one line.
 | [bespoke-silicon-group/basejump_stl](https://github.com/bespoke-silicon-group/basejump_stl) | `bsg_fpu_add_sub`: add, sub, single and double | 2,080,000 each | 68,280, 68,308; 66,020, 65,835 | [#765](https://github.com/bespoke-silicon-group/basejump_stl/pull/765) |
 | bespoke-silicon-group/basejump_stl | `bsg_fpu_mul`, `bsg_fpu_f2i`, single and double | 3,120,000; 2,080,000 | 0 values; overflow and invalid flags in three cases | offered in #765 |
 | bespoke-silicon-group/basejump_stl | `bsg_fpu_i2f`, `bsg_fpu_cmp`, `bsg_fpu_classify`, sticky, leading zeros | 2,080,000 each | 0 | |
+| [black-parrot/black-parrot](https://github.com/black-parrot/black-parrot) | decoder, reservation stage and the aux, fma and long pipes: 29 F and D operations, single and double, five rounding modes | 6,960,000 | 907, all `fcvt.s.l` and `fcvt.s.lu` to nearest | [#1380](https://github.com/black-parrot/black-parrot/pull/1380) |
+| black-parrot/black-parrot | `fcvt.s.l`, `fcvt.s.lu` to nearest, integers aimed at halfway points | 399,621 | 37,541 | #1380 |
+| black-parrot/black-parrot | RV64M multiply, divide and remainder through the same pipes | 1,300,000 | 0 | |
 | [lowRISC/muntjac](https://github.com/lowRISC/muntjac) | FPU: add, sub, single and double, five rounding modes | 10,000,000 each | 1,205, 1,295; 1,455, 1,330 | [#8](https://github.com/lowRISC/muntjac/issues/8) |
 | lowRISC/muntjac | FPU: fused multiply-add family, single and double | 400,000 each | 2,220 to 3,439 | #8 |
 | lowRISC/muntjac | FPU: mul | 10,000,000 each | 0 values; underflow flag 53,406 and 69,672 | #8 |
@@ -126,6 +129,15 @@ add  0x00000000 + 0x00000000    IEEE 0x00000000    core 0x00800000 (smallest nor
 add  0x0c7fffff + 0x80000000    IEEE 0x0c7fffff    core 0x0c7ffffe
 add  0xbf800000 + 0x3f800000    IEEE 0x00000000    core 0x80000000 (-0)
 ```
+
+**BlackParrot `bp_be_pipe_aux`.** An integer is converted to double and the double is then rounded to single, so `fcvt.s.l` and `fcvt.s.lu` round twice. To nearest, the result is one unit in the last place off for integers above 2^53 that sit beside a halfway point of the single. About one random 64-bit integer in 2^28 is such a number.
+
+```
+fcvt.s.l  0x4000004000000001 (2^62 + 2^38 + 1)    IEEE 0x5e800001    core 0x5e800000
+fcvt.s.l  0x400000bfffffffff                      IEEE 0x5e800001    core 0x5e800002
+```
+
+The fix hands the integer to the rounding stage unrounded. 0 wrong of 2,000,000 after it. Everything else in the F and D extensions, and RV64M, is right: the run goes through the core's own decoder, reservation stage and execution pipes.
 
 **lowRISC muntjac FPU.** A zero operand is decoded with a placeholder magnitude, and the sum computed from it can cancel against the other operand. The double-precision fused multiply-add has no guard bits under the 106-bit product.
 
