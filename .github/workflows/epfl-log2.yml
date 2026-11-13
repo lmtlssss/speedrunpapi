@@ -1,0 +1,34 @@
+name: EPFL log2
+on:
+  push:
+    paths:
+      - 'hardware/epfl-log2/**'
+      - '.github/workflows/epfl-log2.yml'
+  pull_request:
+    paths:
+      - 'hardware/epfl-log2/**'
+      - '.github/workflows/epfl-log2.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Benchmark circuit at a pinned commit
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://raw.githubusercontent.com/lsils/benchmarks/82d8cc6910419298e713a46644ed59fd3df53038/arithmetic/log2.aig" -o log2.aig
+          echo "146f031921372d0dc47c73ad2c82ce4e7413caff725204b7938a4cf61b1f15cb  log2.aig" | sha256sum -c -
+      - name: Formula and netlist against the benchmark, one sixteenth of the inputs
+        run: |
+          set -euo pipefail
+          cc -O3 -o check hardware/epfl-log2/check.c -lpthread
+          first=$(( ${{ matrix.part }} * 524288 ))
+          last=$(( first + 524288 ))
+          ./check log2.aig hardware/epfl-log2/log2_size_2027.blif hardware/epfl-log2/tables.json 4 "$first" "$last"

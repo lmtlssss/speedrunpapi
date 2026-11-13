@@ -220,6 +220,8 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 
 [`hardware/epfl-sin/`](hardware/epfl-sin/) holds the EPFL `sin` benchmark as 735 LUT-6 where the smallest published netlist has 994, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 16,777,216 inputs.
 
+[`hardware/epfl-log2/`](hardware/epfl-log2/) holds the EPFL `log2` benchmark as 4,099 LUT-6 where the smallest published netlist has 5,986, and the arithmetic the benchmark computes, which the suite does not describe. Both are checked against the benchmark on all 4,294,967,296 inputs.
+
 [`hardware/epfl-arbiter/`](hardware/epfl-arbiter/) holds the EPFL round-robin `arbiter` as 256 LUT-6 where the smallest published netlist has 259, with the equations it is built from. ABC proves it equal to the benchmark in under a second.
 
 [`hardware/divider/udiv.v`](hardware/divider/) is a drop-in unsigned divider: 4,889 cells at 64 bits on Lattice ECP5, placed and routed, where the Verilog operators take 12,246.
