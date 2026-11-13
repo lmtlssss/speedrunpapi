@@ -207,9 +207,9 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 | `hyp`, size | 36451 LUT-6 | 24898 LUT-6 |
 | `div`, size | 3082 LUT-6 | 2287 LUT-6 |
 | `div`, depth | 170 levels, 30849 LUT-6 | 58 levels, 20232 LUT-6 |
-| `sixteen`, size | 3282958 LUT-6 | 13092 LUT-6 |
-| `twenty`, size | 4166467 LUT-6 | 13079 LUT-6 |
-| `twentythree`, size | 470892 LUT-6 | 13104 LUT-6 |
+| `sixteen`, size | 3282958 LUT-6 | 12691 LUT-6 |
+| `twenty`, size | 4166467 LUT-6 | 12719 LUT-6 |
+| `twentythree`, size | 470892 LUT-6 | 12744 LUT-6 |
 | `sixteen`, depth | 14 levels, 3387001 LUT-6 | 9 levels, 407332 LUT-6 |
 | `twenty`, depth | 14 levels, 4381634 LUT-6 | 9 levels, 419071 LUT-6 |
 | `twentythree`, depth | 15 levels, 4913996 LUT-6 | 9 levels, 468313 LUT-6 |
