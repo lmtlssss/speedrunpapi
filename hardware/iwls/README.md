@@ -91,13 +91,15 @@ At even n this function commutes with rotating the word by two places.
 
 ## Check
 
-[`rules.py`](rules.py) holds the four rules as Python and compares them with the contest truth tables on every input.
+[`rules.py`](rules.py) holds the four rules as Python. [`check.py`](check.py) compares every rule and every circuit with the contest truth tables on every input. It needs Python only and takes a few seconds.
 
 ```
-python3 rules.py <folder with ex280.truth ... ex299.truth>
+python3 check.py <folder with ex280.truth ... ex299.truth>
 ```
 
-Each circuit against its truth table, in ABC:
+The same check runs on each change to this folder, against the truth tables of contest commit `91ad493` ([workflow](../../.github/workflows/iwls.yml), checksums in [`truth.sha256`](truth.sha256)).
+
+One circuit against its truth table, in ABC:
 
 ```
 abc -c "read_aiger ex299.aig; print_stats; &get; &cec -t ex299.truth"
