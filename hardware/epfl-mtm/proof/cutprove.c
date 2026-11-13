@@ -74,7 +74,8 @@ int main(int argc,char**argv){
       else if(i>=NX+2*n){u c=i-NX-2*n;if(c<6){static const w pat[6]={0xAAAAAAAAAAAAAAAAULL,0xCCCCCCCCCCCCCCCCULL,0xF0F0F0F0F0F0F0F0ULL,0xFF00FF00FF00FF00ULL,0xFFFF0000FFFF0000ULL,0xFFFFFFFF00000000ULL};x=pat[c];}else x=((base>>c)&1)?~(w)0:0;}
       val[i+1]=x;}
     for(u v=I+1;v<=M;v++)if(!sym[v]){u a=f0[v],c=f1[v];val[v]=(val[a>>1]^-(w)(a&1))&(val[c>>1]^-(w)(c&1));}
-    for(int b=0;b<64;b++){
+    int nb=NC<6?(1<<NC):64;
+    for(int b=0;b<nb;b++){
       // literal resolution: constant nodes give 0/1, symbolic inputs give themselves, symbolic nodes rep[]
       #define RES(e) (sym[(e)>>1]?(((e)>>1)<=I?(e):(rep[(e)>>1]^((e)&1))):(u)((((val[(e)>>1]>>b)&1)^((e)&1))))
       for(u k=0;k<ns;k++){u v=sl[k];u a=RES(f0[v]),c=RES(f1[v]);

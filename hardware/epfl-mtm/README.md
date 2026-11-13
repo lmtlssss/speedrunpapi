@@ -12,6 +12,16 @@ Each netlist is proven equivalent to the EPFL original. The proof uses no solver
 The LUT and level counts are `nd` and `lev` from ABC `print_stats` on [`sixteen.blif`](sixteen.blif), [`twenty.blif`](twenty.blif), [`twentythree.blif`](twentythree.blif).
 The originals are the AIGER files of `EPFL_complete.tar.gz`, Zenodo record 2572934.
 
+The same three circuits in 9 levels:
+
+| Circuit | EPFL best levels, 2026 | Levels here | LUT-6 here |
+| --- | --- | --- | --- |
+| sixteen | 14, with 3,387,001 LUT-6 | 9 | 407,332 |
+| twenty | 14, with 4,381,634 LUT-6 | 9 | 419,071 |
+| twentythree | 15, with 4,913,996 LUT-6 | 9 | 468,313 |
+
+These are 42 to 49 MB each and are attached to the release [`epfl-mtm-9-levels`](https://github.com/lmtlssss/speedrunpapi/releases/tag/epfl-mtm-9-levels) as `sixteen_depth.blif.gz`, `twenty_depth.blif.gz`, `twentythree_depth.blif.gz`.
+
 ## What the circuits compute
 
 Inputs 0 to 16 are a number x. The other inputs are two words A and B of n bits each, least significant bit first.
@@ -57,6 +67,8 @@ The points (0,0) and (0,1) are separate terms.
 
 The multipliers are radix-4 Booth with one LUT per partial-product bit and 6:3 counters. One LUT per output joins the two halves.
 
+**The 9-level netlists** are the two tables written out. Every output bit of the x term is a lookup over the 17 x inputs: 6-input leaves under 4:1 multiplexers, 7 levels. Every point of Y is an AND of 6-bit patterns of (A,B), 3 levels. Every output is the OR of its points in five trees of at most 5 levels, and one LUT joins the five trees and the x term.
+
 ## The proof
 
 `proof/verify.py NAME ORIGINAL.aig NETLIST.blif`
@@ -76,6 +88,8 @@ The netlist:
    The check logic that depends only on those wires is then constant, and what is left of each output is a function of A and B alone. It is multiplied out. Every product must be a point of Y with that output bit set.
    The netlist drives the 18 wires from (A,B), so whatever it does is one of the enumerated cases: Y' is on only where Y is on.
 4. At every point of Y the netlist gives the word of Y. So Y' = Y.
+
+The 9-level netlists have no index wires. For them step 3 is a single case: the y side is multiplied out as it stands, about a million products per circuit.
 
 `blif2aig.py` turns the LUT netlist into AND and OR gates for step 3. Each LUT that depends on A or B is written twice, as an irredundant cover of its function and as one of its complement, and each cover is checked against the LUT's truth table.
 
@@ -100,6 +114,13 @@ cd proof
 ```
 
 It needs a C compiler and Python 3. The three circuits take about nine minutes on one core of an Apple M1.
+
+For a 9-level netlist, unpack it and call the script on it:
+
+```
+gunzip sixteen_depth.blif.gz
+python3 verify.py sixteen /path/to/EPFLfull/MtM/sixteen/aiger/sixteen.aig sixteen_depth.blif
+```
 
 ## Files
 
