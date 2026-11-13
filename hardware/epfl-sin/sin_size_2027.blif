@@ -1,11 +1,11 @@
 .model top
-.inputs pi00 pi01 pi02 pi03 pi04 pi05 pi06 pi07 pi08 pi09 a[10] a[11] a[12] a[13] a[14] a[15] a[16] a[17] a[18] a[19] a[20] a[21] a[22] a[23]
-.outputs po00 po01 po02 po03 po04 po05 po06 po07 po08 po09 sin[10] sin[11] sin[12] sin[13] sin[14] sin[15] sin[16] sin[17] sin[18] sin[19] sin[20] sin[21] sin[22] sin[23] sin[24]
-.names pi00 pi01 pi02 pi03 pi04 new_n51
+.inputs a[0] a[1] a[2] a[3] a[4] a[5] a[6] a[7] a[8] a[9] a[10] a[11] a[12] a[13] a[14] a[15] a[16] a[17] a[18] a[19] a[20] a[21] a[22] a[23]
+.outputs sin[0] sin[1] sin[2] sin[3] sin[4] sin[5] sin[6] sin[7] sin[8] sin[9] sin[10] sin[11] sin[12] sin[13] sin[14] sin[15] sin[16] sin[17] sin[18] sin[19] sin[20] sin[21] sin[22] sin[23] sin[24]
+.names a[0] a[1] a[2] a[3] a[4] new_n51
 00000 1
-.names pi05 pi06 pi07 pi08 new_n51 new_n52
+.names a[5] a[6] a[7] a[8] new_n51 new_n52
 00001 1
-.names pi09 a[10] a[11] a[12] new_n52 new_n53
+.names a[9] a[10] a[11] a[12] new_n52 new_n53
 00001 1
 .names a[13] a[14] a[15] a[16] new_n53 new_n54
 00001 1
@@ -224,13 +224,13 @@
 0100 1
 1-10 1
 1001 1
-.names pi05 pi06 new_n51 a[22] pi07 new_n80
+.names a[5] a[6] new_n51 a[22] a[7] new_n80
 ---10 1
 --001 1
 -1-01 1
 001-0 1
 1--01 1
-.names pi05 pi06 pi07 new_n51 a[22] pi08 new_n81
+.names a[5] a[6] a[7] new_n51 a[22] a[8] new_n81
 ----10 1
 ---001 1
 --1-01 1
@@ -241,7 +241,7 @@
 --010 0
 -0-01 0
 0--00 0
-.names pi09 a[10] new_n52 a[22] a[11] new_n83
+.names a[9] a[10] new_n52 a[22] a[11] new_n83
 ---10 1
 --001 1
 -1-01 1
@@ -249,11 +249,11 @@
 1--01 1
 .names new_n83 new_n77 new_n84
 00 1
-.names a[22] new_n52 pi09 new_n85
+.names a[22] new_n52 a[9] new_n85
 -10 1
 001 1
 1-0 1
-.names new_n52 pi09 a[22] a[10] new_n86
+.names new_n52 a[9] a[22] a[10] new_n86
 --10 1
 -101 1
 0-01 1
@@ -385,11 +385,11 @@
 0100 1
 1-10 1
 1001 1
-.names a[22] new_n51 pi05 new_n101
+.names a[22] new_n51 a[5] new_n101
 -10 1
 001 1
 1-0 1
-.names new_n51 pi05 a[22] pi06 new_n102
+.names new_n51 a[5] a[22] a[6] new_n102
 --10 1
 -101 1
 0-01 1
@@ -408,13 +408,13 @@
 --010 0
 -0-01 0
 0--00 0
-.names pi00 pi01 pi02 a[22] pi03 new_n107
+.names a[0] a[1] a[2] a[22] a[3] new_n107
 ---10 1
 --101 1
 -1-01 1
 000-0 1
 1--01 1
-.names pi00 pi01 pi02 pi03 a[22] pi04 new_n108
+.names a[0] a[1] a[2] a[3] a[22] a[4] new_n108
 ----10 1
 ---101 1
 --1-01 1
@@ -682,7 +682,7 @@
 0--101 0
 0--110 0
 000--- 0
-.names pi09 a[10] a[11] new_n52 a[22] a[12] new_n137
+.names a[9] a[10] a[11] new_n52 a[22] a[12] new_n137
 ----10 1
 ---001 1
 --1-01 1
@@ -2664,7 +2664,7 @@
 --110 0
 -1-01 0
 0--00 0
-.names pi00 pi01 a[22] pi02 new_n328
+.names a[0] a[1] a[22] a[2] new_n328
 --10 1
 -101 1
 00-0 1
@@ -2705,11 +2705,11 @@
 --110 0
 -1-01 0
 0--00 0
-.names a[22] pi00 pi01 new_n339
+.names a[22] a[0] a[1] new_n339
 -00 1
 011 1
 1-0 1
-.names new_n303 new_n301 new_n292 new_n339 pi00 new_n340
+.names new_n303 new_n301 new_n292 new_n339 a[0] new_n340
 --100 0
 -1-11 0
 0--01 0
@@ -2723,7 +2723,7 @@
 --110 0
 -1-01 0
 0--00 0
-.names new_n281 new_n279 new_n268 new_n339 pi00 new_n344
+.names new_n281 new_n279 new_n268 new_n339 a[0] new_n344
 --100 0
 -1-11 0
 0--01 0
@@ -2731,7 +2731,7 @@
 --110 0
 -0-00 0
 1--01 0
-.names new_n268 new_n280 new_n253 new_n339 pi00 new_n346
+.names new_n268 new_n280 new_n253 new_n339 a[0] new_n346
 --100 0
 -0-01 0
 1--11 0
@@ -3128,7 +3128,7 @@
 0111 1
 1-10 1
 1001 1
-.names new_n388 new_n386 new_n383 new_n339 pi00 new_n389
+.names new_n388 new_n386 new_n383 new_n339 a[0] new_n389
 --100 0
 -1-11 0
 0--01 0
@@ -3165,7 +3165,7 @@
 111011 1
 111101 1
 111110 1
-.names new_n323 new_n321 new_n313 new_n339 pi00 new_n391
+.names new_n323 new_n321 new_n313 new_n339 a[0] new_n391
 --100 0
 -1-11 0
 0--01 0
@@ -3186,7 +3186,7 @@
 --110 0
 -1-01 0
 0--00 0
-.names new_n322 new_n313 new_n301 new_n339 pi00 new_n396
+.names new_n322 new_n313 new_n301 new_n339 a[0] new_n396
 --100 0
 -1-11 0
 0--01 0
@@ -3269,7 +3269,7 @@
 11010 1
 11100 1
 11111 1
-.names new_n377 new_n372 new_n321 new_n339 pi00 new_n401
+.names new_n377 new_n372 new_n321 new_n339 a[0] new_n401
 --100 0
 -1-11 0
 0--01 0
@@ -3376,7 +3376,7 @@
 111011 1
 111101 1
 111110 1
-.names new_n378 new_n376 new_n372 new_n339 pi00 new_n407
+.names new_n378 new_n376 new_n372 new_n339 a[0] new_n407
 --100 0
 -1-11 0
 0--01 0
@@ -3489,7 +3489,7 @@
 10-11- 1
 101-1- 1
 1011-- 1
-.names new_n387 new_n383 new_n376 new_n339 pi00 new_n415
+.names new_n387 new_n383 new_n376 new_n339 a[0] new_n415
 --100 0
 -1-11 0
 0--01 0
@@ -3592,15 +3592,15 @@
 10-110 1
 100-01 1
 1000-1 1
-.names new_n239 new_n255 new_n253 new_n339 pi00 new_n421
+.names new_n239 new_n255 new_n253 new_n339 a[0] new_n421
 --111 0
 -0-01 0
 1--00 0
-.names new_n209 new_n224 new_n223 new_n339 pi00 new_n422
+.names new_n209 new_n224 new_n223 new_n339 a[0] new_n422
 --111 0
 -0-01 0
 1--00 0
-.names new_n223 new_n254 new_n239 new_n339 pi00 new_n423
+.names new_n223 new_n254 new_n239 new_n339 a[0] new_n423
 --111 0
 -0-01 0
 1--00 0
@@ -3664,7 +3664,7 @@
 --110 0
 -1-01 0
 0--00 0
-.names new_n302 new_n292 new_n279 new_n339 pi00 new_n430
+.names new_n302 new_n292 new_n279 new_n339 a[0] new_n430
 --100 0
 -1-11 0
 0--01 0
@@ -4093,7 +4093,7 @@
 0111 1
 1-10 1
 1001 1
-.names new_n469 new_n467 new_n464 new_n339 pi00 new_n470
+.names new_n469 new_n467 new_n464 new_n339 a[0] new_n470
 --100 0
 -1-11 0
 0--01 0
@@ -4134,7 +4134,7 @@
 010--0 0
 010-0- 0
 0100-- 0
-.names new_n468 new_n464 new_n386 new_n339 pi00 new_n474
+.names new_n468 new_n464 new_n386 new_n339 a[0] new_n474
 --100 0
 -1-11 0
 0--01 0
@@ -4449,7 +4449,7 @@
 0111 1
 1-10 1
 1001 1
-.names new_n500 new_n499 new_n467 new_n339 pi00 new_n501
+.names new_n500 new_n499 new_n467 new_n339 a[0] new_n501
 --100 0
 -1-11 0
 0--01 0
@@ -4493,7 +4493,7 @@
 11011 1
 11101 1
 11110 1
-.names new_n390 new_n478 new_n479 new_n434 new_n435 new_n503 po00
+.names new_n390 new_n478 new_n479 new_n434 new_n435 new_n503 sin[0]
 ---000 1
 --1--0 1
 -00111 1
@@ -4713,7 +4713,7 @@
 0101 1
 1-11 1
 1000 1
-.names new_n522 new_n521 new_n499 new_n339 pi00 new_n523
+.names new_n522 new_n521 new_n499 new_n339 a[0] new_n523
 --100 0
 -0-11 0
 0--01 0
@@ -4750,14 +4750,14 @@
 111010 1
 111100 1
 111111 1
-.names po00 new_n503 new_n506 new_n524 new_n525
+.names sin[0] new_n503 new_n506 new_n524 new_n525
 -100 1
 -111 1
 0001 1
 0010 1
 1-00 1
 1-11 1
-.names po00 a[22] a[23] new_n525 po01
+.names sin[0] a[22] a[23] new_n525 sin[1]
 -000 1
 -110 1
 0--0 1
@@ -4944,7 +4944,7 @@
 .names new_n521 new_n499 new_n522 new_n543
 000 0
 111 0
-.names new_n543 new_n521 new_n339 pi00 new_n544
+.names new_n543 new_n521 new_n339 a[0] new_n544
 -000 1
 0-01 1
 .names new_n507 new_n511 new_n518 new_n519 new_n520 new_n523 new_n545
@@ -4994,7 +4994,7 @@
 00-0 1
 1-01 1
 11-1 1
-.names po00 new_n525 a[22] a[23] new_n547 po02
+.names sin[0] new_n525 a[22] a[23] new_n547 sin[2]
 --000 1
 --110 1
 -0011 1
@@ -5233,7 +5233,7 @@
 111010 1
 111100 1
 111111 1
-.names new_n339 pi00 new_n549 new_n546 new_n547 new_n566 new_n567
+.names new_n339 a[0] new_n549 new_n546 new_n547 new_n566 new_n567
 --0-01 1
 --0010 1
 --01-1 1
@@ -5246,7 +5246,7 @@
 1---01 1
 1--010 1
 1--1-1 1
-.names po00 new_n525 new_n547 a[22] a[23] new_n567 po03
+.names sin[0] new_n525 new_n547 a[22] a[23] new_n567 sin[3]
 ---000 1
 ---110 1
 --0011 1
@@ -5256,7 +5256,7 @@
 011--0 1
 1--011 1
 1--101 1
-.names po00 new_n525 new_n547 new_n567 new_n569
+.names sin[0] new_n525 new_n547 new_n567 new_n569
 0111 1
 .names new_n500 new_n499 new_n467 new_n108 new_n101 new_n570
 --110 0
@@ -5460,7 +5460,7 @@
 11010 1
 11100 1
 11111 1
-.names new_n339 pi00 new_n549 new_n566 new_n567 new_n587 new_n588
+.names new_n339 a[0] new_n549 new_n566 new_n567 new_n587 new_n588
 ---010 1
 ---101 1
 --0-01 1
@@ -5471,7 +5471,7 @@
 0110-0 1
 1---01 1
 1--1-1 1
-.names new_n569 a[22] a[23] new_n588 po04
+.names new_n569 a[22] a[23] new_n588 sin[4]
 -000 1
 -110 1
 0011 1
@@ -5697,7 +5697,7 @@
 -01 1
 010 1
 1-1 1
-.names new_n569 new_n588 a[22] a[23] new_n607 po05
+.names new_n569 new_n588 a[22] a[23] new_n607 sin[5]
 --000 1
 --110 1
 -0011 1
@@ -5922,7 +5922,7 @@
 -01 1
 010 1
 1-1 1
-.names new_n569 new_n588 new_n607 a[22] a[23] new_n625 po06
+.names new_n569 new_n588 new_n607 a[22] a[23] new_n625 sin[6]
 ---000 1
 ---110 1
 --0011 1
@@ -6136,7 +6136,7 @@
 -01 1
 010 1
 1-1 1
-.names new_n627 a[22] a[23] new_n643 po07
+.names new_n627 a[22] a[23] new_n643 sin[7]
 -000 1
 -110 1
 0011 1
@@ -6324,7 +6324,7 @@
 -01 1
 010 1
 1-1 1
-.names new_n627 new_n643 a[22] a[23] new_n659 po08
+.names new_n627 new_n643 a[22] a[23] new_n659 sin[8]
 --000 1
 --110 1
 -0011 1
@@ -6501,7 +6501,7 @@
 -01 1
 010 1
 1-1 1
-.names new_n627 new_n643 new_n659 a[22] a[23] new_n675 po09
+.names new_n627 new_n643 new_n659 a[22] a[23] new_n675 sin[9]
 ---000 1
 ---110 1
 --0011 1
