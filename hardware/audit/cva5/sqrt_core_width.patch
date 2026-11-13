@@ -1,0 +1,52 @@
+--- a/core/execution_units/fp_unit/fp_sqrt_core.sv
++++ b/core/execution_units/fp_unit/fp_sqrt_core.sv
+@@ -57,28 +57,30 @@
+ 
+     ////////////////////////////////////////////////////
+     //Subtraction
++    //The partial remainder can be twice the partial root and is shifted left twice before each subtraction,
++    //so the working registers need two bits more than the result
++    typedef logic[sqrt.DATA_WIDTH+1:0] rem_t;
+     frac_t rad;
+-    frac_t current_subtractend;
+-    frac_t next_subtractend;
+-    frac_t subtractor;
+-    frac_t subtraction;
++    rem_t current_subtractend;
++    rem_t next_subtractend;
++    rem_t subtractor;
++    rem_t subtraction;
++    rem_t kept;
+     logic overflow;
+ 
+-    assign subtractor = {sqrt.result[sqrt.DATA_WIDTH-3:0], 2'b01};
++    assign subtractor = {sqrt.result, 2'b01};
+     assign {overflow, subtraction} = current_subtractend - subtractor;
++    assign kept = overflow ? current_subtractend : subtraction;
+ 
+     ////////////////////////////////////////////////////
+     //Next Working subtractend Determination
+     always_comb begin
+-        if (overflow)
+-            next_subtractend = {current_subtractend[sqrt.DATA_WIDTH-3:0], rad[sqrt.DATA_WIDTH-1-:2]};
+-        else
+-            next_subtractend = {subtraction[sqrt.DATA_WIDTH-3:0], rad[sqrt.DATA_WIDTH-1-:2]};
++        next_subtractend = {kept[sqrt.DATA_WIDTH-1:0], rad[sqrt.DATA_WIDTH-1-:2]};
+     end
+ 
+     always_ff @(posedge clk) begin
+         if (sqrt.start) //First working subtractend extracts the upper 2 bits of the radicand
+-            current_subtractend <= {{(sqrt.DATA_WIDTH-2){1'b0}}, sqrt.radicand[sqrt.DATA_WIDTH-1-:2]};
++            current_subtractend <= {{(sqrt.DATA_WIDTH){1'b0}}, sqrt.radicand[sqrt.DATA_WIDTH-1-:2]};
+         else
+             current_subtractend <= next_subtractend;
+     end
+@@ -102,7 +104,7 @@
+         else if (|counter) begin
+             //Shift in new quotient bit
+             sqrt.result <= {sqrt.result[sqrt.DATA_WIDTH-2:0], ~overflow};
+-            sqrt.remainder <= next_subtractend;
++            sqrt.remainder <= frac_t'(|kept); //Exact remainder of this step; only zero/non-zero is used (sticky)
+         end
+     end
+ 

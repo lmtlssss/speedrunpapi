@@ -1,0 +1,26 @@
+--- a/core/execution_units/fp_unit/fp_rs_preprocess.sv
++++ b/core/execution_units/fp_unit/fp_rs_preprocess.sv
+@@ -60,7 +60,7 @@
+     assign special.snan = single ? snan_s & is_boxed : snan_d;
+     assign special.qnan = single ? qnan_s | ~is_boxed : qnan_d;
+     assign special.zero = single ? zero_s & is_boxed : zero_d;
+-    assign hidden = single ? ~zero_s : hidden_double; //TODO: singles sharing subnormal range with doubles
++    assign hidden = single ? ~(zero_s & is_boxed) : hidden_double; //An unboxed single is a NaN, not a zero //TODO: singles sharing subnormal range with doubles
+ 
+     fp_special_case_detection #(.FRAC_W(FRAC_WIDTH_F), .EXPO_W(EXPO_WIDTH_F), .SUBNORMAL(1)) input_case_s (
+         .expo(in.s.expo),
+--- a/core/execution_units/fp_unit/fp_wb2int_misc.sv
++++ b/core/execution_units/fp_unit/fp_wb2int_misc.sv
+@@ -77,10 +77,10 @@
+         fclass_rd = '0;
+         fclass_rd[0] = args.rs1.d.sign & args.rs1_special_case.inf;
+         fclass_rd[1] = args.rs1.d.sign & args.rs1_original_hidden_bit & ~|args.rs1_special_case;
+-        fclass_rd[2] = args.rs1.d.sign & ~args.rs1_original_hidden_bit & ~args.rs1_special_case.zero;
++        fclass_rd[2] = args.rs1.d.sign & ~args.rs1_original_hidden_bit & ~|args.rs1_special_case; //Subnormal only if not zero/inf/NaN (an unboxed single is a NaN)
+         fclass_rd[3] = args.rs1.d.sign & args.rs1_special_case.zero;
+         fclass_rd[4] = ~args.rs1.d.sign & args.rs1_special_case.zero;
+-        fclass_rd[5] = ~args.rs1.d.sign & ~args.rs1_original_hidden_bit & ~args.rs1_special_case.zero;
++        fclass_rd[5] = ~args.rs1.d.sign & ~args.rs1_original_hidden_bit & ~|args.rs1_special_case;
+         fclass_rd[6] = ~args.rs1.d.sign & args.rs1_original_hidden_bit & ~|args.rs1_special_case;
+         fclass_rd[7] = ~args.rs1.d.sign & args.rs1_special_case.inf;
+         fclass_rd[8] = args.rs1_special_case.snan;

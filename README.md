@@ -232,7 +232,7 @@ The same mathematics builds logic. Compilers, netlists and proofs are under [`ha
 `udivf64.v` in the same directory divides in 181 ns on that device, where the operators take 394 ns.
 [`hardware/linear/`](hardware/linear/) builds XOR logic: CRC-32 over a 512-bit bus in 701 LUT-6 at 4 levels, where Yosys takes 2,344; with any number of valid bytes, 1,172.
 
-[`hardware/audit/`](hardware/audit/) runs open arithmetic cores beside exact arithmetic: a double-precision divider in a 763-star FPU returns 2^29 times the quotient for a band of subnormal results. The floating-point adder of a 694-star hardware library returns the smallest normal number for 0 + 0.
+[`hardware/audit/`](hardware/audit/) runs open arithmetic cores beside exact arithmetic: a double-precision divider in a 763-star FPU returns 2^29 times the quotient for a band of subnormal results. The floating-point adder of a 694-star hardware library returns the smallest normal number for 0 + 0. The floating-point unit of OpenHW's CVA5 never answers 0.0 / 2.0 when that division directly follows another one.
 Every netlist has an independent checker; the division and square-root recurrences are proved in Lean 4.
 
 [Terms](https://colony.technology/terms) · [Releases](https://github.com/lmtlssss/speedrunpapi/releases)
