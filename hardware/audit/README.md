@@ -18,6 +18,10 @@ Every row below has a reproducer that fits on one line.
 | OpenCores `double_fpu` | div | 20,000 | 903 | |
 | OpenCores `fpu` (single) | add, sub, mul, div | 80,000 | 7 | no maintained upstream |
 | [openrisc/or1200](https://github.com/openrisc/or1200) | `or1200_fpu_arith` | 80,000 | 152 | |
+| [openrisc/mor1kx](https://github.com/openrisc/mor1kx) | `pfpu32`: add, sub, mul, div, four rounding modes | 8,000,000 each | 124,892, 125,288, 177,982, 259,566; none in round to nearest | [#181](https://github.com/openrisc/mor1kx/issues/181) |
+| openrisc/mor1kx | `pfpu32`: int to float, float to int, 13 compares | 8,000,000 each; 1,000,000 compares | 0 | |
+| [openrisc/or1k_marocchino](https://github.com/openrisc/or1k_marocchino) | `pfpu_marocchino`: add, sub, mul, div, single and double, four rounding modes | 8,000,000 each | single as mor1kx; double 129,338, 128,898, 176,716, 255,254 | [#30](https://github.com/openrisc/or1k_marocchino/issues/30) |
+| openrisc/or1k_marocchino | `pfpu_marocchino`: all operations interleaved | 15,680,000 | 56,402 after a division by zero | [#29](https://github.com/openrisc/or1k_marocchino/issues/29) |
 | [stnolting/neorv32](https://github.com/stnolting/neorv32) | Zfinx FPU, five rounding modes | 987,401 | 1,004 | [#1689](https://github.com/stnolting/neorv32/issues/1689) |
 | stnolting/neorv32 | multiply/divide unit, serial and fast | 2,000,000 per variant | 0 | |
 | [chipsalliance/Cores-VeeR-EH2](https://github.com/chipsalliance/Cores-VeeR-EH2) | 1/2/3/4-bit dividers, XLEN 64 | 1,000,000 each | 12,200 to 13,600 each | [#60](https://github.com/chipsalliance/Cores-VeeR-EH2/issues/60) |
@@ -78,6 +82,23 @@ mul  0x46ffffff * 0x8000001f    IEEE 0x800f8000    core 0x800001f0
 div  0x00717f69 / 0xff40f8f5    IEEE 0x80000000    core 0x80969150    45 of 20,000 with a subnormal dividend
 mul  0xb4800000 * 0x0b7fffff    IEEE 0x80800000    core 0x80000000    rounds up to the smallest normal
 ```
+
+**OpenRISC `pfpu32` and `pfpu_marocchino`.** The overflow branch of the rounding stage returns infinity in every mode. Toward zero, and toward the infinity of the other sign, IEEE 754 returns the largest finite number.
+
+```
+mul  0x7f7fffff * 0x40000000, toward zero    IEEE 0x7f7fffff    core 0x7f800000 (inf)
+mul  0xff7fffff * 0x40000000, toward +inf    IEEE 0xff7fffff    core 0xff800000 (-inf)
+```
+
+**OpenRISC `pfpu_marocchino`, after a division by zero.** The divider holds its divide-by-zero output until its next result, and the rounding stage latches it for whatever operation arrives (`pfpu_marocchino_rnd.v`, line 266).
+
+```
+div 1.0 / 0.0    +inf, DZF    correct
+add 1.0 + 1.0    expected 0x40000000    core 0x7f800000 (inf), DZF
+mul 3.0 * 2.0    expected 0x40c00000    core 0x7f800000 (inf), DZF
+```
+
+Fix: `s0o_div_dbz <= div_rdy_i & div_dbz_i;`. 0 wrong of 15,680,000 after both fixes.
 
 **neorv32 Zfinx FPU.** The float-to-integer path drops the mantissa bit shifted out for inputs in (0.5, 1), so 0.5 + 1 ulp looks like a tie. In round-down mode the zero sum of two zeros takes the wrong sign.
 
