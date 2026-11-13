@@ -1,0 +1,30 @@
+name: IWLS 2025 functions
+on:
+  push:
+    paths:
+      - 'hardware/iwls/2025/**'
+      - 'hardware/iwls/check.py'
+      - '.github/workflows/iwls-2025.yml'
+  pull_request:
+    paths:
+      - 'hardware/iwls/2025/**'
+      - 'hardware/iwls/check.py'
+      - '.github/workflows/iwls-2025.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Contest truth tables at a pinned commit
+        run: |
+          set -euo pipefail
+          mkdir truth
+          for e in $(seq 160 185); do
+            curl -fsSL "https://raw.githubusercontent.com/alanminko/iwls2025-ls-contest/defcf35c16381ead60776f08a3dd088b954b2ede/benchmarks/2025/ex$e.truth" -o "truth/ex$e.truth"
+          done
+          cd truth && sha256sum -c ../hardware/iwls/2025/truth.sha256
+      - name: Rules and circuits against the tables on every input
+        run: python3 hardware/iwls/2025/check.py truth
