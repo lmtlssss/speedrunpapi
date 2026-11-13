@@ -105,7 +105,7 @@ It needs a C compiler and Python 3. The three circuits take about nine minutes o
 
 | | |
 | --- | --- |
-| `sixteen.blif`, `twenty.blif`, `twentythree.blif` | the netlists. Inputs and outputs in the order of the EPFL files. The index wires are named `cut_t0` .. `cut_t13`, `cut_r0` .. `cut_r3`. |
+| `sixteen.blif`, `twenty.blif`, `twentythree.blif` | the netlists. Inputs and outputs have the names and order of the EPFL files, `in0` .. and `ot0` .. . The index wires are named `cut_t0` .. `cut_t13`, `cut_r0` .. `cut_r3`. |
 | `proof/sop.c` | sum of products of every output of an AIG |
 | `proof/xsim.c` | all values of inputs 0..16, the other inputs at 1 |
 | `proof/psim.c` | simulation of a list of input patterns |
