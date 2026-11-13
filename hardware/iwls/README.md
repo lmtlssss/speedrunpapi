@@ -1,11 +1,11 @@
-# IWLS contest functions ex280 to ex294
+# IWLS contest functions ex280 to ex299
 
 The IWLS 2026 programming contest gave 100 functions as truth tables and asked for AND-inverter graphs.
 Twelve teams entered, and every circuit they submitted is public in [alanminko/iwls2026-ls-contest](https://github.com/alanminko/iwls2026-ls-contest).
 The functions come without a description.
 
-This folder holds the rule behind fifteen of them, `ex280` to `ex294`, and one circuit per function built from its rule.
-For `ex290` to `ex294` the circuit here is 5 to 12 times smaller than the smallest in the contest.
+This folder holds the rule behind twenty of them, `ex280` to `ex299`, and one circuit per function built from its rule.
+For `ex290` to `ex299` the circuit here is smaller than the smallest in the contest, by a factor of 1.4 to 14.8.
 
 | Function | Inputs | Smallest in the contest, AND nodes | Here, AND nodes | Levels here |
 | --- | --- | --- | --- | --- |
@@ -14,6 +14,11 @@ For `ex290` to `ex294` the circuit here is 5 to 12 times smaller than the smalle
 | `ex292` | 14 | 5,557 | 605 | 14 |
 | `ex293` | 15 | 6,849 | 640 | 15 |
 | `ex294` | 16 | 8,383 | 683 | 15 |
+| `ex295` | 12 | 1,573 | 1,158 | 84 |
+| `ex296` | 13 | 6,217 | 1,067 | 72 |
+| `ex297` | 14 | 4,757 | 1,575 | 98 |
+| `ex298` | 15 | 21,553 | 1,459 | 91 |
+| `ex299` | 16 | 15,410 | 2,056 | 112 |
 
 For `ex280` to `ex289` the contest already has circuits of this size.
 
@@ -32,6 +37,7 @@ For `ex280` to `ex289` the contest already has circuits of this size.
 
 "Smallest in the contest" is the lowest AND count over all teams in `results/pareto_tables/` of the contest repository.
 The counts here are `and` and `lev` from ABC `print_stats`.
+The contest also scored depth. The circuits for `ex295` to `ex299` run their rounds one after another and are deep; they are the small end only.
 
 ## What the functions compute
 
@@ -68,21 +74,36 @@ g     = L(a ^ t) | (L(a) ^ R(t))
 out_i = g_i ^ (~g_{i+1} & g_{i+2})
 ```
 
+```
+ex295 - ex299     n = 12 ... 16
+
+y = x
+repeat n times:
+    z_i = y_i ^ (y_{i+1} & y_{i+2})       for every i
+    for every pair j = 0 ... floor(n/2) - 1:
+        d = x_{2j} ^ z_{2j+2}             x is the input, not y
+        (y_{2j}, y_{2j+1}) = (z_{2j}, z_{2j+1}) sorted: the larger bit goes to 2j when d = 1, to 2j+1 when d = 0
+    y_{n-1} = 0 when n is odd
+out = y
+```
+
+At even n this function commutes with rotating the word by two places.
+
 ## Check
 
-[`rules.py`](rules.py) holds the three rules as Python and compares them with the contest truth tables on every input.
+[`rules.py`](rules.py) holds the four rules as Python and compares them with the contest truth tables on every input.
 
 ```
-python3 rules.py <folder with ex280.truth ... ex294.truth>
+python3 rules.py <folder with ex280.truth ... ex299.truth>
 ```
 
 Each circuit against its truth table, in ABC:
 
 ```
-abc -c "read_aiger ex294.aig; print_stats; &get; &cec -t ex294.truth"
+abc -c "read_aiger ex299.aig; print_stats; &get; &cec -t ex299.truth"
 ```
 
 ## Files
 
-`ex280.aig` to `ex294.aig` are binary AIGER, inputs and outputs in the order of the truth tables.
+`ex280.aig` to `ex299.aig` are binary AIGER, inputs and outputs in the order of the truth tables.
 The truth tables are `benchmarks/truth/` in the contest repository.
