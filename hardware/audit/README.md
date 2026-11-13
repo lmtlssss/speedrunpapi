@@ -62,6 +62,8 @@ Every row below has a reproducer that fits on one line.
 | [GRLIB](https://www.gaisler.com/grlib-ip-library) NOEL-V, 2026.3-b4301 | `nanofpunv` at its issue and commit interface: 29 F and D operations, single and double, five rounding modes | 4,384,000 | 24, all double fused multiply-add | reported to Gaisler, [cause and fix](noelv) |
 | GRLIB NOEL-V | `nanofpunv`: an instruction issued in the cycle after an unissue | 43,008 aimed pairs; 30,000 random pairs | 1,600; 43 | reported, [cause and fix](noelv) |
 | GRLIB NOEL-V | the whole core `cpucorenv`, HP, GP and GP-lite: a multiply or fused multiply-add at the target of a mispredicted branch | one program, [`flush.S`](noelv/flush.S) | wrong in each configuration | same report |
+| IEEE 1076 `float_pkg`, the float package of the VHDL standard as the IEEE publishes it and GHDL and NVC ship it | add, subtract, multiply, divide, sqrt, mac, reciprocal, resize, dividebyp2, scalb and the conversions with integers; float16, float32, float64, float128; four rounding styles | 3,439,564 | 371,873, and 1,302 stop the simulator; with the default rounding 38,608 of 860,720 | [cause and patch](ieee-float-pkg) |
+| IEEE 1076 `float_pkg` | every operand of a 7-bit format, and every operand pair of a 10-bit one | 8,692,326; 17,340,682 | 1,271,619; 883,716 | 0 with the patch |
 
 ## Reproducers
 
@@ -229,6 +231,17 @@ at a branch target    fmsub.d  3.0 * 5.0 - 15.0, round to nearest        expecte
 ```
 
 Fix: two patches in [`noelv/`](noelv), with the two programs and a testbench for the whole core in GHDL. 0 wrong after them.
+
+**IEEE 1076 `float_pkg`.** The float package of the VHDL standard, in the IEEE's own source, which GHDL and NVC ship unchanged. With its own settings, round to nearest and three guard bits, the square root is a fixed number of Newton steps with no sticky bit, the multiply-accumulate subtracts the larger number from the smaller when the product and the addend have the same exponent, and every result's exponent is cut to two bits more than the target format's before its range is decided.
+
+```
+sqrt (2.0) in float64                   expected 3FF6A09E667F3BCD      package 3FF6A09E667F3BCC
+mac (-6.0, -1.0, -5.0)                  expected 1.0                   package -15.0
+resize (2.0**-512 in float64, 8, 23)    expected 0.0                   package 1.0
+divide (6.0, 3.0, round_inf)            expected 2.0                   package 2.0000002
+```
+
+Fix: one patch to the package body in [`ieee-float-pkg/`](ieee-float-pkg), with the exact reference and a testbench for GHDL and NVC. 0 wrong after it in 32,470,838 calls.
 
 ## Your block
 
