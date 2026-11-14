@@ -168,6 +168,34 @@ denormalize false              255,606     27,745                           0   
 
 With two guard bits 112 results of `add` and `subtract` are not the rounded ones, and with one guard bit 2,194 of `add`, `subtract` and `multiply`: too few bits to round every result, and both packages return the same bits on those lines. With no guard bits nothing is rounded: the patched `sqrt`, `mac` and `reciprocal` then return the exact result cut off toward zero on every line, where the shipped ones do on 10,207 of 11,141, 3,902 of 9,750 and 10,749 of 11,102. With `denormalize` false the comparison is with that setting's own numbers, where an exponent field of zero is one more binade of numbers with a leading one.
 
+## The fixed-point package
+
+`ieee.fixed_pkg` comes from the same source, `ieee/fixed_generic_pkg-body.vhdl`, and NVC ships that file byte for byte. Every operand of six pairs of small index ranges, unsigned and signed, went through every arithmetic operation: 751,418 calls. Addition, subtraction, multiplication, `rem`, `mod`, the comparisons, `add_carry`, `resize` in both rounding and both overflow styles, `to_integer`, `scalb`, unary minus and `abs` are right on every one. Division is not.
+
+```
+                                              ufixed               sfixed
+/                                             1,073 of 19,984      952 of 19,984
+divide, fixed_round, 1 guard bit              4,632                4,376
+divide, fixed_round, 2 guard bits             2,433                2,370
+divide, fixed_round, 3 guard bits             1,073                952
+divide, fixed_round, 4 guard bits             487                  402
+divide, fixed_truncate, 3 guard bits          0                    651
+divide, no guard bits                         0                    7,785
+```
+
+`0.125 / 1.875` in `ufixed (3 downto -3)` returns 0.0625. The quotient is 0.0667, and the nearest number the result can hold is 0.0703.
+
+The quotient is an integer division carried to the guard bits (lines 604 and 646), and the rounding sees those bits and not the remainder of the division. Guard bits of 100 with a remainder behind them are above the halfway point, and they are rounded as a tie, to even. That is about one quotient in twenty with the default three guard bits. A signed division cuts toward zero and `resize` then cuts toward minus infinity, so with `fixed_truncate` a negative quotient goes one way or the other depending on where its guard bits end.
+
+[`fixed_generic_pkg-body.patch`](fixed_generic_pkg-body.patch) gives both `divide` functions one more bit below the guard bits, set when the division leaves a remainder, and takes a negative signed quotient that is not exact down to the next lower number before `resize` rounds or cuts it. `reciprocal` calls `divide`. With it nothing is wrong in the 751,418 calls, and GHDL and NVC write the same result file with either package.
+
+```
+sh run_fixed.sh ghdl /path/to/ieee    # 41026 wrong in 751418 operations, then 0 wrong in 751418 operations
+sh run_fixed.sh nvc  /path/to/ieee
+```
+
+[`tb_fixed.vhd`](tb_fixed.vhd) is the testbench and [`fixed_exact.py`](fixed_exact.py) the reference.
+
 ## Running it
 
 GHDL or NVC, Python 3.9 or later, and the three files `float_generic_pkg.vhdl`, `float_generic_pkg-body.vhdl` and `float_pkg.vhdl` from the directory `ieee` of the IEEE repository or from `lib/ghdl/src/ieee2008` of a GHDL installation.

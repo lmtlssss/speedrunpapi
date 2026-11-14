@@ -1,0 +1,101 @@
+--- a/ieee/fixed_generic_pkg-body.vhdl
++++ b/ieee/fixed_generic_pkg-body.vhdl
+@@ -580,6 +580,9 @@
+     variable result     : UNRESOLVED_ufixed (l'high - mine(r'low, r'low) downto
+                                          mine (l'low, l'low) - r'high -1);
+     variable dresult    : UNRESOLVED_ufixed (result'high downto result'low -guard_bits);
++    -- the quotient with its guard bits and one bit below them, which is set
++    -- when the division leaves a remainder
++    variable sresult    : UNRESOLVED_ufixed (result'high downto result'low -guard_bits-1);
+     variable lresize    : UNRESOLVED_ufixed (l'high downto l'high - dresult'length+1);
+     variable lslv       : UNRESOLVED_UNSIGNED (lresize'length-1 downto 0);
+     variable rslv       : UNRESOLVED_UNSIGNED (r'length-1 downto 0);
+@@ -603,11 +606,27 @@
+     else
+       result_slv := lslv / rslv;
+       dresult    := to_fixed (result_slv, dresult'high, dresult'low);
+-      result := resize (arg            => dresult,
+-                        left_index     => result'high,
+-                        right_index    => result'low,
+-                        overflow_style => fixed_wrap,  -- overflow impossible
+-                        round_style    => round_style);
++      if guard_bits = 0 then            -- nothing to round with
++        result := resize (arg            => dresult,
++                          left_index     => result'high,
++                          right_index    => result'low,
++                          overflow_style => fixed_wrap,  -- overflow impossible
++                          round_style    => fixed_truncate);
++      else
++        -- Rounding has to know whether the quotient is exact: guard bits of
++        -- 100 with a remainder behind them are above the halfway point.
++        sresult (dresult'range) := dresult;
++        if (lslv rem rslv) = 0 then
++          sresult (sresult'low) := '0';
++        else
++          sresult (sresult'low) := '1';
++        end if;
++        result := resize (arg            => sresult,
++                          left_index     => result'high,
++                          right_index    => result'low,
++                          overflow_style => fixed_wrap,  -- overflow impossible
++                          round_style    => round_style);
++      end if;
+     end if;
+     return result;
+   end function divide;
+@@ -622,10 +641,14 @@
+     variable result     : UNRESOLVED_sfixed (l'high - mine(r'low, r'low) + 1 downto
+                                              mine (l'low, l'low) - r'high);
+     variable dresult    : UNRESOLVED_sfixed (result'high downto result'low-guard_bits);
++    -- the quotient with its guard bits and one bit below them, which is set
++    -- when the division leaves a remainder
++    variable sresult    : UNRESOLVED_sfixed (result'high downto result'low-guard_bits-1);
+     variable lresize    : UNRESOLVED_sfixed (l'high+1 downto l'high+1 -dresult'length+1);
+     variable lslv       : UNRESOLVED_SIGNED (lresize'length-1 downto 0);
+     variable rslv       : UNRESOLVED_SIGNED (r'length-1 downto 0);
+     variable result_slv : UNRESOLVED_SIGNED (lresize'length-1 downto 0);
++    variable inexact    : BOOLEAN;      -- the division leaves a remainder
+   begin
+     if (l'length < 1 or r'length < 1 or
+         mins(r'low, r'low) /= r'low or mins(l'low, l'low) /= l'low) then
+@@ -644,12 +667,34 @@
+       result := saturate (result'high, result'low);
+     else
+       result_slv := lslv / rslv;
+-      dresult    := to_fixed (result_slv, dresult'high, dresult'low);
+-      result := resize (arg            => dresult,
+-                        left_index     => result'high,
+-                        right_index    => result'low,
+-                        overflow_style => fixed_wrap,  -- overflow impossible
+-                        round_style    => round_style);
++      inexact    := (lslv rem rslv) /= 0;
++      -- "/" cuts toward zero. A two's complement number with bits below it
++      -- counts up from the next lower one, so a negative quotient that is
++      -- not exact goes one down, and resize rounds or cuts from there the
++      -- way it does for every other number.
++      if inexact and (lslv(lslv'high) /= rslv(rslv'high)) then
++        result_slv := result_slv - 1;
++      end if;
++      dresult := to_fixed (result_slv, dresult'high, dresult'low);
++      if guard_bits = 0 then            -- nothing to round with
++        result := resize (arg            => dresult,
++                          left_index     => result'high,
++                          right_index    => result'low,
++                          overflow_style => fixed_wrap,  -- overflow impossible
++                          round_style    => fixed_truncate);
++      else
++        sresult (dresult'range) := dresult;
++        if inexact then
++          sresult (sresult'low) := '1';
++        else
++          sresult (sresult'low) := '0';
++        end if;
++        result := resize (arg            => sresult,
++                          left_index     => result'high,
++                          right_index    => result'low,
++                          overflow_style => fixed_wrap,  -- overflow impossible
++                          round_style    => round_style);
++      end if;
+     end if;
+     return result;
+   end function divide;
