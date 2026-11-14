@@ -46,6 +46,10 @@ jobs:
           cut -d' ' -f1 hardware/audit/xls-apfloat/tops.txt | xargs -P 4 -I{} bash -c 'one {}' | tee out/log/summary.txt
           echo "modules: $(ls out/v | wc -l) of $(wc -l < hardware/audit/xls-apfloat/tops.txt)"
           head -30 out/v/add_4_3.v || true
+      - name: The four cases as DSLX tests, in XLS's own interpreter
+        run: |
+          set -uo pipefail
+          xlsbin/interpreter_main --dslx_stdlib_path=xlsbin/xls/dslx/stdlib hardware/audit/xls-apfloat/repro.x 2>&1 | tee out/log/repro.txt || true
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: xls-apfloat-verilog
