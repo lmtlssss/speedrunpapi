@@ -42,7 +42,12 @@ to_signed (2.25, 8, round_inf)              2                         3
 to_float (100000, 5, 10, round_zero)        +infinity                 65504.0, the largest
 ```
 
-[`plain.vhd`](plain.vhd) makes these calls and prints `WRONG` beside each result that is not the exactly rounded one: 24 lines, and the 25th call stops the simulator with an index out of bounds at line 358 of the package body.
+[`plain.vhd`](plain.vhd) makes these calls and prints `WRONG` beside each result that is not the exactly rounded one: 24 lines, and the 25th call stops the simulator with an index out of bounds at line 358 of the package body. It needs GHDL and nothing else:
+
+```
+ghdl -a --std=08 plain.vhd
+ghdl --elab-run --std=08 plain
+```
 
 The plain operands are not rare ones. Of the integers 1 to 4,096, `sqrt` returns a float32 one unit off for 256 and a float64 one unit off for 264. Of the 4,913 triples made from -6 to 6, 0.25, 0.5, 1.5 and 10, `mac` returns the wrong float32 for 290. `resize` from float64 to float32 returns +infinity for every power of two from 2^-1074 to 2^-1024, stops the simulator from 2^-662 to 2^-639, returns 2^(e+512) from 2^-638 to 2^-512 and 2^(e-512) from 2^513 to 2^639.
 
