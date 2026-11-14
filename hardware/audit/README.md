@@ -81,7 +81,10 @@ Every row below has a reproducer that fits on one line.
 | hlslibs/ac_math | `ac_sqrt` on fixed-point types and integers; `ac_div` on integers | 54,144; 2,592; 2,288 | 0 values; the flag returned by the signed integer division on 14 | |
 | hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
 | [llvm/llvm-project](https://github.com/llvm/llvm-project), `APFloat`, the software floating point the compiler folds constants with, release 23.1.4 | `add`, `subtract`, `multiply`, `divide`, `fusedMultiplyAdd`, `remainder`, `mod`, `compare`, the conversions, `roundToIntegral`, `scalbn`, `next` on every operand of its eleven 8-, 6- and 4-bit formats, five rounding modes | 695,676,784 | 1,391 values: `roundToIntegral` on two formats, 1,366, and a NaN that converts to the bits of infinity, 25 | on LLVM's record: #224353, #214919 |
-| llvm/llvm-project | `APFloat` on main: the status of `multiply`, `divide`, `fusedMultiplyAdd` and `convert` | 185,075,600 | 0 values; 97,209 return `opInexact` where underflow is due, and binary64 does the same | patch in [`apfloat/`](apfloat) |
+| llvm/llvm-project | `APFloat` on main: the status of `multiply`, `divide`, `fusedMultiplyAdd` and `convert` | 185,075,600 | 0 values; 97,209 return `opInexact` where underflow is due, and binary64 does the same | [#242633](https://github.com/llvm/llvm-project/issues/242633), patch in [`apfloat/`](apfloat) |
+| [google/xls](https://github.com/google/xls), `apfloat`, the float library of Google's high-level synthesis toolchain, as the Verilog XLS generates | `fma` on every operand triple of four small formats | 50,593,792 | 9,045,120 NaN results: infinity in three formats (the E4M3 and E5M2 layouts among them), a NaN with the quiet bit clear in the fourth; 145,664 zeros of the wrong sign | [#5417](https://github.com/google/xls/issues/5417), [#5418](https://github.com/google/xls/issues/5418) |
+| google/xls | `cast_from_fixed_using_rz`, every 8-bit and 12-bit integer into four formats | 17,408 | 12,165: infinity where the largest finite number is the result | [#5419](https://github.com/google/xls/issues/5419) |
+| google/xls | `add`, `sub`, `mul`, the five comparisons, `ceil`, `floor`, `trunc`, `round`, `to_int`, `to_uint`, `cast_to_fixed`, `cast_from_fixed_using_rne`, `ldexp`, `downcast`, `upcast`: 135 modules on every input | 2,136,384 | 0 | |
 
 ## Reproducers
 
@@ -291,6 +294,17 @@ roundToIntegral (1.0), Float6E2M3FN, release 23.1.4  expected 1.0               
 ```
 
 Fix: [`apfloat/underflow.patch`](apfloat), 42 lines added to `APFloat.cpp` and 21 removed, with a unit test. With it no status of the sweep differs from the rule except the overflow flag, which is LLVM's #220018; no value changes; LLVM's 325 `APFloat` tests pass.
+
+**Google XLS `apfloat`.** The floating-point library of Google's high-level synthesis toolchain, compiled to Verilog by XLS itself at four small sizes and run on every input. `add`, `mul`, the comparisons, the rounding functions and the conversions are right. The fused multiply-add builds its NaN with a constant of its own: with fewer than four fraction bits, which is the E4M3 and E5M2 layouts, the result is infinity. It returns +0 for a negative zero product added to a negative zero, and the conversion from an integer that rounds toward zero overflows to infinity. XLS's own interpreter fails the same cases.
+
+```
+fma (NaN, 1.0, 1.0), APFloat<4,3>                    expected 7c (NaN)       library 78 (+inf)
+fma (NaN, 1.0, 1.0), binary32                        expected 7fc00000       library 7f880000
+fma (1.0, -0.0, -0.0), binary32                      expected 80000000       library 00000000
+100000 to binary16, rounding toward zero             expected 7bff (65504)   library 7c00 (+inf)
+```
+
+Wrappers, exact reference and the workflow that makes the Verilog: [`xls-apfloat/`](xls-apfloat).
 
 ## Your block
 
