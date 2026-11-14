@@ -39,6 +39,8 @@ bool rnd_ovf = (QR != AC_TRN_ZERO) & !add_r[accu_size-1] & (t == t_h(-1));
 
 With ties to odd an exact tie stays on the all-ones significand. The exponent is raised anyway and the significand is left as it is. The multiplier has the term that is missing (line 1166: `& ((QR != AC_RND_CONV_ODD) | sticky_bit)`).
 
+Reported on 13 November 2026 as [hlslibs/ac_types#41](https://github.com/hlslibs/ac_types/issues/41).
+
 ## `add` and `sub` at fraction widths 5, 13, 29 and 61
 
 When the fraction `W - E - 1` is 5, 13, 29 or 61 bits wide, `add` and `sub` in the three round-to-nearest modes return the neighbour of the correct result if one operand is far smaller than the other.
@@ -65,6 +67,8 @@ Every operand pair of `ac_std_float<10,4>`, which has 5 fraction bits: `add` is 
 
 Cause. `add_generic` shifts the smaller operand right by the exponent difference into a field with three bits below the point: guard, round, sticky. The shift has to reach `mu_bits + 2` before the whole operand is under the sticky bit; `mu_bits` is the fraction width plus one. The difference is saturated first (lines 963 to 966) in a type of `ac::nbits<mu_bits+1>` bits. For most widths that type's largest value is above `mu_bits + 1`. When `mu_bits + 1` is all ones, which is `mu_bits` = 6, 14, 30, 62, it is exactly `mu_bits + 1`. A shift of that much leaves the operand's leading bit in the round position, so an operand any distance away counts as a quarter of a unit in the last place.
 
+Reported as [hlslibs/ac_types#42](https://github.com/hlslibs/ac_types/issues/42).
+
 ## `ceil`, `trunc` and `round` lose the sign of zero
 
 For a negative operand whose result is zero, `ceil`, `trunc` and `round` return +0, and `trunc` and `round` return +0 for -0. `floor` keeps the sign. The C library returns -0, as IEEE 754 does for rounding to an integral value.
@@ -90,6 +94,8 @@ Every operand of four formats:
 | `ac_std_float<11,4>` | 2,048 | 447 | 448 | 384 | 0 |
 
 Cause. Lines 1688, 1745 and 1764 return `zero()` for these operands.
+
+Reported as [hlslibs/ac_types#43](https://github.com/hlslibs/ac_types/issues/43).
 
 ## The patch
 

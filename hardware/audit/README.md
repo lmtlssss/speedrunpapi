@@ -70,9 +70,9 @@ Every row below has a reproducer that fits on one line.
 | antonblanchard/microwatt | `fpu`: 43 instructions with every exception disabled, with the fix of #476 | 344,000 | 0 | |
 | antonblanchard/microwatt | `fpu`: 43 instructions starting from a filled FPSCR; the record forms | 90,300; 9,030 | 0 | |
 | antonblanchard/microwatt | `fpu`: the twelve integer divisions and remainders, OE and Rc both ways | 600,000 | 0 | |
-| [hlslibs/ac_types](https://github.com/hlslibs/ac_types), the Algorithmic C datatypes Siemens publishes for high-level synthesis | `ac_std_float`: `fma` with ties to odd on every operand triple of two small formats | 2,359,296 | 13,732: twice the right value on a tie just under a power of two | [cause and fix](ac-std-float) |
-| hlslibs/ac_types | `ac_std_float`: `add` and `sub` on every operand pair of a format with 5 fraction bits, four rounding modes | 8,388,608 | 18,368, none under truncation: fraction widths 5, 13, 29 and 61 with one operand far smaller | [cause and fix](ac-std-float) |
-| hlslibs/ac_types | `ac_std_float`: `ceil`, `trunc`, `round` on every operand of four small formats | 11,520 | 2,396: +0 where the result is -0 | [cause and fix](ac-std-float) |
+| [hlslibs/ac_types](https://github.com/hlslibs/ac_types), the Algorithmic C datatypes Siemens publishes for high-level synthesis | `ac_std_float`: `fma` with ties to odd on every operand triple of two small formats | 2,359,296 | 13,732: twice the right value on a tie just under a power of two | [#41](https://github.com/hlslibs/ac_types/issues/41), [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: `add` and `sub` on every operand pair of a format with 5 fraction bits, four rounding modes | 8,388,608 | 18,368, none under truncation: fraction widths 5, 13, 29 and 61 with one operand far smaller | [#42](https://github.com/hlslibs/ac_types/issues/42), [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: `ceil`, `trunc`, `round` on every operand of four small formats | 11,520 | 2,396: +0 where the result is -0 | [#43](https://github.com/hlslibs/ac_types/issues/43), [cause and fix](ac-std-float) |
 | hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
 
 ## Reproducers
