@@ -1,0 +1,12 @@
+--- a/fpu.vhdl
++++ b/fpu.vhdl
+@@ -1200,6 +1200,9 @@
+                         when "10110" =>        -- fcfid
+                             v.result_sign := e_in.frb(63);
+                             v.longmask := e_in.single;
++                        when "11110" =>        -- fcfidu
++                            v.result_sign := '0';
++                            v.longmask := e_in.single;
+                         when others =>
+                             v.result_sign := '0';
+                     end case;
