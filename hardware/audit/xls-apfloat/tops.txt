@@ -1,0 +1,159 @@
+add_3_2 6,6 6 add 3 2
+addlza_3_2 6,6 6 add 3 2
+sub_3_2 6,6 6 sub 3 2
+mul_3_2 6,6 6 mul 3 2
+fma_3_2 6,6,6 6 fma 3 2
+ceil_3_2 6 6 ceil 3 2
+ceildaz_3_2 6 6 ceildaz 3 2
+floor_3_2 6 6 floor 3 2
+floordaz_3_2 6 6 floordaz 3 2
+trunc_3_2 6 6 trunc 3 2
+round_3_2 6 6 round 3 2
+rounda_3_2 6 6 rounda 3 2
+eq_3_2 6,6 1 eq 3 2
+gt_3_2 6,6 1 gt 3 2
+gte_3_2 6,6 1 gte 3 2
+lte_3_2 6,6 1 lte 3 2
+lt_3_2 6,6 1 lt 3 2
+toint_3_2_4 6 4 toint 3 2 4
+touint_3_2_4 6 4 touint 3 2 4
+tofixed_3_2_4 6 4 tofixed 3 2 4
+toint_3_2_8 6 8 toint 3 2 8
+touint_3_2_8 6 8 touint 3 2 8
+tofixed_3_2_8 6 8 tofixed 3 2 8
+fromfixed_rne_3_2_8 8 6 fromfixed_rne 3 2 8
+fromfixed_rz_3_2_8 8 6 fromfixed_rz 3 2 8
+fromfixed_rne_3_2_12 12 6 fromfixed_rne 3 2 12
+fromfixed_rz_3_2_12 12 6 fromfixed_rz 3 2 12
+ldexp_3_2 6,8 6 ldexp 3 2
+down_rne_5_6_to_3_2 12 6 down_rne 5 6 3 2
+down_even_5_6_to_3_2 12 6 down_even 5 6 3 2
+down_away_5_6_to_3_2 12 6 down_away 5 6 3 2
+up_3_2_to_5_6 6 12 up 3 2 5 6
+updaz_3_2_to_5_6 6 12 updaz 3 2 5 6
+down_rne_4_7_to_3_2 12 6 down_rne 4 7 3 2
+down_even_4_7_to_3_2 12 6 down_even 4 7 3 2
+down_away_4_7_to_3_2 12 6 down_away 4 7 3 2
+up_3_2_to_4_7 6 12 up 3 2 4 7
+updaz_3_2_to_4_7 6 12 updaz 3 2 4 7
+add_4_3 8,8 8 add 4 3
+addlza_4_3 8,8 8 add 4 3
+sub_4_3 8,8 8 sub 4 3
+mul_4_3 8,8 8 mul 4 3
+fma_4_3 8,8,8 8 fma 4 3
+ceil_4_3 8 8 ceil 4 3
+ceildaz_4_3 8 8 ceildaz 4 3
+floor_4_3 8 8 floor 4 3
+floordaz_4_3 8 8 floordaz 4 3
+trunc_4_3 8 8 trunc 4 3
+round_4_3 8 8 round 4 3
+rounda_4_3 8 8 rounda 4 3
+eq_4_3 8,8 1 eq 4 3
+gt_4_3 8,8 1 gt 4 3
+gte_4_3 8,8 1 gte 4 3
+lte_4_3 8,8 1 lte 4 3
+lt_4_3 8,8 1 lt 4 3
+toint_4_3_4 8 4 toint 4 3 4
+touint_4_3_4 8 4 touint 4 3 4
+tofixed_4_3_4 8 4 tofixed 4 3 4
+toint_4_3_8 8 8 toint 4 3 8
+touint_4_3_8 8 8 touint 4 3 8
+tofixed_4_3_8 8 8 tofixed 4 3 8
+fromfixed_rne_4_3_8 8 8 fromfixed_rne 4 3 8
+fromfixed_rz_4_3_8 8 8 fromfixed_rz 4 3 8
+fromfixed_rne_4_3_12 12 8 fromfixed_rne 4 3 12
+fromfixed_rz_4_3_12 12 8 fromfixed_rz 4 3 12
+ldexp_4_3 8,8 8 ldexp 4 3
+down_rne_5_6_to_4_3 12 8 down_rne 5 6 4 3
+down_even_5_6_to_4_3 12 8 down_even 5 6 4 3
+down_away_5_6_to_4_3 12 8 down_away 5 6 4 3
+up_4_3_to_5_6 8 12 up 4 3 5 6
+updaz_4_3_to_5_6 8 12 updaz 4 3 5 6
+down_rne_4_7_to_4_3 12 8 down_rne 4 7 4 3
+down_even_4_7_to_4_3 12 8 down_even 4 7 4 3
+down_away_4_7_to_4_3 12 8 down_away 4 7 4 3
+up_4_3_to_4_7 8 12 up 4 3 4 7
+updaz_4_3_to_4_7 8 12 updaz 4 3 4 7
+add_3_4 8,8 8 add 3 4
+addlza_3_4 8,8 8 add 3 4
+sub_3_4 8,8 8 sub 3 4
+mul_3_4 8,8 8 mul 3 4
+fma_3_4 8,8,8 8 fma 3 4
+ceil_3_4 8 8 ceil 3 4
+ceildaz_3_4 8 8 ceildaz 3 4
+floor_3_4 8 8 floor 3 4
+floordaz_3_4 8 8 floordaz 3 4
+trunc_3_4 8 8 trunc 3 4
+round_3_4 8 8 round 3 4
+rounda_3_4 8 8 rounda 3 4
+eq_3_4 8,8 1 eq 3 4
+gt_3_4 8,8 1 gt 3 4
+gte_3_4 8,8 1 gte 3 4
+lte_3_4 8,8 1 lte 3 4
+lt_3_4 8,8 1 lt 3 4
+toint_3_4_4 8 4 toint 3 4 4
+touint_3_4_4 8 4 touint 3 4 4
+tofixed_3_4_4 8 4 tofixed 3 4 4
+toint_3_4_8 8 8 toint 3 4 8
+touint_3_4_8 8 8 touint 3 4 8
+tofixed_3_4_8 8 8 tofixed 3 4 8
+fromfixed_rne_3_4_8 8 8 fromfixed_rne 3 4 8
+fromfixed_rz_3_4_8 8 8 fromfixed_rz 3 4 8
+fromfixed_rne_3_4_12 12 8 fromfixed_rne 3 4 12
+fromfixed_rz_3_4_12 12 8 fromfixed_rz 3 4 12
+ldexp_3_4 8,8 8 ldexp 3 4
+down_rne_5_6_to_3_4 12 8 down_rne 5 6 3 4
+down_even_5_6_to_3_4 12 8 down_even 5 6 3 4
+down_away_5_6_to_3_4 12 8 down_away 5 6 3 4
+up_3_4_to_5_6 8 12 up 3 4 5 6
+updaz_3_4_to_5_6 8 12 updaz 3 4 5 6
+down_rne_4_7_to_3_4 12 8 down_rne 4 7 3 4
+down_even_4_7_to_3_4 12 8 down_even 4 7 3 4
+down_away_4_7_to_3_4 12 8 down_away 4 7 3 4
+up_3_4_to_4_7 8 12 up 3 4 4 7
+updaz_3_4_to_4_7 8 12 updaz 3 4 4 7
+add_5_2 8,8 8 add 5 2
+addlza_5_2 8,8 8 add 5 2
+sub_5_2 8,8 8 sub 5 2
+mul_5_2 8,8 8 mul 5 2
+fma_5_2 8,8,8 8 fma 5 2
+ceil_5_2 8 8 ceil 5 2
+ceildaz_5_2 8 8 ceildaz 5 2
+floor_5_2 8 8 floor 5 2
+floordaz_5_2 8 8 floordaz 5 2
+trunc_5_2 8 8 trunc 5 2
+round_5_2 8 8 round 5 2
+rounda_5_2 8 8 rounda 5 2
+eq_5_2 8,8 1 eq 5 2
+gt_5_2 8,8 1 gt 5 2
+gte_5_2 8,8 1 gte 5 2
+lte_5_2 8,8 1 lte 5 2
+lt_5_2 8,8 1 lt 5 2
+toint_5_2_4 8 4 toint 5 2 4
+touint_5_2_4 8 4 touint 5 2 4
+tofixed_5_2_4 8 4 tofixed 5 2 4
+toint_5_2_8 8 8 toint 5 2 8
+touint_5_2_8 8 8 touint 5 2 8
+tofixed_5_2_8 8 8 tofixed 5 2 8
+fromfixed_rne_5_2_8 8 8 fromfixed_rne 5 2 8
+fromfixed_rz_5_2_8 8 8 fromfixed_rz 5 2 8
+fromfixed_rne_5_2_12 12 8 fromfixed_rne 5 2 12
+fromfixed_rz_5_2_12 12 8 fromfixed_rz 5 2 12
+ldexp_5_2 8,8 8 ldexp 5 2
+down_rne_5_6_to_5_2 12 8 down_rne 5 6 5 2
+down_even_5_6_to_5_2 12 8 down_even 5 6 5 2
+down_away_5_6_to_5_2 12 8 down_away 5 6 5 2
+up_5_2_to_5_6 8 12 up 5 2 5 6
+updaz_5_2_to_5_6 8 12 updaz 5 2 5 6
+fma_8_23 32,32,32 32 fma 8 23
+add_8_23 32,32 32 add 8 23
+mul_8_23 32,32 32 mul 8 23
+fromfixed_rz_8_23_32 32 32 fromfixed_rz 8 23 32
+fma_8_7 16,16,16 16 fma 8 7
+add_8_7 16,16 16 add 8 7
+mul_8_7 16,16 16 mul 8 7
+fromfixed_rz_8_7_32 32 16 fromfixed_rz 8 7 32
+fma_5_10 16,16,16 16 fma 5 10
+add_5_10 16,16 16 add 5 10
+mul_5_10 16,16 16 mul 5 10
+fromfixed_rz_5_10_32 32 16 fromfixed_rz 5 10 32

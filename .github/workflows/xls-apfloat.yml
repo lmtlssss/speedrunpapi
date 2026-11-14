@@ -1,0 +1,59 @@
+name: XLS apfloat to Verilog
+on:
+  push:
+    paths:
+      - 'hardware/audit/xls-apfloat/**'
+      - '.github/workflows/xls-apfloat.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: XLS release at a pinned version
+        run: |
+          set -euo pipefail
+          V=v0.0.0-11089-gc2639fac5
+          curl -fsSL -o xls.tar.gz "https://github.com/google/xls/releases/download/$V/xls-$V-linux-x64.tar.gz"
+          echo "1a52214899286322de164e6fc835db1fcf9cffcd1ec281c9a1ad8b5b7cb69c66  xls.tar.gz" | sha256sum -c -
+          tar -xzf xls.tar.gz
+          mv "xls-$V-linux-x64" xlsbin
+          ls xlsbin
+      - name: DSLX to IR
+        run: |
+          set -euo pipefail
+          mkdir -p out/v out/log
+          xlsbin/ir_converter_main --dslx_stdlib_path=xlsbin/xls/dslx/stdlib hardware/audit/xls-apfloat/w.x > out/w.ir 2> out/log/ir_converter.log || { tail -40 out/log/ir_converter.log; exit 1; }
+          grep -c "^fn \|^top fn " out/w.ir
+      - name: One Verilog module per function
+        run: |
+          set -uo pipefail
+          one() {
+            n="$1"
+            if xlsbin/opt_main --top="__w__$n" out/w.ir > "out/$n.opt.ir" 2> "out/log/$n.opt.log" \
+               && xlsbin/codegen_main --generator=combinational --delay_model=unit --use_system_verilog=false --module_name="$n" "out/$n.opt.ir" > "out/v/$n.v" 2> "out/log/$n.codegen.log"; then
+              echo "ok $n"
+            else
+              echo "FAILED $n"; tail -5 "out/log/$n.opt.log" "out/log/$n.codegen.log" 2>/dev/null
+              rm -f "out/v/$n.v"
+            fi
+            rm -f "out/$n.opt.ir"
+          }
+          export -f one
+          cut -d' ' -f1 hardware/audit/xls-apfloat/tops.txt | xargs -P 4 -I{} bash -c 'one {}' | tee out/log/summary.txt
+          echo "modules: $(ls out/v | wc -l) of $(wc -l < hardware/audit/xls-apfloat/tops.txt)"
+          head -30 out/v/add_4_3.v || true
+      - name: The four cases as DSLX tests, in XLS's own interpreter
+        run: |
+          set -uo pipefail
+          xlsbin/interpreter_main --dslx_stdlib_path=xlsbin/xls/dslx/stdlib hardware/audit/xls-apfloat/repro.x 2>&1 | tee out/log/repro.txt || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: xls-apfloat-verilog
+          path: |
+            out/v
+            out/log
+          retention-days: 14
