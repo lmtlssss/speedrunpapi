@@ -194,3 +194,7 @@ To use the patched package in a design, compile `float_generic_pkg.vhdl` and the
 `remainder`, `modulo`, `Logb`, `Nextafter`, the comparisons, the conversions with `real` and with fixed point, the text input and output, operands of two different formats in one call, and `check_error` false.
 
 The VHDL-93 version of the package, `float_pkg_c.vhdl` in [FPHDL/fphdl](https://github.com/FPHDL/fphdl), carries the same lines. It was not run here.
+
+## Reported
+
+To the IEEE P1076 working group by mail on 13 November 2026, and as [ghdl/ghdl#3486](https://github.com/ghdl/ghdl/issues/3486), [nickg/nvc#1758](https://github.com/nickg/nvc/issues/1758) and [FPHDL/fphdl#4](https://github.com/FPHDL/fphdl/issues/4).
