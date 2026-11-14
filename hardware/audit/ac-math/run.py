@@ -20,7 +20,10 @@ cxx = os.environ.get("CXX", "c++")
 # CXXEXTRA: more compiler flags, for example -ftrivial-auto-var-init=pattern (clang), which fills every
 # automatic variable that the source leaves unset, so that a read of one shows in the result
 extra = os.environ.get("CXXEXTRA", "").split()
-inc =(["-I", first] if first else []) + ["-I", os.path.join(types, "include"), "-I", os.path.join(math, "include")]
+# ACM_MODULE: which sweep to run, acm (division and square root, the default) or acs (the shifts)
+MODULE = os.environ.get("ACM_MODULE", "acm")
+sys.path.insert(0, here)
+inc = (["-I", first] if first else []) + ["-I", os.path.join(types, "include"), "-I", os.path.join(math, "include")]
 os.makedirs(out, exist_ok=True)
 skip_path = os.path.join(out, "nocompile.json")
 why_path = os.path.join(out, "nocompile_why.json")
@@ -29,7 +32,7 @@ if os.path.exists(skip_path):
 why = {}
 
 for attempt in range(4):
-    subprocess.run([sys.executable, os.path.join(here, "acm.py"), "gen", out, str(parts)], check=True)
+    subprocess.run([sys.executable, os.path.join(here, MODULE + ".py"), "gen", out, str(parts)], check=True)
     t0 = time.time()
     procs = []
     for p in range(parts):
@@ -46,10 +49,10 @@ for attempt in range(4):
                 m = re.search(r"(ac_\w+\.h:\d+):\d+: error: (.*)", line)
                 if m:
                     last_error = m.group(1) + ": " + m.group(2)[:150]
-                m = re.search(r"(?:fdiv|fsqrt|idiv|isqrt_)<[^']*>' requested here", line)
+                m = re.search(r"(?:fdiv|fsqrt|idiv|isqrt_|shift_)<[^']*>' requested here", line)
                 if m and last_error:
                     pass
-                m = re.search(r"specialization '(fdiv|fsqrt|idiv|isqrt_)<([^']*)>' requested here", line)
+                m = re.search(r"specialization '(fdiv|fsqrt|idiv|isqrt_|shift_)<([^']*)>' requested here", line)
                 if m and last_error:
                     key = m.group(1) + "<" + m.group(2) + ">"
                     why.setdefault(key, last_error)
@@ -60,7 +63,7 @@ for attempt in range(4):
     # map the failing instantiations back to configuration ids through the generated call text
     cs = json.load(open(os.path.join(out, "configs.json")))
     sys.path.insert(0, here)
-    import acm
+    acm = __import__(MODULE)
     ids = []
     for c in cs:
         text = acm.call(c).strip()
@@ -84,6 +87,6 @@ for tag, sentinel in (("a", "55555555"), ("b", "aaaaaaaa")):
             if r.returncode:
                 raise SystemExit("a test program failed")
     print("== output variables hold %s before each call" % sentinel, flush=True)
-    subprocess.run([sys.executable, os.path.join(here, "acm.py"), "check", out, res, "1"], check=True)
+    subprocess.run([sys.executable, os.path.join(here, MODULE + ".py"), "check", out, res, "1"], check=True)
 print("== the two runs compared", flush=True)
-subprocess.run([sys.executable, os.path.join(here, "acm.py"), "depends", out, paths[0], paths[1], "6"], check=True)
+subprocess.run([sys.executable, os.path.join(here, MODULE + ".py"), "depends", out, paths[0], paths[1], "6"], check=True)
