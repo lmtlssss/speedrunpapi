@@ -62,6 +62,8 @@ When the output's last place is at or above that bound, `ZW` is zero or negative
 
 These are what is left when the first defect is fixed alone.
 
+Both are reported, on 13 November 2026, as [hlslibs/ac_math#11](https://github.com/hlslibs/ac_math/issues/11).
+
 ## The returned flag of signed integer division
 
 `ac_div` returns true when the remainder is nonzero. The unsigned integer version tests its full internal remainder. The signed one tests the remainder after it has been cut to the width of the remainder output, so with a remainder output narrower than the divisor it returns false for a nonzero remainder: 14 calls of `ac_int<4,true>` divided by `ac_int<4,true>` with a 2-bit remainder, for example 4 / 5.
