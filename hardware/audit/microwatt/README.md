@@ -50,6 +50,8 @@ Without the one-line fix, 55 of the 155,400 differ, all in FPRF as above and all
 
 The integer divisions and remainders (`divd`, `divdu`, `divw`, `divwu`, `divde`, `divdeu`, `divwe`, `divweu`, `modsd`, `modud`, `modsw`, `moduw`) are compared with integer arithmetic by [`mw_idiv.py`](mw_idiv.py), with OE and Rc both ways: quotient or remainder, OV, OV32, SO, CR0. What the ISA leaves undefined is not compared: the result when the divisor is zero or the quotient does not fit, and the upper half of the word forms.
 
+All 600,000 are right: 50,000 operand pairs for each of the twelve instructions. For 113,689 of them the ISA leaves the result undefined, most of them extended divisions whose quotient does not fit; there OV, OV32 and SO are right and the value is not compared.
+
 ## Running it
 
 GHDL and Python 3. `MICROWATT` is a checkout of the core.
