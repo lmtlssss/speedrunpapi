@@ -1,0 +1,26 @@
+name: APFloat underflow on x86-64
+on:
+  push:
+    paths:
+      - 'hardware/audit/apfloat/**'
+      - '.github/workflows/apfloat.yml'
+  pull_request:
+    paths:
+      - 'hardware/audit/apfloat/**'
+      - '.github/workflows/apfloat.yml'
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Two products just below the smallest normal double, on the processor
+        run: |
+          set -euo pipefail
+          cc -O0 -frounding-math -o uf_hw hardware/audit/apfloat/uf_hw.c -lm
+          ./uf_hw | tee uf_hw.txt
+          sed -n '1p' uf_hw.txt | grep -q "x86-64"
+          sed -n '2p' uf_hw.txt | grep -q "inexact 1  underflow 1"
+          sed -n '3p' uf_hw.txt | grep -q "inexact 1  underflow 0"
