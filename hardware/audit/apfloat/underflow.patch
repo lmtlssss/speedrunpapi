@@ -1,0 +1,197 @@
+--- a/llvm/lib/Support/APFloat.cpp
++++ b/llvm/lib/Support/APFloat.cpp
+@@ -1670,6 +1670,11 @@
+   /* One, not zero, based MSB.  */
+   unsigned omsb = significandMSB() + 1;
+ 
++  /* Underflow tininess is detected after rounding: the result is tiny when,
++     rounded to the precision of the format as though the exponent range were
++     unbounded, it lies below the smallest normal number.  */
++  bool isTiny = false;
++
+   // Only skip this `if` if the value is exactly zero.
+   if (omsb || lost_fraction != lfExactlyZero) {
+     /* OMSB is numbered from 1.  We want to place it in the integer
+@@ -1684,8 +1689,32 @@
+ 
+     /* Subnormal numbers have exponent minExponent, and their MSB
+        is forced based on that.  */
+-    if (exponent + exponentChange < semantics->minExponent)
++    if (exponent + exponentChange < semantics->minExponent) {
++      /* A negative change means the caller has already cut the significand
++         down to the least exponent (decimal conversion does); what is needed
++         to round it to full precision is gone, and it is left as it was.  */
++      if (exponentChange >= 0) {
++        isTiny = true;
++
++        /* In the binade below the smallest normal number the rounding to full
++           precision can still carry up to it; such a result is not tiny.  */
++        if (exponent + exponentChange == semantics->minExponent - 1) {
++          IEEEFloat unbounded(*this);
++          lostFraction lf = lost_fraction;
++          if (exponentChange > 0)
++            lf = combineLostFractions(
++                unbounded.shiftSignificandRight(exponentChange), lf);
++          if (lf != lfExactlyZero &&
++              unbounded.roundAwayFromZero(rounding_mode, lf, 0)) {
++            unbounded.incrementSignificand();
++            if (unbounded.significandMSB() + 1 == semantics->precision + 1)
++              isTiny = false;
++          }
++        }
++      }
++
+       exponentChange = semantics->minExponent - exponent;
++    }
+ 
+     /* Shifting left is easy as we don't lose precision.  */
+     if (exponentChange < 0) {
+@@ -1770,10 +1799,11 @@
+       return handleOverflow(rounding_mode);
+   }
+ 
+-  /* The normal case - we were and are not denormal, and any
+-     significand increment above didn't overflow.  */
++  /* The result is a normal number.  Either it was one before rounding, or a
++     denormal was rounded up to the smallest normal number; that one is still
++     an underflow when it was tiny.  */
+   if (omsb == semantics->precision)
+-    return opInexact;
++    return isTiny ? (opStatus)(opUnderflow | opInexact) : opInexact;
+ 
+   /* We have a non-zero denormal.  */
+   assert(omsb < semantics->precision);
+@@ -2573,27 +2603,18 @@
+     X86SpecialNan = true;
+   }
+ 
+-  // If this is a truncation of a denormal number, and the target semantics
+-  // has larger exponent range than the source semantics (this can happen
+-  // when truncating from PowerPC double-double to double format), the
+-  // right shift could lose result mantissa bits.  Adjust exponent instead
+-  // of performing excessive shift.
+-  // Also do a similar trick in case shifting denormal would produce zero
+-  // significand as this case isn't handled correctly by normalize.
++  // If this is a truncation of a denormal number, the right shift could lose
++  // result mantissa bits: the target semantics may have a larger exponent
++  // range than the source semantics (this can happen when truncating from
++  // PowerPC double-double to double format), and normalize needs every bit
++  // to tell whether the result is tiny.  Adjust exponent instead of
++  // performing excessive shift.
+   if (shift < 0 && isFiniteNonZero()) {
+     int omsb = significandMSB() + 1;
+     int exponentChange = omsb - fromSemantics.precision;
+-    if (exponent + exponentChange < toSemantics.minExponent)
+-      exponentChange = toSemantics.minExponent - exponent;
+     exponentChange = std::max(exponentChange, shift);
+-    if (exponentChange < 0) {
+-      shift -= exponentChange;
+-      exponent += exponentChange;
+-    } else if (omsb <= -shift) {
+-      exponentChange = omsb + shift - 1; // leave at least one bit set
+-      shift -= exponentChange;
+-      exponent += exponentChange;
+-    }
++    shift -= exponentChange;
++    exponent += exponentChange;
+   }
+ 
+   // If this is a truncation, perform the shift before we narrow the storage.
+--- a/llvm/unittests/ADT/APFloatTest.cpp
++++ b/llvm/unittests/ADT/APFloatTest.cpp
+@@ -2692,6 +2692,95 @@
+   St = P.roundToIntegral(APFloat::rmNearestTiesToEven);
+   EXPECT_EQ(10.0, P.convertToDouble());
+   EXPECT_EQ(APFloat::opInexact, St);
++}
++
++TEST(APFloatTest, UnderflowTininessAfterRounding) {
++  // Tininess is detected after rounding: a result below the smallest normal
++  // number is tiny unless rounding it to the precision of the format, with the
++  // exponent range unbounded, gives the smallest normal number. Each value is
++  // a binary128 number just below 2^-1022 that is converted to binary64. The
++  // largest subnormal is 0x1.ffffffffffffep-1023; the comments say how far the
++  // value lies from it toward 2^-1022.
++  const int Tiny = APFloat::opUnderflow | APFloat::opInexact;
++  const int NotTiny = APFloat::opInexact;
++  const struct {
++    const char *Value;
++    APFloat::roundingMode RM;
++    const char *Result;
++    int Status;
++  } Tests[] = {
++      // Halfway. Exact in 53 bits, so tiny; the result rounds up to 2^-1022.
++      {"0x1.fffffffffffff0p-1023", APFloat::rmNearestTiesToEven, "0x1p-1022",
++       Tiny},
++      {"0x1.fffffffffffff0p-1023", APFloat::rmNearestTiesToAway, "0x1p-1022",
++       Tiny},
++      {"0x1.fffffffffffff0p-1023", APFloat::rmTowardPositive, "0x1p-1022",
++       Tiny},
++      {"-0x1.fffffffffffff0p-1023", APFloat::rmTowardNegative, "-0x1p-1022",
++       Tiny},
++      // Five eighths. In 53 bits it rounds down to the halfway point: tiny.
++      {"0x1.fffffffffffff4p-1023", APFloat::rmNearestTiesToEven, "0x1p-1022",
++       Tiny},
++      // A directed rounding to 53 bits reaches 2^-1022 instead: not tiny.
++      {"0x1.fffffffffffff4p-1023", APFloat::rmTowardPositive, "0x1p-1022",
++       NotTiny},
++      {"-0x1.fffffffffffff4p-1023", APFloat::rmTowardNegative, "-0x1p-1022",
++       NotTiny},
++      // Three quarters. The tie in 53 bits goes to 2^-1022: not tiny.
++      {"0x1.fffffffffffff8p-1023", APFloat::rmNearestTiesToEven, "0x1p-1022",
++       NotTiny},
++      {"0x1.fffffffffffff8p-1023", APFloat::rmNearestTiesToAway, "0x1p-1022",
++       NotTiny},
++      // Seven eighths.
++      {"0x1.fffffffffffffcp-1023", APFloat::rmNearestTiesToEven, "0x1p-1022",
++       NotTiny},
++      // One quarter, rounded up.
++      {"0x1.ffffffffffffe8p-1023", APFloat::rmTowardPositive, "0x1p-1022",
++       Tiny},
++      // A result that stays subnormal is tiny in every mode.
++      {"0x1.fffffffffffffcp-1023", APFloat::rmTowardZero,
++       "0x1.ffffffffffffep-1023", Tiny},
++      {"0x1.fffffffffffffcp-1023", APFloat::rmTowardNegative,
++       "0x1.ffffffffffffep-1023", Tiny},
++  };
++  for (const auto &T : Tests) {
++    SCOPED_TRACE(T.Value);
++    APFloat X(APFloat::IEEEquad(), T.Value);
++    bool LosesInfo = false;
++    APFloat::opStatus Status =
++        X.convert(APFloat::IEEEdouble(), T.RM, &LosesInfo);
++    EXPECT_TRUE(X.bitwiseIsEqual(APFloat(APFloat::IEEEdouble(), T.Result)));
++    EXPECT_EQ(T.Status, static_cast<int>(Status));
++    EXPECT_TRUE(LosesInfo);
++  }
++
++  // A subnormal source keeps the bits that decide it. The binary32 number
++  // 0x007f8000 is 1.1111111b * 2^-127, exact in the eight bits of bfloat:
++  // tiny. 0x007fc000 is 1.11111111b * 2^-127, which rounds to 2^-126 in eight
++  // bits: not tiny.
++  for (auto [Bits, Status] :
++       {std::pair(0x007f8000u, Tiny), std::pair(0x007fc000u, NotTiny)}) {
++    SCOPED_TRACE(Bits);
++    APFloat X(APFloat::IEEEsingle(), APInt(32, Bits));
++    bool LosesInfo = false;
++    EXPECT_EQ(Status, static_cast<int>(X.convert(APFloat::BFloat(),
++                                                 APFloat::rmNearestTiesToEven,
++                                                 &LosesInfo)));
++    EXPECT_EQ(APInt(16, 0x0080), X.bitcastToAPInt());
++  }
++
++  // The same through a multiplication. (1 - 2^-53) * 2^-1022 is exact in 53
++  // bits.
++  APFloat P(0x1.fffffffffffffp-1);
++  EXPECT_EQ(Tiny, static_cast<int>(P.multiply(APFloat(0x1p-1022),
++                                              APFloat::rmNearestTiesToEven)));
++  EXPECT_EQ(0x1p-1022, P.convertToDouble());
++  // (1 - 2^-52) * (1 + 2^-52) * 2^-1022 rounds to 2^-1022 in 53 bits.
++  APFloat Q(0x1.ffffffffffffep-1);
++  EXPECT_EQ(NotTiny,
++            static_cast<int>(Q.multiply(APFloat(0x1.0000000000001p-1022),
++                                        APFloat::rmNearestTiesToEven)));
++  EXPECT_EQ(0x1p-1022, Q.convertToDouble());
+ }
+ 
+ TEST(APFloatTest, isInteger) {

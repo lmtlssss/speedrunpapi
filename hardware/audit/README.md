@@ -80,6 +80,8 @@ Every row below has a reproducer that fits on one line.
 | [hlslibs/ac_math](https://github.com/hlslibs/ac_math), the math library of the same datatypes | `ac_div` on fixed-point types: every operand of 4,480 small configurations, eight quantization modes, wrapping and saturating outputs | 627,648 | 11,488: the output is not written when the quotient is below its last place; 56 configurations do not compile and 4 stop at an assertion | [#11](https://github.com/hlslibs/ac_math/issues/11), [cause and fix](ac-math) |
 | hlslibs/ac_math | `ac_sqrt` on fixed-point types and integers; `ac_div` on integers | 54,144; 2,592; 2,288 | 0 values; the flag returned by the signed integer division on 14 | |
 | hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
+| [llvm/llvm-project](https://github.com/llvm/llvm-project), `APFloat`, the software floating point the compiler folds constants with, release 23.1.4 | `add`, `subtract`, `multiply`, `divide`, `fusedMultiplyAdd`, `remainder`, `mod`, `compare`, the conversions, `roundToIntegral`, `scalbn`, `next` on every operand of its eleven 8-, 6- and 4-bit formats, five rounding modes | 695,676,784 | 1,391 values: `roundToIntegral` on two formats, 1,366, and a NaN that converts to the bits of infinity, 25 | on LLVM's record: #224353, #214919 |
+| llvm/llvm-project | `APFloat` on main: the status of `multiply`, `divide`, `fusedMultiplyAdd` and `convert` | 185,075,600 | 0 values; 97,209 return `opInexact` where underflow is due, and binary64 does the same | patch in [`apfloat/`](apfloat) |
 
 ## Reproducers
 
@@ -280,6 +282,15 @@ ac_fixed<8,0,true> -0.5 / ac_fixed<8,8,true> 3, truncation toward minus infinity
 ```
 
 Fix: two lines in [`ac-math/`](ac-math), with the exact reference and the sweep. 0 wrong after them in 689,808 calls over 5,802 configurations, 56 of which did not compile before.
+
+**LLVM `APFloat`.** The software floating point that Clang, the optimizer and MLIR fold constants with. On its eleven 8-, 6- and 4-bit formats the arithmetic is right in all five rounding modes, on every operand pair and on every operand triple of the fused multiply-add. The two value defects of release 23.1.4 are on LLVM's record already. One thing is not: a result below the smallest normal number that rounds up to it comes back without the underflow status, in every format. An x86-64 and an arm64 processor both raise underflow for the first line.
+
+```
+(1 - 2^-53) x 2^-1022, binary64, to nearest          expected opUnderflow | opInexact      library opInexact
+roundToIntegral (1.0), Float6E2M3FN, release 23.1.4  expected 1.0                          library 0
+```
+
+Fix: [`apfloat/underflow.patch`](apfloat), 42 lines added to `APFloat.cpp` and 21 removed, with a unit test. With it no status of the sweep differs from the rule except the overflow flag, which is LLVM's #220018; no value changes; LLVM's 325 `APFloat` tests pass.
 
 ## Your block
 
