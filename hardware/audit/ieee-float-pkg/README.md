@@ -153,7 +153,7 @@ float16, the one-operand functions, 2,998,266 calls       266,342 wrong         
 plain.vhd, 25 calls                                       24 wrong, 1 stop             0
 ```
 
-GHDL and NVC wrote the same result file for the 7-bit format with either package, 8,693,248 lines, and for the four formats with the patched one, 3,680,000 lines. The reference itself was set beside this machine's own arithmetic on the float32 and float64 vectors of add, subtract, multiply, divide and sqrt in `round_nearest`: 99,135 operations, none different.
+GHDL and NVC wrote the same result files with either package: 8,693,248 lines for the 7-bit format and 3,680,000 for the four formats, the 1,302 stops on the same lines. The reference itself was set beside this machine's own arithmetic on the float32 and float64 vectors of add, subtract, multiply, divide and sqrt in `round_nearest`: 99,135 operations, none different.
 
 The package takes its guard bits and its denormal numbers as parameters. On 1,000 calls per cell in float16, float32 and float64:
 
