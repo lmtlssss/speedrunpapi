@@ -1,6 +1,42 @@
 --- a/include/ac_std_float.h
 +++ b/include/ac_std_float.h
-@@ -960,10 +960,13 @@
+@@ -515,7 +515,8 @@
+         m_r = 0;
+         m_r[r_mant_bits-1] = !!(d.template slc<mant_bits>(0));
+       }
+-      e_t e_r = f_e + rnd_ovf;
++      // a subnormal that rounds up to the smallest normal number carries into the hidden bit, not past it
++      e_t e_r = f_e + (rnd_ovf | (!f_normal & r_rnd[r_mant_bits]));
+       r.d = m_r;
+       r.d.set_slc(r_mant_bits, e_r);
+       r.d[WR-1] = d[W-1];
+@@ -623,7 +624,8 @@
+         int ls = f_mu.leading_sign();
+         int max_shift_left = f_e - r_min_exp + 1;
+         bool shift_exponent_limited = ls >= max_shift_left;
+-        int shift_l = shift_exponent_limited ? max_shift_left : ls;
++        // limited by the exponent: stop at the target's smallest exponent, where the result is subnormal
++        int shift_l = shift_exponent_limited ? max_shift_left - 1 : ls;
+         f_mu <<= shift_l;
+         exp -= shift_l;
+       }
+@@ -711,10 +713,13 @@
+       // after shift of abs value, MSB should be 0 with exception of 1 followed by 0s
+       bool ovf_most_neg = SFX & x_u[WFX-1];
+       bool ovf = ovf_most_neg;
+-      if (((Q == AC_RND_CONV) | (Q == AC_RND_INF)) & (WFX-SFX > mu_bits)) {
++      if (((Q == AC_RND_CONV) | (Q == AC_RND_INF) | (Q == AC_RND_CONV_ODD)) & (WFX-SFX > mu_bits)) {
+         // Check whether rounding would trigger overflow
+         mu1_t t = x_u.template slc<mu_bits+1>((WFX-SFX) - mu_bits - 1);
+-        ovf |= t == mu1_t(-1);
++        // with ties to odd an exact tie stays on the all-ones significand; anything above the tie carries
++        x_u_t below = x_u;
++        below <<= SFX + mu_bits + 1;
++        ovf |= (t == mu1_t(-1)) & ((Q != AC_RND_CONV_ODD) | !!below);
+       }
+       ac_fixed<mu_bits,WFX-SFX,false,Q> r_rnd;
+       r_rnd = (ac_int<WFX-SFX,false>)x_u;
+@@ -960,10 +965,13 @@
      mu_t op_smaller = op1_smaller ? op1_mu : op2_mu;
      int exp = op1_smaller ? op2_e_b : op1_e_b;
  
@@ -16,7 +52,7 @@
  
      bool m1_eq_m2 = (op1_mu == op2_mu);
      bool op_sign = op1_smaller & op2_sign;
-@@ -1455,7 +1458,10 @@
+@@ -1455,7 +1463,10 @@
      const int slc_ptr = No_SubNormals ? 4+extra_lsb : mu_bits+2;
      typedef ac_int<mu_bits+1,false> t_h;
      t_h t = add_r.template slc<mu_bits+1>(slc_ptr);
@@ -28,7 +64,7 @@
      bool r_sign = op3_inf ? op3_sign : mult_inf ? mult_sign : (r_neg ^ toggle_r_sign) & !add_exact_zero;
      ac_int<mu_bits+1,true> r_rnd_i = r_rnd.template slc<mu_bits+1>(0);
      bool r_zero = !rnd_ovf & !r_rnd_i;
-@@ -1685,7 +1691,7 @@
+@@ -1685,7 +1696,7 @@
      if (!d.template slc<W-1>(0))
        return *this;
      if (e < exp_bias) {
@@ -37,7 +73,7 @@
      } else {
        ac_std_float r(*this);
        int e_dif = mant_bits + exp_bias - e;
-@@ -1742,7 +1748,7 @@
+@@ -1742,7 +1753,7 @@
    ac_std_float trunc() const {
      ac_int<E,false> e = d.template slc<E>(mant_bits);
      if (e < exp_bias) {
@@ -46,7 +82,7 @@
      } else {
        ac_std_float r(*this);
        int e_dif = mant_bits + exp_bias - e;
-@@ -1761,7 +1767,7 @@
+@@ -1761,7 +1772,7 @@
    ac_std_float round() const {
      ac_int<E,false> e = d.template slc<E>(mant_bits);
      if (e < exp_bias-1) {

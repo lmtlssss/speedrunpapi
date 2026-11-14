@@ -73,6 +73,10 @@ Every row below has a reproducer that fits on one line.
 | [hlslibs/ac_types](https://github.com/hlslibs/ac_types), the Algorithmic C datatypes Siemens publishes for high-level synthesis | `ac_std_float`: `fma` with ties to odd on every operand triple of two small formats | 2,359,296 | 13,732: twice the right value on a tie just under a power of two | [#41](https://github.com/hlslibs/ac_types/issues/41), [cause and fix](ac-std-float) |
 | hlslibs/ac_types | `ac_std_float`: `add` and `sub` on every operand pair of a format with 5 fraction bits, four rounding modes | 8,388,608 | 18,368, none under truncation: fraction widths 5, 13, 29 and 61 with one operand far smaller | [#42](https://github.com/hlslibs/ac_types/issues/42), [cause and fix](ac-std-float) |
 | hlslibs/ac_types | `ac_std_float`: `ceil`, `trunc`, `round` on every operand of four small formats | 11,520 | 2,396: +0 where the result is -0 | [#43](https://github.com/hlslibs/ac_types/issues/43), [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: conversion to another fraction width with the same exponent width, every value of five small formats | 41,984 | 114: a subnormal that rounds up to the smallest normal number becomes zero | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: conversion to another format, every value of five small formats into thirteen | 147,456 | 96, in all four rounding modes: a subnormal that stays subnormal under a wider exponent comes out doubled or zero | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: from sixteen fixed-point types into five formats, four rounding modes | 17,600 | 67, all with ties to odd: zero where the rounding carries into the next power of two | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: to fixed point, eight quantization modes, wrapping and saturating | 364,544 | 0 | |
 | [hlslibs/ac_math](https://github.com/hlslibs/ac_math), the math library of the same datatypes | `ac_div` on fixed-point types: every operand of 4,480 small configurations, eight quantization modes, wrapping and saturating outputs | 627,648 | 11,488: the output is not written when the quotient is below its last place; 56 configurations do not compile and 4 stop at an assertion | [#11](https://github.com/hlslibs/ac_math/issues/11), [cause and fix](ac-math) |
 | hlslibs/ac_math | `ac_sqrt` on fixed-point types and integers; `ac_div` on integers | 54,144; 2,592; 2,288 | 0 values; the flag returned by the signed integer division on 14 | |
 | hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
@@ -255,15 +259,18 @@ divide (6.0, 3.0, round_inf)            expected 2.0                   package 2
 
 Fix: one patch to the package body in [`ieee-float-pkg/`](ieee-float-pkg), with the exact reference and a testbench for GHDL and NVC. 0 wrong after it in 32,470,838 calls.
 
-**Siemens `ac_std_float`.** The floating-point class of the Algorithmic C datatypes, in the header that a high-level synthesis flow both simulates and synthesizes from. With ties to odd, its fused multiply-add raises the exponent on a tie that it does not round up. Its adder leaves the leading bit of a far smaller operand in the round position when the fraction is 5, 13, 29 or 61 bits wide. Three of its four functions that round to an integer return +0 where the result is -0.
+**Siemens `ac_std_float`.** The floating-point class of the Algorithmic C datatypes, in the header that a high-level synthesis flow both simulates and synthesizes from. With ties to odd, its fused multiply-add raises the exponent on a tie that it does not round up. Its adder leaves the leading bit of a far smaller operand in the round position when the fraction is 5, 13, 29 or 61 bits wide. Three of its four functions that round to an integer return +0 where the result is -0. Three of its conversions lose a number: a subnormal that rounds up to the smallest normal number, a subnormal carried to a wider exponent, and an integer converted with ties to odd.
 
 ```
 fma (2^-12, 2^-12, 2 - 2^-23), ties to odd, binary32       expected 3fffffff      library 407fffff
 1.0 + (-(1 + 2^-13) x 2^-16), ac_std_float<20,6>             expected 3e000         library 3dfff
 ceil (-0.5), binary32                                        expected 80000000      library 00000000
+binary32 007fffff to bfloat16's layout, to nearest           expected 0080          library 0000
+ac_std_float<16,4> 2^-16 to binary16                         expected 0100          library 0200
+4294967295 to binary32, ties to odd                          expected 4f800000      library 00000000
 ```
 
-Fix: seven lines of the header in [`ac-std-float/`](ac-std-float), with the exact reference and the testbench. 0 wrong after them in 31,464,448 operations of `fma`, `add`, `sub`, `mult`, `div` and `sqrt`.
+Fix: thirteen lines of the header in [`ac-std-float/`](ac-std-float), with the exact reference and the testbench. 0 wrong after them in 31,464,448 operations of `fma`, `add`, `sub`, `mult`, `div` and `sqrt` and in 571,584 conversions.
 
 **Siemens `ac_math::ac_div`.** The division of the math library that goes with those datatypes. On fixed-point types, when the quotient is smaller than the last place of the output, the function returns without writing the output, and the signed version builds its result from a variable that was never set.
 

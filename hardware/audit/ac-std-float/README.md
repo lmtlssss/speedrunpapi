@@ -4,7 +4,7 @@
 
 The class is run as it is. For a small format, every operand, pair or triple goes through one operation in each of the library's four rounding modes, and every result is compared with [`acref.py`](acref.py): the operation done on fractions of integers and rounded once. For binary32 and binary64 the comparison is with the processor's own arithmetic.
 
-Three things are wrong. Everything else that was run agrees.
+Six things are wrong, three in the arithmetic and three in the conversions. Everything else that was run agrees.
 
 ## `fma` with ties to odd doubles the result
 
@@ -97,11 +97,59 @@ Cause. Lines 1688, 1745 and 1764 return `zero()` for these operands.
 
 Reported as [hlslibs/ac_types#43](https://github.com/hlslibs/ac_types/issues/43).
 
+## Conversions
+
+[`acconv.py`](acconv.py) puts every value of a source type through one conversion: to another float format, to `ac_fixed`, and from `ac_fixed`. 1,396 configurations, 571,584 calls. [`accases.cpp`](accases.cpp) has the three cases below in ordinary formats.
+
+### A subnormal that rounds up to the smallest normal number becomes zero
+
+`convert<WR,QR>()` changes the fraction width and keeps the exponent width. The constructor from an `ac_std_float` with the same exponent width uses it with AC_RND_CONV.
+
+```
+ac_std_float<32,8> x = 007fffff               the largest subnormal of binary32
+x.convert<16, AC_RND_CONV>()        0000      to bfloat16's layout, 8 exponent and 7 fraction bits; 0080, which is 2^-126, is right
+x.convert<16, 8, AC_RND_CONV>()     0080      the general conversion, same two formats
+
+ac_std_float<64,11> x = 000fffffffffffff      the largest subnormal of binary64
+ac_std_float<40,11> y(x)            0000000000      0010000000, which is 2^-1022, is right
+```
+
+114 of 41,984 calls, in 23 of 68 configurations, with AC_RND_CONV, AC_RND_INF and AC_RND_CONV_ODD. Every one is a subnormal whose rounding reaches the smallest normal number.
+
+Cause. Line 518, `e_t e_r = f_e + rnd_ovf;`, adds only a carry out of the whole significand. For a subnormal the rounding carries into the hidden bit: the fraction comes out zero and the exponent field stays zero. The general `convert<WR,ER,QR>()` gets this case right.
+
+### A subnormal converted to a wider exponent comes out doubled, or zero
+
+`convert<WR,ER,QR>()` with `ER > E` normalizes a subnormal source. When the value is still subnormal in the target format, it shifts one place too far.
+
+```
+ac_std_float<16,4> 0002, which is 2^-16   ->  binary16     0200, which is 2^-15       0100 is right
+ac_std_float<16,4> 0001, which is 2^-17   ->  binary16     0100, which is 2^-16       0080 is right
+```
+
+In all four rounding modes, truncation included: 96 of 147,456 calls, in the 16 configurations that take `ac_std_float<10,3>` to a format with four exponent bits. 32 come out twice the exact value, 32 two thirds of it and 32 zero.
+
+Cause. Lines 624 to 626: `max_shift_left = f_e - r_min_exp + 1` is the first shift that is too large, and the limited case shifts by exactly that. binary16, binary32 and binary64 converted to one another never reach it, because every subnormal of the narrower format is a normal number in the wider one.
+
+### From a fixed-point number or an integer with ties to odd: zero
+
+`assign_from<AC_RND_CONV_ODD>()` returns zero when the rounding carries into the next power of two.
+
+```
+ac_int<32,false> 4294967295  ->  binary32            AC_RND_CONV 4f800000    AC_RND_CONV_ODD 00000000    4f800000 is right
+ac_fixed<8,4,false> 7.9375   ->  ac_std_float<8,3>                           AC_RND_CONV_ODD 00          60, which is 8.0, is right
+```
+
+67 of 4,400 calls in that mode, in 12 of 80 configurations. The other three modes are right on the same sources.
+
+Cause. Line 714 tests for a rounding that overflows the significand only when the mode is AC_RND_CONV or AC_RND_INF. With ties to odd the rounding carries too, whenever something lies above the tie. The constructors from `ac_fixed`, `ac_int`, `int` and `long long` use AC_RND_CONV and are right.
+
 ## The patch
 
-[`ac_std_float.patch`](ac_std_float.patch) is seven lines of code in the header: the missing term in `fma`, one more value in the type of the saturated shift, and `-zero()` in the three functions when the sign bit is set. With it:
+[`ac_std_float.patch`](ac_std_float.patch) is thirteen lines of code in the header: the missing term in `fma`, one more value in the type of the saturated shift, `-zero()` in the three functions when the sign bit is set, the carry into the hidden bit in `convert<WR,QR>()`, the shift limit in `convert<WR,ER,QR>()`, and the ties-to-odd carry in `assign_from`. With it:
 
-- the three reproducers print the right values;
+- the reproducers print the right values;
+- the conversion sweep: 571,584 calls, 0 wrong;
 - `fma` on every triple of the 6.3 and 7.3 formats, four rounding modes: 9,437,184 operations, 0 wrong;
 - `add`, `sub`, `mult`, `div` and `sqrt` on every operand of the 8.3, 9.4 and 10.4 formats, four rounding modes: 22,027,264 operations, 0 wrong;
 - `ceil`, `floor`, `trunc` and `round` on every operand of the four formats above: 0 wrong;
@@ -117,6 +165,8 @@ The header as published, without the patch:
 - `fma` with AC_RND_CONV, AC_TRN_ZERO and AC_RND_INF on every triple of 6.3 and 7.3: 0 wrong.
 - The six comparisons on every pair of the 8.3 and 10.4 formats: 6,684,672, 0 wrong.
 - binary32 and binary64 in round to nearest even beside the processor: `add`, `sub`, `mult`, `div`, `sqrt` and `fma`, 1,000,000 operand sets each in each format, 0 wrong. The operands sit at chosen exponent distances and on the edges of the significand.
+- `convert_to_ac_fixed` on every finite value of three formats, into sixteen fixed-point types, with the eight quantization modes and wrapping and saturating overflow: 768 configurations, 364,544 calls, 0 wrong.
+- `assign_from` a fixed-point number with AC_RND_CONV, AC_TRN_ZERO and AC_RND_INF: 13,200 calls, 0 wrong. `convert<WR,ER,QR>()` between formats, apart from the case above.
 
 Overflow is taken as IEEE 754 has it: infinity, except under truncation, where it is the largest finite number. A NaN is compared as a NaN whatever its payload.
 
@@ -132,6 +182,9 @@ export AC_TYPES=/path/to/ac_types
 ./run.sh small "10.4" "ceil floor trunc round"
 ./run.sh host                               # binary32 and binary64 beside the processor
 ./run.sh patched                            # the header with the patch: the reproducers and three of the runs again
+
+python3 convrun.py out_conv 8               # the conversion sweep on the header as published
+python3 convrun.py out_conv_patched 8 $PWD/build/patched     # and on the patched one, after ./run.sh patched
 ```
 
 A summary line reads `add   10.4  conv    1048576 operations,    3024 wrong {'one unit': 3024}`, with the first wrong cases above it.
@@ -145,4 +198,6 @@ A summary line reads `add   10.4  conv    1048576 operations,    3024 wrong {'on
 | [`aczero.cpp`](aczero.cpp) | `ceil`, `floor`, `trunc` and `round` beside the C library on operands whose result is zero |
 | [`acbuiltin.cpp`](acbuiltin.cpp) | the same calls through `ac_ieee_float<binary32>`, built with and without `AC_IEEE_FLOAT_USE_BUILTIN` |
 | [`achost.cpp`](achost.cpp) | binary32 and binary64 beside the processor's float and double |
-| [`ac_std_float.patch`](ac_std_float.patch) | the seven lines |
+| [`acconv.py`](acconv.py), [`convrun.py`](convrun.py) | the conversions: the configurations, the generated test programs, the reference, the run |
+| [`accases.cpp`](accases.cpp) | the three conversion cases in ordinary formats |
+| [`ac_std_float.patch`](ac_std_float.patch) | the thirteen lines |
