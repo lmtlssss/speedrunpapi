@@ -1,0 +1,57 @@
+--- a/include/ac_std_float.h
++++ b/include/ac_std_float.h
+@@ -960,10 +960,13 @@
+     mu_t op_smaller = op1_smaller ? op1_mu : op2_mu;
+     int exp = op1_smaller ? op2_e_b : op1_e_b;
+ 
+-    typedef ac_int<ac::nbits<mu_bits+1>::val,false> e_dif_sat_t;
++    // one more than mu_bits+1 has to fit: when mu_bits+1 is all ones (mu_bits 6, 14, 30, 62) a type of
++    // nbits<mu_bits+1> saturates at exactly mu_bits+1, and a shift by that leaves the leading bit of a far
++    // smaller operand in the round position
++    typedef ac_int<ac::nbits<mu_bits+2>::val,false> e_dif_sat_t;
+     // saturate e_dif (if bigger than mu_bits, result will be the same as mu_bits+1 because shift will be bigger than number of bits)
+     //unsigned e_dif_sat = (e_dif > mu_bits) ? mu_bits+1 : e_dif;
+-    e_dif_sat_t e_dif_sat = ac_fixed<ac::nbits<mu_bits+1>::val,ac::nbits<mu_bits+1>::val,false,AC_TRN,AC_SAT>(e_dif).to_ac_int();
++    e_dif_sat_t e_dif_sat = ac_fixed<ac::nbits<mu_bits+2>::val,ac::nbits<mu_bits+2>::val,false,AC_TRN,AC_SAT>(e_dif).to_ac_int();
+ 
+     bool m1_eq_m2 = (op1_mu == op2_mu);
+     bool op_sign = op1_smaller & op2_sign;
+@@ -1455,7 +1458,10 @@
+     const int slc_ptr = No_SubNormals ? 4+extra_lsb : mu_bits+2;
+     typedef ac_int<mu_bits+1,false> t_h;
+     t_h t = add_r.template slc<mu_bits+1>(slc_ptr);
+-    bool rnd_ovf = (QR != AC_TRN_ZERO) & !add_r[accu_size-1] & (t == t_h(-1));
++    // a tie rounds up into the next binade in every mode but round-half-to-odd, where the all-ones
++    // significand is the odd neighbour and stays; it carries there only when something lies below the tie
++    bool below_rnd = !!add_r.template slc<slc_ptr>(0);
++    bool rnd_ovf = (QR != AC_TRN_ZERO) & !add_r[accu_size-1] & (t == t_h(-1)) & ((QR != AC_RND_CONV_ODD) | below_rnd);
+     bool r_sign = op3_inf ? op3_sign : mult_inf ? mult_sign : (r_neg ^ toggle_r_sign) & !add_exact_zero;
+     ac_int<mu_bits+1,true> r_rnd_i = r_rnd.template slc<mu_bits+1>(0);
+     bool r_zero = !rnd_ovf & !r_rnd_i;
+@@ -1685,7 +1691,7 @@
+     if (!d.template slc<W-1>(0))
+       return *this;
+     if (e < exp_bias) {
+-      return sign ? zero() : one();
++      return sign ? -zero() : one();
+     } else {
+       ac_std_float r(*this);
+       int e_dif = mant_bits + exp_bias - e;
+@@ -1742,7 +1748,7 @@
+   ac_std_float trunc() const {
+     ac_int<E,false> e = d.template slc<E>(mant_bits);
+     if (e < exp_bias) {
+-      return zero();
++      return d[W-1] ? -zero() : zero();
+     } else {
+       ac_std_float r(*this);
+       int e_dif = mant_bits + exp_bias - e;
+@@ -1761,7 +1767,7 @@
+   ac_std_float round() const {
+     ac_int<E,false> e = d.template slc<E>(mant_bits);
+     if (e < exp_bias-1) {
+-      return zero();
++      return d[W-1] ? -zero() : zero();
+     } else {
+       ac_std_float r(*this);
+       int e_dif = mant_bits + exp_bias -1 - e;
