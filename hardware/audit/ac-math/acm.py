@@ -247,6 +247,11 @@ def expected(c, f):
     return isqrt(int(f[1], 16)) & ((1 << ow) - 1), int(f[2], 16), None
 
 
+def operands_of(c):
+    """how many fields of a result line are operands"""
+    return 2 if c["op"] in ("fdiv", "idiv", "shift") else 1
+
+
 def describe(c):
     if c["op"] == "fdiv":
         return "ac_div %s ac_fixed<%d,%d> / <%d,%d> -> <%d,%d,%s,%s>" % ("signed" if c["s"] else "unsigned", *c["n"], *c["d"], *c["q"], c["qq"], c["qo"])
@@ -287,7 +292,7 @@ def check(out_dir, results, examples):
             bad_cfg[c["id"]] = bad_cfg.get(c["id"], 0) + 1
             if shown.get(key, 0) < examples:
                 shown[key] = shown.get(key, 0) + 1
-                print("  %s: operands %s -> %x, exact %x" % (describe(c), " ".join(f[1:3] if c["op"] in ("fdiv", "idiv") else f[1:2]), got, want))
+                print("  %s: operands %s -> %x, exact %x" % (describe(c), " ".join(f[1:1 + operands_of(c)]), got, want))
     print("%-34s %10s %9s %9s %9s" % ("operation and mode", "calls", "wrong", "flag", "asserts"))
     for key in sorted(total):
         print("%-34s %10d %9d %9d %9d" % (key, total[key], wrong.get(key, 0), flagwrong.get(key, 0), asserts.get(key, 0)))
@@ -313,8 +318,8 @@ def depends(out_dir, path_a, path_b, examples):
             if shown < examples and cfg[c["id"]] == 1:
                 shown += 1
                 print("  %s: operands %s -> %s with one earlier content, %s with another" % (
-                    describe(c), " ".join(fa[1:3] if c["op"] in ("fdiv", "idiv") else fa[1:2]), " ".join(fa[3:] if c["op"] in ("fdiv", "idiv") else fa[2:]),
-                    " ".join(fb[3:] if c["op"] in ("fdiv", "idiv") else fb[2:])))
+                    describe(c), " ".join(fa[1:1 + operands_of(c)]), " ".join(fa[1 + operands_of(c):]),
+                    " ".join(fb[1 + operands_of(c):])))
     for key in sorted(per):
         print("%-34s %9d calls depend on the earlier content" % (key, per[key]))
     print("total %d calls in %d configurations give a result that depends on what the output variable held" % (sum(per.values()), len(cfg)))

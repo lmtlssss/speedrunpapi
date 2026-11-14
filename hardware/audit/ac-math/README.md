@@ -83,6 +83,8 @@ With it all 5,802 configurations compile and 689,808 calls are right in both run
 
 On the header as published: `ac_sqrt` on unsigned fixed-point types in all eight quantization modes (54,144 calls over 1,296 configurations) and on integers (2,592 calls); integer `ac_div`, quotient and remainder, unsigned and signed (2,288 calls); and the fixed-point divisions outside the two cases above.
 
+`ac_shift_left` and `ac_shift_right` of [`ac_shift.h`](https://github.com/hlslibs/ac_math/blob/4bc5da6682e5ecbb9ff41ffe5f04725f3bdedc30/include/ac_math/ac_shift.h), which the rest of the library is built on, were run the same way by [`acs.py`](acs.py): both directions, signed and unsigned operands, an `int` and an `unsigned int` count, five operand types, six output types, the eight quantization modes, wrapping and saturating outputs. That is 3,840 configurations, every operand shifted by every count from -10 to 10: 786,432 calls, 0 wrong, and nothing that depends on the earlier content of the output.
+
 ## Running it
 
 A C++17 compiler and Python 3. `AC_TYPES` and `AC_MATH` are checkouts of [hlslibs/ac_types](https://github.com/hlslibs/ac_types) and [hlslibs/ac_math](https://github.com/hlslibs/ac_math).
@@ -98,6 +100,8 @@ CXXEXTRA=-ftrivial-auto-var-init=pattern python3 run.py out 8          # the swe
 mkdir -p patched/ac_math && cp $AC_MATH/include/ac_math/ac_div.h patched/ac_math/
 patch -p2 -d patched < ac_div.patch
 CXXEXTRA=-ftrivial-auto-var-init=pattern python3 run.py out_patched 8 $PWD/patched
+
+ACM_MODULE=acs CXXEXTRA=-ftrivial-auto-var-init=pattern python3 run.py out_shift 8      # the shifts
 ```
 
 `run.py` writes the test programs, compiles them, sets aside the configurations the library does not compile for (with the compiler's error for each in `nocompile_why.json`), runs the rest twice and compares. The library's assertions are caught through its own `AC_USER_DEFINED_ASSERT` hook; with that hook defined `ac_fixed.h` needs `<iostream>` included before it.
@@ -105,6 +109,7 @@ CXXEXTRA=-ftrivial-auto-var-init=pattern python3 run.py out_patched 8 $PWD/patch
 | File | |
 | --- | --- |
 | [`acm.py`](acm.py) | the configurations, the generated test programs, the exact reference and the comparison |
+| [`acs.py`](acs.py) | the same for `ac_shift_left` and `ac_shift_right` |
 | [`run.py`](run.py) | build, run twice, compare |
 | [`acdiv.cpp`](acdiv.cpp) | three plain cases |
 | [`qtest.cpp`](qtest.cpp), [`acq.py`](acq.py) | the reference's quantization and overflow against the library's own `ac_fixed` |
