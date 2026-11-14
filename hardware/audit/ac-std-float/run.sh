@@ -1,7 +1,7 @@
 #!/bin/sh
 # usage: AC_TYPES=/path/to/ac_types ./run.sh repro | small "FORMATS" "OPS" | host [SEED N] | patched
 #
-#   repro     the three findings on the library as it is: a few lines each
+#   repro     the findings on the library as it is: a few lines each
 #   small     every operand of each small format through each operation, in the four rounding modes,
 #             checked by acref.py; one summary line per run.   example: ./run.sh small "8.3 10.4" "add sub"
 #   host      binary32 and binary64 in round to nearest even beside the processor's own arithmetic
@@ -20,7 +20,7 @@ B="$HERE/build"
 mkdir -p "$B"
 
 build() {   # build FIRST_INCLUDE_DIR SUFFIX
-  for p in actb acfma acadd aczero achost acbuiltin; do
+  for p in actb acfma acadd aczero achost acbuiltin accases; do
     "$CXX" -std=c++17 -O2 -w -I "$1" -I "$AC_TYPES/include" "$HERE/$p.cpp" -o "$B/$p$2"
   done
   # the same source once more with the library's C-library mode for binary32 and binary64
@@ -46,6 +46,7 @@ case "$1" in
     "$B/aczero"
     "$B/acbuiltin"
     "$B/acbuiltin_c"
+    "$B/accases"
     ;;
   small)
     build "$AC_TYPES/include" ""
@@ -65,6 +66,7 @@ case "$1" in
     "$B/aczero_patched"
     "$B/acbuiltin_patched"
     "$B/acbuiltin_c_patched"
+    "$B/accases_patched"
     sweep "_patched" "6.3" "fma"
     sweep "_patched" "10.4" "add sub"
     sweep "_patched" "10.4" "ceil floor trunc round"
