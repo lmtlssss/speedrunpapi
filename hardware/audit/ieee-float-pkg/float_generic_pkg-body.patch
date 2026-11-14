@@ -1,0 +1,874 @@
+--- a/ieee/float_generic_pkg-body.vhdl
++++ b/ieee/float_generic_pkg-body.vhdl
+@@ -301,27 +301,37 @@
+     variable shift          : INTEGER;
+     variable remainder      : UNSIGNED (2 downto 0);
+     variable round          : STD_ULOGIC;           -- round BIT
++    variable sticky         : STD_ULOGIC;           -- bits below remainder
+   begin
+     isign                   := to_x01(arg(arg'high));
+     -- exponent /= '0', normal floating point
+     expon                   := to_01(SIGNED(arg (exponent_width-1 downto 0)), 'X');
+     expon(exponent_width-1) := not expon(exponent_width-1);
+     exp                     := to_integer (expon);
+-    -- Figure out the fraction
+-    fract                   := (others => '0');     -- fill with zero
+-    fract (fract'high)      := '1';     -- Add the "1.0".
+-    shift                   := (fract'high-1) - exp;
+-    if fraction_width > fract'high then             -- Can only use size-2 bits
+-      fract (fract'high-1 downto 0) := UNSIGNED (to_slv (arg(-1 downto
+-                                                             -fract'high)));
++    -- Figure out the fraction: the "1.0" and as many bits below it as
++    -- frac_shift holds, three more than frac, so that the three bits under
++    -- the integer are bits of the number whatever the shift. The rest goes
++    -- to sticky: without it 0.50000006 is taken for exactly one half.
++    shift                        := (fract'high-1) - exp;
++    frac_shift                   := (others => '0');     -- fill with zero
++    frac_shift (frac_shift'high) := '1';     -- Add the "1.0".
++    sticky                       := '0';
++    if fraction_width > frac_shift'high then
++      frac_shift (frac_shift'high-1 downto 0) :=
++        UNSIGNED (to_slv (arg(-1 downto -frac_shift'high)));
++      sticky := or (to_slv (arg(-frac_shift'high-1 downto -fraction_width)));
+     else                                -- can use all bits
+-      fract (fract'high-1 downto fract'high-fraction_width) :=
++      frac_shift (frac_shift'high-1 downto frac_shift'high-fraction_width) :=
+         UNSIGNED (to_slv (arg(-1 downto -fraction_width)));
+     end if;
+-    frac_shift := fract & "000";
+     if shift < 0 then                   -- Overflow
+       fract := (others => '1');
+     else
++      for i in frac_shift'range loop    -- the bits the shift drops
++        if i < shift then
++          sticky := sticky or frac_shift(i);
++        end if;
++      end loop;
+       frac_shift := shift_right (frac_shift, shift);
+       fract      := frac_shift (frac_shift'high downto 3);
+       remainder  := frac_shift (2 downto 0);
+@@ -329,15 +339,15 @@
+       case round_style is
+         when round_nearest =>
+           round := remainder(2) and
+-                   (fract (0) or (or (remainder (1 downto 0))));
+-        when round_inf =>
+-          round := remainder(2) and not isign;
++                   (fract (0) or (or (remainder (1 downto 0))) or sticky);
++        when round_inf =>               -- anything below the integer rounds up
++          round := ((or (remainder)) or sticky) and not isign;
+         when round_neginf =>
+-          round := remainder(2) and isign;
++          round := ((or (remainder)) or sticky) and isign;
+         when others =>
+           round := '0';
+       end case;
+-      if round = '1' then
++      if round = '1' and (and (fract)) /= '1' then   -- all ones stays, as on overflow
+         fract := fract + 1;
+       end if;
+     end if;
+@@ -409,6 +419,7 @@
+     variable rexpon     : UNSIGNED (exponent_width-1 downto 0);   -- exponent
+     variable result     : UNRESOLVED_float (exponent_width downto -fraction_width);  -- result
+     variable shiftr     : INTEGER;      -- shift amount
++    variable expi       : INTEGER;      -- exponent at its full width
+     variable stickyx    : STD_ULOGIC;   -- version of sticky
+     constant expon_base : SIGNED (exponent_width-1 downto 0) :=
+       gen_expon_base(exponent_width);   -- exponent offset
+@@ -419,27 +430,47 @@
+     round   := false;
+     shiftr  := find_leftmost (to_01(fract), '1')     -- Find the first "1"
+                - fraction_width - nguard;  -- subtract the length we want
+-    exp := resize (expon, exp'length) + shiftr;
++    -- The exponent that comes in can be wider than the one that goes out
++    -- (resize to a narrower format), so the range is decided on its full
++    -- value and not on a copy cut to exp'length.
++    expi := to_integer (to_01(expon)) + shiftr;
+     if (or (fract) = '0') then   -- Zero
+       zerores := true;
+-    elsif ((exp <= -resize(expon_base, exp'length)-1) and denormalize)
+-      or ((exp < -resize(expon_base, exp'length)-1) and not denormalize) then
+-      if (exp >= -resize(expon_base, exp'length)-fraction_width-1)
++    elsif ((expi <= -to_integer(expon_base)-1) and denormalize)
++      or ((expi < -to_integer(expon_base)-1) and not denormalize) then
++      if (expi >= -to_integer(expon_base)-fraction_width-1)
+         and denormalize then
+         exp    := -resize(expon_base, exp'length)-1;
+-        shiftr := -to_integer (expon + expon_base);  -- new shift
++        shiftr := -(to_integer (to_01(expon)) + to_integer (expon_base));  -- new shift
+       else                              -- return zero
+         zerores := true;
+       end if;
+-    elsif (exp > expon_base-1) then     -- infinity
++    elsif (expi > to_integer(expon_base)-1) then     -- infinity
+       infres := true;
++    else
++      exp := to_signed (expi, exp'length);
+     end if;
+     if zerores then
+       result := zerofp (fraction_width => fraction_width,
+                         exponent_width => exponent_width);
++      -- A value that is not zero and too small for the format: rounding away
++      -- from zero gives the smallest number of the format, not zero.
++      if (or (fract) = '1' or sticky = '1')
++        and ((round_style = round_inf and sign = '0')
++             or (round_style = round_neginf and sign = '1')) then
++        result (-fraction_width) := '1';
++      end if;
+     elsif infres then
+       result := pos_inffp (fraction_width => fraction_width,
+                            exponent_width => exponent_width);
++      -- Too large for the format: rounding toward zero gives the largest
++      -- finite number, not infinity.
++      if round_style = round_zero
++        or (round_style = round_inf and sign = '1')
++        or (round_style = round_neginf and sign = '0') then
++        result (0)                         := '0';
++        result (-1 downto -fraction_width) := (others => '1');
++      end if;
+     else
+       sfract := fract srl shiftr;       -- shift
+       if shiftr > 0 then
+@@ -752,6 +783,22 @@
+     elsif (lfptype = neg_zero and rfptype = neg_zero) then   -- -0 + -0 = -0
+       fpresult := neg_zerofp (fraction_width => fraction_width,
+                              exponent_width => exponent_width);
++    elsif (lfptype = pos_zero or lfptype = neg_zero)
++      and rfptype /= pos_zero and rfptype /= neg_zero then   -- 0 + x = x
++      -- (Without denormals a zero is broken up with a higher exponent than
++      -- a number of the lowest binade, and would be taken for the larger.)
++      fpresult := resize (arg            => to_X01(r),
++                          exponent_width => exponent_width,
++                          fraction_width => fraction_width,
++                          denormalize_in => denormalize,
++                          denormalize    => denormalize);
++    elsif (rfptype = pos_zero or rfptype = neg_zero)
++      and lfptype /= pos_zero and lfptype /= neg_zero then   -- x + 0 = x
++      fpresult := resize (arg            => to_X01(l),
++                          exponent_width => exponent_width,
++                          fraction_width => fraction_width,
++                          denormalize_in => denormalize,
++                          denormalize    => denormalize);
+     else
+       lresize := resize (arg            => to_X01(l),
+                          exponent_width => exponent_width,
+@@ -836,7 +883,14 @@
+         end if;
+       end if;
+       if or (ufract) = '0' then
+-        sign := '0';                    -- IEEE 854, 6.3, paragraph 2.
++        -- IEEE 854, 6.3, paragraph 2: an exact zero sum of operands with
++        -- unlike signs is +0, except when rounding toward minus infinity,
++        -- where it is -0.
++        if l(l'high) /= r(r'high) and round_style = round_neginf then
++          sign := '1';
++        else
++          sign := '0';
++        end if;
+       end if;
+       -- normalize
+       fpresult := normalize (fract          => ufract,
+@@ -1009,7 +1063,63 @@
+     -- to make the output look like that of the unsigned IEEE divide.
+     return resize (q, lx'length);
+   end function short_divide;
++
++  -- purpose: '1' when the division done by short_divide leaves a remainder.
++  -- The quotient of a floating-point divide is exact when it leaves none, and
++  -- rounding has to know which: the same stages as short_divide, keeping the
++  -- last partial remainder.
++  function short_divide_sticky (
++    lx, rx : UNSIGNED)
++    return STD_ULOGIC
++  is
++    constant stages       : INTEGER := lx'high - rx'high;  -- number of stages
++    variable partial      : UNSIGNED (lx'range);
++    variable partial_argl : SIGNED (rx'high + 2 downto 0);
++    variable partial_arg  : SIGNED (rx'high + 2 downto 0);
++  begin
++    partial := lx;
++    for i in stages downto 0 loop
++      partial_argl := resize ("0" & SIGNED (partial(lx'high downto i)),
++                              partial_argl'length);
++      partial_arg := partial_argl - SIGNED ("0" & rx);
++      if (partial_arg (partial_arg'high) = '0') then       -- not negative
++        partial (lx'high+i-stages downto lx'high+i-stages-rx'high) :=
++          UNSIGNED (partial_arg(rx'range));
++      end if;
++    end loop;
++    return or (partial (rx'high downto 0));
++  end function short_divide_sticky;
+ 
++  -- purpose: integer square root, one bit of the root per step.
++  -- arg has twice as many bits as root; root is the largest number whose
++  -- square does not exceed arg, and inexact says that the square is smaller.
++  procedure isqrt_floor (
++    arg     : in  UNSIGNED;
++    root    : out UNSIGNED;
++    inexact : out STD_ULOGIC) is
++    constant n     : NATURAL := root'length;
++    variable a     : UNSIGNED (2*n-1 downto 0);
++    variable r     : UNSIGNED (n-1 downto 0);
++    variable part  : UNSIGNED (n+1 downto 0);   -- partial remainder
++    variable trial : UNSIGNED (n+1 downto 0);
++  begin
++    a    := arg;
++    r    := (others => '0');
++    part := (others => '0');
++    for i in n-1 downto 0 loop
++      part  := part (n-1 downto 0) & a (2*i+1 downto 2*i);
++      trial := r & "01";
++      if part >= trial then
++        part := part - trial;
++        r    := r (n-2 downto 0) & '1';
++      else
++        r    := r (n-2 downto 0) & '0';
++      end if;
++    end loop;
++    root    := r;
++    inexact := or (part);
++  end procedure isqrt_floor;
++
+   -- 1/X function.  Needed for algorithm development.
+   function reciprocal (
+     arg                  : UNRESOLVED_float;
+@@ -1034,8 +1144,21 @@
+       q := short_divide (one, arg);     -- Unsigned divide
+       return resize (q, arg'length+1);
+     end function onedivy;
++    -- '1' when 1/y is not exact
++    function onedivy_sticky (
++      y : UNSIGNED)
++      return STD_ULOGIC
++    is
++      variable one : UNSIGNED ((2*y'high)+1 downto 0);
++    begin
++      one           := (others => '0');
++      one(one'high) := '1';
++      return short_divide_sticky (one, y);
++    end function onedivy_sticky;
+     variable fptype        : valid_fpstate;
+     variable expon         : SIGNED (exponent_width-1 downto 0);   -- exponents
++    -- the negated exponent needs one more bit than the exponent
++    variable rexpon        : SIGNED (exponent_width+1 downto 0);
+     variable denorm_offset : NATURAL range 0 to 2;
+     variable fract         : UNSIGNED (fraction_width downto 0);
+     variable fractg        : UNSIGNED (fraction_width+divguard downto 0);
+@@ -1050,21 +1173,32 @@
+         -- Return quiet NAN, IEEE754-1985-7.1,1
+         fpresult := qnanfp (fraction_width => fraction_width,
+                             exponent_width => exponent_width);
+-      when pos_inf | neg_inf =>         -- 1/inf, return 0
++      when pos_inf | neg_inf =>         -- 1/inf, return 0 with the sign of arg
+         fpresult := zerofp (fraction_width => fraction_width,
+                             exponent_width => exponent_width);
+-      when neg_zero | pos_zero =>       -- 1/0
++        fpresult (exponent_width) := to_x01 (arg (exponent_width));
++      when neg_zero | pos_zero =>       -- 1/0, infinity with the sign of arg
+         report float_generic_pkg'instance_name
+           & "RECIPROCAL: Floating Point divide by zero"
+           severity error;
+         fpresult := pos_inffp (fraction_width => fraction_width,
+                                exponent_width => exponent_width);
++        fpresult (exponent_width) := to_x01 (arg (exponent_width));
+       when others =>
+-        if (fptype = pos_denormal or fptype = neg_denormal)
++        -- Without denormals an exponent field of zero is one more binade of
++        -- numbers with a leading one, and they take the ordinary path.
++        if denormalize and (fptype = pos_denormal or fptype = neg_denormal)
+           and ((arg (-1) or arg(-2)) /= '1') then
+           -- 1/denormal = infinity, with the exception of 2**-expon_base
+           fpresult := pos_inffp (fraction_width => fraction_width,
+                                  exponent_width => exponent_width);
++          -- rounding toward zero gives the largest finite number
++          if round_style = round_zero
++            or (round_style = round_inf and to_x01 (arg (exponent_width)) = '1')
++            or (round_style = round_neginf and to_x01 (arg (exponent_width)) = '0') then
++            fpresult (0)                         := '0';
++            fpresult (-1 downto -fraction_width) := (others => '1');
++          end if;
+           fpresult (exponent_width) := to_x01 (arg (exponent_width));
+         else
+           break_number (
+@@ -1074,7 +1208,7 @@
+             fract       => fract,
+             expon       => expon);
+           fractg := (others => '0');
+-          if (fptype = pos_denormal or fptype = neg_denormal) then
++          if denormalize and (fptype = pos_denormal or fptype = neg_denormal) then
+             -- The reciprocal of a denormal number is typically zero,
+             -- except for two special cases which are trapped here.
+             if (to_x01(arg (-1)) = '1') then
+@@ -1090,13 +1224,13 @@
+             fractg (fractg'high downto divguard) := fract;
+             denorm_offset                        := 0;
+           end if;
+-          expon  := - expon - 3 + denorm_offset;
++          rexpon := - resize (expon, rexpon'length) - 3 + denorm_offset;
+           sfract := onedivy (fractg);
+           -- normalize
+           fpresult := normalize (fract          => sfract,
+-                                 expon          => expon,
++                                 expon          => rexpon,
+                                  sign           => arg(exponent_width),
+-                                 sticky         => '1',
++                                 sticky         => onedivy_sticky (fractg),
+                                  fraction_width => fraction_width,
+                                  exponent_width => exponent_width,
+                                  round_style    => round_style,
+@@ -1240,7 +1374,8 @@
+             -- divide
+             rfract := short_divide (fractl, fractr);        -- unsigned divide
+             sfract := rfract (sfract'range);       -- lower bits
+-            sticky := '1';
++            -- sticky only when the quotient is not exact
++            sticky := short_divide_sticky (fractl, fractr);
+             -- normalize
+             fpresult := normalize (fract          => sfract,
+                                    expon          => rexpon,
+@@ -1270,8 +1405,9 @@
+     variable lfptype, rfptype : valid_fpstate;
+     variable fpresult         : UNRESOLVED_float (exponent_width downto -fraction_width);
+     variable ulfract, urfract : UNSIGNED (fraction_width downto 0);
++    variable gfract           : UNSIGNED (fraction_width+guard downto 0);  -- with guard bits
++    variable rlead            : INTEGER;          -- the one bit of the divisor
+     variable exponl, exponr   : SIGNED(exponent_width-1 downto 0);  -- exponents
+-    variable rexpon           : SIGNED(exponent_width downto 0);  -- result exponent
+     variable fp_sign          : STD_ULOGIC;       -- sign of result
+     variable lresize, rresize : UNRESOLVED_float (exponent_width downto -fraction_width);
+   begin  -- divisionbyp2
+@@ -1359,23 +1495,30 @@
+               denormalize => denormalize,
+               fract       => urfract,
+               expon       => exponr);
+-            assert (or (urfract (fraction_width-1 downto 0)) = '0')
++            -- A power of two has one bit set; in a denormal it sits below
++            -- the top and the exponent goes down by as many places.
++            rlead := find_leftmost (urfract, '1');
++            assert (urfract = shift_left (to_unsigned (1, urfract'length), rlead))
+               report float_generic_pkg'instance_name
+               & "DIVIDEBYP2: "
+               & "Dividebyp2 called with a non power of two divisor"
+               severity error;
+-            rexpon := (exponl(exponl'high)&exponl)
+-                      - (exponr(exponr'high)&exponr) - 1;
+-            -- normalize
+-            fpresult := normalize (fract          => ulfract,
+-                                   expon          => rexpon,
++            -- The quotient is exact. It still has to be rounded when it
++            -- comes out denormal, so it is given the guard bits.
++            gfract                              := (others => '0');
++            gfract (gfract'high downto guard)   := ulfract;
++            fpresult := normalize (fract          => gfract,
++                                   expon          => to_signed (to_integer (exponl)
++                                                                - to_integer (exponr)
++                                                                + (fraction_width - rlead) - 1,
++                                                                exponent_width + 3),
+                                    sign           => fp_sign,
+-                                   sticky         => '1',
++                                   sticky         => '0',
+                                    fraction_width => fraction_width,
+                                    exponent_width => exponent_width,
+                                    round_style    => round_style,
+                                    denormalize    => denormalize,
+-                                   nguard         => 0);
++                                   nguard         => guard);
+         end case classcase2;
+     end case classcase;
+     return fpresult;
+@@ -1394,23 +1537,45 @@
+       -mine (mine(l'low, r'low), c'low);   -- length of FP output fraction
+     constant exponent_width : NATURAL :=
+       maximum (maximum(l'high, r'high), c'high);  -- length of FP output exponent
++    -- The product has 2*fraction_width+2 bits and c has fraction_width+1.
++    -- In a window this wide, with its top at the higher leading one, that
++    -- operand fits whole and the other is exact or far enough below it for
++    -- one sticky bit.
++    constant wd                        : NATURAL := 3*fraction_width + 8;
+     variable lfptype, rfptype, cfptype : valid_fpstate;
+     variable fpresult                  : UNRESOLVED_float (exponent_width downto -fraction_width);
+-    variable fractl, fractr            : UNSIGNED (fraction_width downto 0);  -- fractions
+-    variable fractx                    : UNSIGNED (fraction_width+guard downto 0);
+-    variable fractc, fracts            : UNSIGNED (fraction_width+1+guard downto 0);
+-    variable rfract                    : UNSIGNED ((2*(fraction_width))+1 downto 0);  -- result fraction
+-    variable ufract            : UNSIGNED (fraction_width+1+guard downto 0);  -- result fraction
++    variable fractl, fractr, fractc    : UNSIGNED (fraction_width downto 0);  -- fractions
++    variable rfract                    : UNSIGNED ((2*(fraction_width))+1 downto 0);  -- product
+     variable exponl, exponr, exponc    : SIGNED (exponent_width-1 downto 0);  -- exponents
+-    variable rexpon, rexpon2           : SIGNED (exponent_width+1 downto 0);  -- result exponent
+-    variable shifty                    : INTEGER;      -- denormal shift
+-    variable shiftx                    : SIGNED (rexpon'range);  -- shift fractions
+-    variable fp_sign                   : STD_ULOGIC;  -- sign of result
+-    variable lresize, rresize          : UNRESOLVED_float (exponent_width downto -fraction_width);
+-    variable cresize                   : UNRESOLVED_float (exponent_width downto -fraction_width - guard);
+-    variable leftright                 : BOOLEAN;     -- left or right used
+-    variable sticky                    : STD_ULOGIC;  -- Holds precision for rounding
+-  begin  -- multiply
++    variable pw, cw, sw                : UNSIGNED (wd downto 0);  -- product, c and result in the window
++    variable stp, stc, sticky          : STD_ULOGIC;  -- bits below the window
++    variable sp, sc, top, lsb          : INTEGER;     -- exponents of bit 0 and of the window
++    variable fp_sign, c_sign, rsign    : STD_ULOGIC;  -- signs of the product, of c and of the result
++    variable lresize, rresize, cresize : UNRESOLVED_float (exponent_width downto -fraction_width);
++    -- arg at 2**shift in the window; lost says that bits fell below it
++    procedure place (
++      arg   : in  UNSIGNED;
++      shift : in  INTEGER;
++      w     : out UNSIGNED (wd downto 0);
++      lost  : out STD_ULOGIC) is
++      variable x    : UNSIGNED (arg'length-1 downto 0);
++      variable orx  : STD_ULOGIC;
++    begin
++      x   := arg;
++      orx := '0';
++      if shift >= 0 then
++        w := shift_left (resize (x, wd+1), shift);
++      else
++        w := resize (shift_right (x, -shift), wd+1);
++        for i in x'range loop           -- the bits the shift drops
++          if i < -shift then
++            orx := orx or x(i);
++          end if;
++        end loop;
++      end if;
++      lost := orx;
++    end procedure place;
++  begin  -- multiply accumulate
+     if (fraction_width = 0 or l'length < 7 or r'length < 7 or c'length < 7) then
+       lfptype := isx;
+     else
+@@ -1418,6 +1583,8 @@
+       rfptype := Classfp (r, check_error);
+       cfptype := Classfp (c, check_error);
+     end if;
++    fp_sign := to_x01 (l(l'high)) xor to_x01 (r(r'high));  -- sign of the product
++    c_sign  := to_x01 (c(c'high));
+     if (lfptype = isx or rfptype = isx or cfptype = isx) then
+       fpresult := (others => 'X');
+     elsif (lfptype = nan or lfptype = quiet_nan or
+@@ -1434,14 +1601,21 @@
+       fpresult := qnanfp (fraction_width => fraction_width,
+                           exponent_width => exponent_width);
+     elsif (lfptype = pos_inf or rfptype = pos_inf
+-           or lfptype = neg_inf or rfptype = neg_inf  -- x * inf = inf
+-           or cfptype = neg_inf or cfptype = pos_inf) then  -- x + inf = inf
++           or lfptype = neg_inf or rfptype = neg_inf) then  -- x * inf = inf
++      if (cfptype = pos_inf or cfptype = neg_inf) and c_sign /= fp_sign then
++        -- inf - inf: Return quiet NAN, IEEE754-1985-7.1,2
++        fpresult := qnanfp (fraction_width => fraction_width,
++                            exponent_width => exponent_width);
++      else
++        fpresult := pos_inffp (fraction_width => fraction_width,
++                               exponent_width => exponent_width);
++        fpresult (exponent_width) := fp_sign;
++      end if;
++    elsif (cfptype = pos_inf or cfptype = neg_inf) then  -- x + inf = inf
+       fpresult := pos_inffp (fraction_width => fraction_width,
+                              exponent_width => exponent_width);
+-      -- figure out the sign
+-      fpresult (exponent_width) := l(l'high) xor r(r'high);
++      fpresult (exponent_width) := c_sign;  -- with the sign of c
+     else
+-      fp_sign := l(l'high) xor r(r'high);  -- figure out the sign
+       lresize := resize (arg            => to_X01(l),
+                          exponent_width => exponent_width,
+                          fraction_width => fraction_width,
+@@ -1456,7 +1630,7 @@
+       rfptype := Classfp (rresize, false);        -- errors already checked
+       cresize := resize (arg            => to_X01(c),
+                          exponent_width => exponent_width,
+-                         fraction_width => -cresize'low,
++                         fraction_width => fraction_width,
+                          denormalize_in => denormalize,
+                          denormalize    => denormalize);
+       cfptype := Classfp (cresize, false);        -- errors already checked
+@@ -1476,84 +1650,69 @@
+         arg         => cresize,
+         fptyp       => cfptype,
+         denormalize => denormalize,
+-        fract       => fractx,
++        fract       => fractc,
+         expon       => exponc);
+-      if (rfptype = pos_denormal or rfptype = neg_denormal) then
+-        shifty := fraction_width - find_leftmost(fractr, '1');
+-        fractr := shift_left (fractr, shifty);
+-      elsif (lfptype = pos_denormal or lfptype = neg_denormal) then
+-        shifty := fraction_width - find_leftmost(fractl, '1');
+-        fractl := shift_left (fractl, shifty);
++      -- The product and c as integers: rfract * 2**sp and fractc * 2**sc.
++      rfract := fractl * fractr;
++      sp     := to_integer (exponl) + to_integer (exponr) + 2 - 2*fraction_width;
++      sc     := to_integer (exponc) + 1 - fraction_width;
++      -- The window ends just above the leading one of whichever reaches
++      -- higher. A zero has no leading one and does not place the window.
++      if or (rfract) = '0' and or (fractc) = '0' then
++        top := 0;
++      elsif or (rfract) = '0' then
++        top := sc + find_leftmost (fractc, '1') + 1;
++      elsif or (fractc) = '0' then
++        top := sp + find_leftmost (rfract, '1') + 1;
+       else
+-        shifty := 0;
+-        -- Note that a denormal number * a denormal number is always zero.
++        top := maximum (sp + find_leftmost (rfract, '1') + 1,
++                        sc + find_leftmost (fractc, '1') + 1);
+       end if;
+-      -- multiply
+-      rfract := fractl * fractr;        -- Multiply the fraction
+-      -- add the exponents
+-      rexpon := resize (exponl, rexpon'length) + exponr - shifty + 1;
+-      shiftx := rexpon - exponc;
+-      if shiftx < -fractl'high then
+-        rexpon2 := resize (exponc, rexpon2'length);
+-        fractc  := "0" & fractx;
+-        fracts  := (others => '0');
+-        sticky  := or (rfract);
+-      elsif shiftx < 0 then
+-        shiftx := - shiftx;
+-        fracts := shift_right (rfract (rfract'high downto rfract'high
+-                                       - fracts'length+1),
+-                               to_integer(shiftx));
+-        fractc    := "0" & fractx;
+-        rexpon2   := resize (exponc, rexpon2'length);
+-        leftright := false;
+-        sticky := or (rfract (to_integer(shiftx)+rfract'high
+-                                     - fracts'length downto 0));
+-      elsif shiftx = 0 then
+-        rexpon2 := resize (exponc, rexpon2'length);
+-        sticky  := or (rfract (rfract'high - fractc'length downto 0));
+-        if rfract (rfract'high downto rfract'high - fractc'length+1) > fractx
+-        then
+-          fractc := "0" & fractx;
+-          fracts := rfract (rfract'high downto rfract'high
+-                            - fracts'length+1);
+-          leftright := false;
+-        else
+-          fractc := rfract (rfract'high downto rfract'high
+-                            - fractc'length+1);
+-          fracts    := "0" & fractx;
+-          leftright := true;
++      lsb := top - wd;
++      place (rfract, sp - lsb, pw, stp);
++      place (fractc, sc - lsb, cw, stc);
++      if stp = '1' or stc = '1' then
++        -- The one that lost bits below the window is the smaller by far. A
++        -- difference takes one more from the last place for those bits, and
++        -- the result is inexact either way.
++        sticky := '1';
++        if fp_sign = c_sign then
++          sw    := pw + cw;
++          rsign := fp_sign;
++        elsif stc = '1' then
++          sw    := pw - cw - 1;
++          rsign := fp_sign;
++        else
++          sw    := cw - pw - 1;
++          rsign := c_sign;
+         end if;
+-      elsif shiftx > fractx'high then
+-        rexpon2   := rexpon;
+-        fracts    := (others => '0');
+-        fractc    := rfract (rfract'high downto rfract'high - fractc'length+1);
+-        leftright := true;
+-        sticky := or (fractx & rfract (rfract'high - fractc'length
+-                                              downto 0));
+-      else                              -- fractx'high > shiftx > 0
+-        rexpon2   := rexpon;
+-        fracts    := "0" & shift_right (fractx, to_integer (shiftx));
+-        fractc    := rfract (rfract'high downto rfract'high - fractc'length+1);
+-        leftright := true;
+-        sticky := or (fractx (to_integer (shiftx) downto 0)
+-                             & rfract (rfract'high - fractc'length downto 0));
+-      end if;
+-      fracts (0) := fracts (0) or sticky;  -- Or the sticky bit into the LSB
+-      if fp_sign = to_X01(c(c'high)) then
+-        ufract  := fractc + fracts;
+-        fp_sign := fp_sign;
+-      else                              -- signs are different
+-        ufract := fractc - fracts;      -- always positive result
+-        if leftright then               -- Figure out which sign to use
+-          fp_sign := fp_sign;
++      else                              -- both exact in the window
++        sticky := '0';
++        if fp_sign = c_sign then
++          sw    := pw + cw;
++          rsign := fp_sign;
++        elsif pw > cw then
++          sw    := pw - cw;
++          rsign := fp_sign;
++        elsif cw > pw then
++          sw    := cw - pw;
++          rsign := c_sign;
+         else
+-          fp_sign := c(c'high);
++          -- IEEE 854, 6.3, paragraph 2: an exact zero from unlike signs is
++          -- +0, except when rounding toward minus infinity, where it is -0.
++          sw := (others => '0');
++          if round_style = round_neginf then
++            rsign := '1';
++          else
++            rsign := '0';
++          end if;
+         end if;
+       end if;
+-      -- normalize
+-      fpresult := normalize (fract          => ufract,
+-                             expon          => rexpon2,
+-                             sign           => fp_sign,
++      -- one rounding of the exact sum
++      fpresult := normalize (fract          => sw,
++                             expon          => to_signed (lsb + fraction_width + guard - 1,
++                                                          exponent_width + 4),
++                             sign           => rsign,
+                              sticky         => sticky,
+                              fraction_width => fraction_width,
+                              exponent_width => exponent_width,
+@@ -1730,7 +1889,8 @@
+     return fpresult;
+   end function modulo;
+ 
+-  -- Square root of a floating point number.  Done using Newton's Iteration.
++  -- Square root of a floating point number.  Done one bit of the root per
++  -- step, so the result is the exact root rounded once.
+   function sqrt (
+     arg                  : UNRESOLVED_float;        -- floating point input
+     constant round_style : round_type := float_round_style;
+@@ -1741,14 +1901,16 @@
+   is
+     constant fraction_width : NATURAL := guard-arg'low;  -- length of FP output fraction
+     constant exponent_width : NATURAL := arg'high;  -- length of FP output exponent
+-    variable sign           : STD_ULOGIC;
+     variable fpresult       : float (arg'range);
+     variable fptype         : valid_fpstate;
+     variable iexpon         : SIGNED(exponent_width-1 downto 0);  -- exponents
+-    variable expon          : SIGNED(exponent_width downto 0);    -- exponents
+-    variable ufact          : ufixed (0 downto arg'low);
+-    variable fact           : ufixed (2 downto -fraction_width);  -- fraction
+-    variable resb           : ufixed (fact'high+1 downto fact'low);
++    variable sfract         : UNSIGNED (-arg'low downto 0);  -- significand
++    -- significand (or twice it) above fraction_width + guard zeros
++    variable radicand       : UNSIGNED (2*fraction_width+1 downto 0);
++    variable root           : UNSIGNED (fraction_width downto 0);
++    variable rsticky        : STD_ULOGIC;   -- the root is not exact
++    variable rexp           : INTEGER;      -- exponent
++    variable lead           : INTEGER;      -- leading one of the significand
+   begin  -- square root
+     fptype := Classfp (arg, check_error);
+     classcase : case fptype is
+@@ -1770,31 +1932,32 @@
+         fpresult := neg_zerofp (fraction_width => fraction_width-guard,
+                                 exponent_width => exponent_width);
+       when others =>
++        -- The significand is brought up to its leading one, doubled when the
++        -- exponent is odd, and its integer root taken with fraction_width
++        -- more bits. The remainder is the sticky bit.
+         break_number (arg         => arg,
++                      fptyp       => fptype,
+                       denormalize => denormalize,
+-                      check_error => false,
+-                      fract       => ufact,
+-                      expon       => iexpon,
+-                      sign        => sign);
+-        expon := resize (iexpon+1, expon'length);   -- get exponent
+-        fact  := resize (ufact, fact'high, fact'low);
+-        if (expon(0) = '1') then
+-          fact := fact sla 1;           -- * 2.0
+-        end if;
+-        expon := shift_right (expon, 1);            -- exponent/2
+-        -- Newton's iteration - root := (1 + arg) / 2
+-        resb  := (fact + 1) sra 1;
+-        for j in 0 to fraction_width/4 loop
+-          --   root := (root + (arg/root))/2
+-          resb := resize (arg            => (resb + (fact/resb)) sra 1,
+-                          left_index     => resb'high,
+-                          right_index    => resb'low,
+-                          round_style    => fixed_truncate,
+-                          overflow_style => fixed_wrap);
+-        end loop;
+-        fpresult := normalize (fract          => resb,
+-                               expon          => expon-1,
++                      fract       => sfract,
++                      expon       => iexpon);
++        rexp := to_integer (iexpon) + 1;            -- exponent of 1.f or 0.f
++        lead := find_leftmost (sfract, '1');        -- a denormal starts lower
++        sfract := shift_left (sfract, sfract'high - lead);
++        rexp   := rexp - (sfract'high - lead);
++        radicand := (others => '0');
++        if rexp mod 2 /= 0 then                     -- odd: 2 * significand
++          radicand (radicand'high downto radicand'high - sfract'length + 1)
++            := sfract;
++          rexp := rexp - 1;
++        else
++          radicand (radicand'high - 1 downto radicand'high - sfract'length)
++            := sfract;
++        end if;
++        isqrt_floor (arg => radicand, root => root, inexact => rsticky);
++        fpresult := normalize (fract          => root,
++                               expon          => to_signed (rexp / 2 - 1, exponent_width + 2),
+                                sign           => '0',
++                               sticky         => rsticky,
+                                exponent_width => arg'high,
+                                fraction_width => -arg'low,
+                                round_style    => round_style,
+@@ -2403,9 +2566,11 @@
+         when neg_inf =>
+           result := neg_inffp (fraction_width => fraction_width,
+                                exponent_width => exponent_width);
+-        when pos_zero | neg_zero =>
+-          result := zerofp (fraction_width => fraction_width,   -- hate -0
++        when pos_zero | neg_zero =>     -- a zero keeps its sign, as it does
++                                        -- when the size increases
++          result := zerofp (fraction_width => fraction_width,
+                             exponent_width => exponent_width);
++          result (exponent_width) := to_x01 (arg (arg'high));
+         when others =>
+           break_number (
+             arg         => arg,
+@@ -2682,6 +2847,14 @@
+           -- return negative infinity.
+           result := neg_inffp (fraction_width => fraction_width,
+                                exponent_width => exponent_width);
++        end if;
++        -- Too large for the format: rounding toward zero gives the largest
++        -- finite number, not infinity.
++        if round_style = round_zero
++          or (round_style = round_inf and result (exponent_width) = '1')
++          or (round_style = round_neginf and result (exponent_width) = '0') then
++          result (0)                         := '0';
++          result (-1 downto -fraction_width) := (others => '1');
+         end if;
+       else                              -- Normal number (can't be denormal)
+         -- Compute Exponent
+@@ -2803,6 +2976,14 @@
+       if argb2 > UNSIGNED(expon_base) then
+         result := pos_inffp (fraction_width => fraction_width,
+                              exponent_width => exponent_width);
++        -- Too large for the format: rounding toward zero gives the largest
++        -- finite number, not infinity.
++        if round_style = round_zero
++          or (round_style = round_inf and sign = '1')
++          or (round_style = round_neginf and sign = '0') then
++          result (0)                         := '0';
++          result (-1 downto -fraction_width) := (others => '1');
++        end if;
+         result (exponent_width) := sign;
+       else
+         exp     := SIGNED(resize(argb2, exp'length));
+@@ -3153,6 +3334,12 @@
+     classcase : case validfp is
+       when isx | nan | quiet_nan | pos_zero | neg_zero | pos_denormal | neg_denormal =>
+         result := 0;                    -- return 0
++        -- a denormal is not zero: rounding away from it reaches 1 or -1
++        if validfp = pos_denormal and round_style = round_inf then
++          result := 1;
++        elsif validfp = neg_denormal and round_style = round_neginf then
++          result := -1;
++        end if;
+       when pos_inf =>
+         result := INTEGER'high;
+       when neg_inf =>
+@@ -3168,8 +3355,12 @@
+         fract (fract'high-1 downto 0) := frac;
+         isign                         := to_x01 (arg (arg'high));
+         base                          := to_integer (expon) + 1;
+-        if base < -1 then
++        if base < -1 then               -- below one half
+           result := 0;
++          if (round_style = round_inf and isign = '0')
++            or (round_style = round_neginf and isign = '1') then
++            result := 1;                -- still rounds away in that direction
++          end if;
+         elsif base >= frac'high then
+           result := to_integer (fract) * 2**(base - frac'high);
+         else                            -- We need to round
+@@ -3189,10 +3380,10 @@
+                 round := fract (frac'high - base - 1) and
+                          fract (frac'high - base);
+               end if;
+-            when round_inf =>
+-              round := fract(frac'high - base - 1) and not isign;
++            when round_inf =>           -- anything below the integer rounds up
++              round := (or (fract (frac'high - base - 1 downto 0))) and not isign;
+             when round_neginf =>
+-              round := fract(frac'high - base - 1) and isign;
++              round := (or (fract (frac'high - base - 1 downto 0))) and isign;
+             when others =>
+               round := '0';
+           end case;
+@@ -3225,6 +3416,10 @@
+         frac := (others => 'X');
+       when pos_zero | neg_inf | neg_zero | neg_normal | pos_denormal | neg_denormal =>
+         frac := (others => '0');        -- return 0
++        -- a positive denormal is not zero: rounding up reaches 1
++        if validfp = pos_denormal and round_style = round_inf then
++          frac (0) := '1';
++        end if;
+       when pos_inf =>
+         frac := (others => '1');
+       when others =>
+@@ -3258,6 +3453,12 @@
+         result := (others => 'X');
+       when pos_zero | neg_zero | pos_denormal | neg_denormal =>
+         result := (others => '0');      -- return 0
++        -- a denormal is not zero: rounding away from it reaches 1 or -1
++        if validfp = pos_denormal and round_style = round_inf then
++          result (0) := '1';
++        elsif validfp = neg_denormal and round_style = round_neginf then
++          result := (others => '1');
++        end if;
+       when pos_inf =>
+         result               := (others => '1');
+         result (result'high) := '0';
+@@ -4577,8 +4778,9 @@
+     constant exponent_width : NATURAL := y'high;  -- length of FP output exponent
+     variable arg, result    : UNRESOLVED_float (exponent_width downto -fraction_width);  -- internal argument
+     variable expon          : SIGNED (exponent_width-1 downto 0);  -- Vectorized exp
+-    variable exp            : SIGNED (exponent_width downto 0);
+     variable ufract         : UNSIGNED (fraction_width downto 0);
++    variable gfract         : UNSIGNED (fraction_width+float_guard_bits downto 0);  -- with guard bits
++    variable nlim           : INTEGER;  -- N, limited
+     variable fptype : valid_fpstate;
+   begin
+     -- This can be done by simply adding N to the exponent.
+@@ -4591,6 +4793,8 @@
+         -- Return quiet NAN, IEEE754-1985-7.1,1
+         result := qnanfp (fraction_width => fraction_width,
+                           exponent_width => exponent_width);
++      when pos_inf | neg_inf | pos_zero | neg_zero =>
++        result := arg;                  -- infinity and zero stay what they are
+       when others =>
+         break_number (
+           arg         => arg,
+@@ -4598,16 +4802,28 @@
+           denormalize => denormalize,
+           fract       => ufract,
+           expon       => expon);
+-        exp := resize (expon, exp'length) + N;
++        -- The result still has to be rounded when it comes out denormal, so
++        -- the fraction is given the guard bits. N is limited to where the
++        -- result has left the format either way, and the exponent is passed
++        -- at a width that holds the sum.
++        gfract                                       := (others => '0');
++        gfract (gfract'high downto float_guard_bits) := ufract;
++        if N > 2**(exponent_width+1) + fraction_width + 4 then
++          nlim := 2**(exponent_width+1) + fraction_width + 4;
++        elsif N < -(2**(exponent_width+1) + fraction_width + 4) then
++          nlim := -(2**(exponent_width+1) + fraction_width + 4);
++        else
++          nlim := N;
++        end if;
+         result := normalize (
+-          fract          => ufract,
+-          expon          => exp,
++          fract          => gfract,
++          expon          => to_signed (to_integer (expon) + nlim, 32),
+           sign           => to_x01 (arg (arg'high)),
+           fraction_width => fraction_width,
+           exponent_width => exponent_width,
+           round_style    => round_style,
+           denormalize    => denormalize,
+-          nguard         => 0);
++          nguard         => float_guard_bits);
+     end case classcase;
+     return result;
+   end function Scalb;
