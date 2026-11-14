@@ -16,7 +16,7 @@ Eight calls are not judged: `ceil`, `floor` and `round` of 15.5 in `APFloat<3,4>
 
 Every finite result of `fma` is right. The wrong ones are of two kinds, and XLS's own interpreter fails the same cases ([`repro.x`](repro.x): 4 tests ran, 4 failed).
 
-## `fma` returns infinity, or another NaN, where the result is NaN
+## `fma` returns infinity, or another NaN, where the result is NaN ([google/xls#5417](https://github.com/google/xls/issues/5417))
 
 `fma` builds its NaN with its own constant ([line 3655](https://github.com/google/xls/blob/v0.0.0-11089-gc2639fac5/xls/dslx/stdlib/apfloat.x#L3655)):
 
@@ -43,11 +43,11 @@ bfloat16  fma(NaN, 1.0, 1.0)     7f88
 binary16  fma(NaN, 1.0, 1.0)     7c40
 ```
 
-## `fma` returns +0 for a negative zero product added to a negative zero
+## `fma` returns +0 for a negative zero product added to a negative zero ([#5418](https://github.com/google/xls/issues/5418))
 
 `(1.0 * -0.0) + -0.0` is -0.0, and `add(-0.0, -0.0)` returns it. `fma` returns +0.0: binary32 `fma(3f800000, 80000000, 80000000)` is `00000000`. 29,696 triples of `APFloat<4,3>`, 106,496 of `APFloat<3,4>`, 7,808 of `APFloat<5,2>`, 1,664 of `APFloat<3,2>`.
 
-## `cast_from_fixed_using_rz` overflows to infinity
+## `cast_from_fixed_using_rz` overflows to infinity ([#5419](https://github.com/google/xls/issues/5419))
 
 Rounding toward zero carries an overflow to the largest finite number. 100000 to binary16 comes back `7c00`, infinity, where 65504 (`7bff`) is the result. `APFloat<4,3>` from a 12-bit integer returns infinity for all 3,585 integers of magnitude 256 or more. `cast_from_fixed_using_rne` is right to return infinity there.
 
