@@ -68,6 +68,8 @@ Every row below has a reproducer that fits on one line.
 | [antonblanchard/microwatt](https://github.com/antonblanchard/microwatt), the OpenPOWER core | `fpu` at its port: 37 floating-point instructions under seven settings of the FPSCR exception enables, four rounding modes | 155,400 | 55, all in FPRF: an enabled underflow whose rounding carries is classed as denormalized | [#482](https://github.com/antonblanchard/microwatt/issues/482), [cause and fix](microwatt) |
 | antonblanchard/microwatt | `fpu`: `fcfidus` on random 48-bit integers, four rounding modes | 80,000 | 7,470 values; the inexact bit missing on 19,928 | reported by others as [#476](https://github.com/antonblanchard/microwatt/issues/476); the range and the rates are added there |
 | antonblanchard/microwatt | `fpu`: 43 instructions with every exception disabled, with the fix of #476 | 344,000 | 0 | |
+| antonblanchard/microwatt | `fpu`: 43 instructions starting from a filled FPSCR; the record forms | 90,300; 9,030 | 0 | |
+| antonblanchard/microwatt | `fpu`: the twelve integer divisions and remainders, OE and Rc both ways | 600,000 | 0 | |
 
 ## Reproducers
 

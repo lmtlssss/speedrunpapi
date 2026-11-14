@@ -4,6 +4,8 @@
 #
 #   MICROWATT=DIR ./run.sh build [FPU_SOURCE] [BINARY]    the testbench with DIR/fpu.vhdl, or with another file
 #   MICROWATT=DIR ./run.sh enabled SEED N TAG [BINARY]    N operand sets per instruction under seven enable settings
+#   MICROWATT=DIR ./run.sh preset SEED N TAG [BINARY]     the same, starting each test from a filled FPSCR
+#   MICROWATT=DIR ./run.sh record SEED N TAG [BINARY]     the same, with the record forms (Rc = 1) mixed in
 #   MICROWATT=DIR ./run.sh idiv SEED N TAG [BINARY]       N operand pairs for each of the twelve integer divisions
 #   MICROWATT=DIR ./run.sh one TAG BINARY NAME RN EN A:B:C ...   chosen operands (RN 0..3 or all, EN in hex)
 #
@@ -24,9 +26,14 @@ case "$cmd" in
     ghdl -e $OPT -o $BIN tb_mw || exit 1
     echo "built $BIN"
     ;;
-  enabled)
+  enabled|preset|record)
     BIN=${4:-tb_mw}
-    python3 $HERE/mw_enabled.py gen $1 $2 $3 || exit 1
+    case "$cmd" in
+      enabled) GEN=gen ;;
+      preset) GEN=genpre ;;
+      record) GEN=genrc ;;
+    esac
+    python3 $HERE/mw_enabled.py $GEN $1 $2 $3 || exit 1
     ./$BIN -gvecfile=$3.vec -goutfile=$3.out > $3.simlog 2>&1
     python3 $HERE/mw_enabled.py check $3 4 > $3.report
     tail -n 12 $3.report
@@ -48,7 +55,7 @@ case "$cmd" in
     cat $TAG.report
     ;;
   *)
-    echo "usage: MICROWATT=DIR $0 build|enabled|idiv|one ..."
+    echo "usage: MICROWATT=DIR $0 build|enabled|preset|record|idiv|one ..."
     exit 2
     ;;
 esac
