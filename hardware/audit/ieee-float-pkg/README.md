@@ -197,4 +197,4 @@ The VHDL-93 version of the package, `float_pkg_c.vhdl` in [FPHDL/fphdl](https://
 
 ## Reported
 
-To the IEEE P1076 working group by mail on 13 November 2026, and as [ghdl/ghdl#3486](https://github.com/ghdl/ghdl/issues/3486), [nickg/nvc#1758](https://github.com/nickg/nvc/issues/1758) and [FPHDL/fphdl#4](https://github.com/FPHDL/fphdl/issues/4).
+To the IEEE P1076 working group on 13 November 2026 as [VHDL-Issues#388](https://gitlab.com/IEEE-P1076/VHDL-Issues/-/work_items/388) and by mail, and as [ghdl/ghdl#3486](https://github.com/ghdl/ghdl/issues/3486), [nickg/nvc#1758](https://github.com/nickg/nvc/issues/1758) and [FPHDL/fphdl#4](https://github.com/FPHDL/fphdl/issues/4).
