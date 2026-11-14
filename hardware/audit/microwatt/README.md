@@ -26,6 +26,8 @@ Cause. A rounding increment that carries goes through `ROUNDING_3`, which renorm
 
 Fix: [`fpu-enabled-underflow-fprf.patch`](fpu-enabled-underflow-fprf.patch), one line. `ROUND_UFLOW_EN` clears the mark.
 
+Reported on 13 November 2026 as [antonblanchard/microwatt#482](https://github.com/antonblanchard/microwatt/issues/482).
+
 ## `fcfidus`
 
 Converting an unsigned 64-bit integer to single precision drops the bits under the single-precision round bit. This one is reported upstream by others, with its cause and fix, as [#476](https://github.com/antonblanchard/microwatt/issues/476): the decode sets the single-precision mask for `fcfid` and `fcfids` only. This harness ran into it in its first 8,600 tests. Two things it adds to that report:
