@@ -1,0 +1,21 @@
+--- a/include/ac_math/ac_div.h
++++ b/include/ac_math/ac_div.h
+@@ -322,6 +322,7 @@
+     if (ZI-1 < -QF) {
+       // MSB of result is smaller than LSB of requested output
+       quotient_temp = ac_fixed<QW,QI,false,QQ,QO>(0); // Typecast to ac_fixed type in order to avoid FXD violations in CDesignChecker.
++      quotient = quotient_temp; // the output was left unwritten on this path
+       return !! dividend;
+     }
+     // max is to used to avoid compilation problems with non pos bitwidth
+@@ -394,7 +395,9 @@
+     #ifdef ASSERT_ON_INVALID_INPUT
+     AC_ASSERT(!!divisor, "Division by zero.");
+     #endif
+-    const int ZI = (QO == AC_WRAP) ? QI : NI+(DW-DI);
++    // The magnitude of the quotient is at most 2^(NI+(DW-DI)-1), and rounded to the output's last place it can be
++    // one unit of that place, 2^(QI-QW). The temporary needs integer bits for both, and at least one bit in all.
++    const int ZI = (QO == AC_WRAP) ? QI : AC_MAX(NI+(DW-DI), QI-QW+1);
+     const int ZW = ZI+(QW-QI);
+ 
+     ac_fixed<NW,NI,true> N = dividend;

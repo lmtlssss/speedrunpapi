@@ -73,6 +73,8 @@ Every row below has a reproducer that fits on one line.
 | [hlslibs/ac_types](https://github.com/hlslibs/ac_types), the Algorithmic C datatypes Siemens publishes for high-level synthesis | `ac_std_float`: `fma` with ties to odd on every operand triple of two small formats | 2,359,296 | 13,732: twice the right value on a tie just under a power of two | [#41](https://github.com/hlslibs/ac_types/issues/41), [cause and fix](ac-std-float) |
 | hlslibs/ac_types | `ac_std_float`: `add` and `sub` on every operand pair of a format with 5 fraction bits, four rounding modes | 8,388,608 | 18,368, none under truncation: fraction widths 5, 13, 29 and 61 with one operand far smaller | [#42](https://github.com/hlslibs/ac_types/issues/42), [cause and fix](ac-std-float) |
 | hlslibs/ac_types | `ac_std_float`: `ceil`, `trunc`, `round` on every operand of four small formats | 11,520 | 2,396: +0 where the result is -0 | [#43](https://github.com/hlslibs/ac_types/issues/43), [cause and fix](ac-std-float) |
+| [hlslibs/ac_math](https://github.com/hlslibs/ac_math), the math library of the same datatypes | `ac_div` on fixed-point types: every operand of 4,480 small configurations, eight quantization modes, wrapping and saturating outputs | 627,648 | 11,488: the output is not written when the quotient is below its last place; 56 configurations do not compile and 4 stop at an assertion | [cause and fix](ac-math) |
+| hlslibs/ac_math | `ac_sqrt` on fixed-point types and integers; `ac_div` on integers | 54,144; 2,592; 2,288 | 0 values; the flag returned by the signed integer division on 14 | |
 | hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
 
 ## Reproducers
@@ -262,6 +264,15 @@ ceil (-0.5), binary32                                        expected 80000000  
 ```
 
 Fix: seven lines of the header in [`ac-std-float/`](ac-std-float), with the exact reference and the testbench. 0 wrong after them in 31,464,448 operations of `fma`, `add`, `sub`, `mult`, `div` and `sqrt`.
+
+**Siemens `ac_math::ac_div`.** The division of the math library that goes with those datatypes. On fixed-point types, when the quotient is smaller than the last place of the output, the function returns without writing the output, and the signed version builds its result from a variable that was never set.
+
+```
+ac_fixed<8,0,false> 0.5 / ac_fixed<8,8,false> 3 into an ac_fixed<8,8,false> holding 77     expected 0      library 77
+ac_fixed<8,0,true> -0.5 / ac_fixed<8,8,true> 3, truncation toward minus infinity           expected -1     library -2, 0 or 85 by compiler option
+```
+
+Fix: two lines in [`ac-math/`](ac-math), with the exact reference and the sweep. 0 wrong after them in 689,808 calls over 5,802 configurations, 56 of which did not compile before.
 
 ## Your block
 
