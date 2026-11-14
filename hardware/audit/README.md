@@ -70,6 +70,10 @@ Every row below has a reproducer that fits on one line.
 | antonblanchard/microwatt | `fpu`: 43 instructions with every exception disabled, with the fix of #476 | 344,000 | 0 | |
 | antonblanchard/microwatt | `fpu`: 43 instructions starting from a filled FPSCR; the record forms | 90,300; 9,030 | 0 | |
 | antonblanchard/microwatt | `fpu`: the twelve integer divisions and remainders, OE and Rc both ways | 600,000 | 0 | |
+| [hlslibs/ac_types](https://github.com/hlslibs/ac_types), the Algorithmic C datatypes Siemens publishes for high-level synthesis | `ac_std_float`: `fma` with ties to odd on every operand triple of two small formats | 2,359,296 | 13,732: twice the right value on a tie just under a power of two | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: `add` and `sub` on every operand pair of a format with 5 fraction bits, four rounding modes | 8,388,608 | 18,368, none under truncation: fraction widths 5, 13, 29 and 61 with one operand far smaller | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: `ceil`, `trunc`, `round` on every operand of four small formats | 11,520 | 2,396: +0 where the result is -0 | [cause and fix](ac-std-float) |
+| hlslibs/ac_types | `ac_std_float`: `add`, `sub`, `mult`, `div`, `sqrt` on every operand of eight small formats; `add`, `mult`, `div` on two 11-bit formats; the six comparisons; binary32 and binary64 beside the processor | 25,847,424; 100,663,296; 6,684,672; 12,000,000 | 0 | |
 
 ## Reproducers
 
@@ -248,6 +252,16 @@ divide (6.0, 3.0, round_inf)            expected 2.0                   package 2
 ```
 
 Fix: one patch to the package body in [`ieee-float-pkg/`](ieee-float-pkg), with the exact reference and a testbench for GHDL and NVC. 0 wrong after it in 32,470,838 calls.
+
+**Siemens `ac_std_float`.** The floating-point class of the Algorithmic C datatypes, in the header that a high-level synthesis flow both simulates and synthesizes from. With ties to odd, its fused multiply-add raises the exponent on a tie that it does not round up. Its adder leaves the leading bit of a far smaller operand in the round position when the fraction is 5, 13, 29 or 61 bits wide. Three of its four functions that round to an integer return +0 where the result is -0.
+
+```
+fma (2^-12, 2^-12, 2 - 2^-23), ties to odd, binary32       expected 3fffffff      library 407fffff
+1.0 + (-(1 + 2^-13) x 2^-16), ac_std_float<20,6>             expected 3e000         library 3dfff
+ceil (-0.5), binary32                                        expected 80000000      library 00000000
+```
+
+Fix: seven lines of the header in [`ac-std-float/`](ac-std-float), with the exact reference and the testbench. 0 wrong after them in 31,464,448 operations of `fma`, `add`, `sub`, `mult`, `div` and `sqrt`.
 
 ## Your block
 
