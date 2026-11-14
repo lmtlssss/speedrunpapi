@@ -89,6 +89,18 @@ for e, f in FORMATS:
             fn("updaz_%d_%d_to_%d_%d" % (e, f, we, wf), one, WW, fl("apfloat::upcast_daz%s(%s)" % (UP, a)),
                "updaz %d %d %d %d" % (e, f, we, wf))
 
+# The standard widths, for single cases: binary32, bfloat16, binary16.
+for e, f in ((8, 23), (8, 7), (5, 10)):
+    W = w(e, f)
+    T = "uN[%d]" % W
+    P = "<u32:%d, u32:%d>" % (e, f)
+    a, b, c = un(e, f, "a"), un(e, f, "b"), un(e, f, "c")
+    fn("fma_%d_%d" % (e, f), [("a", T, W), ("b", T, W), ("c", T, W)], W, fl("apfloat::fma%s(%s, %s, %s)" % (P, a, b, c)), "fma %d %d" % (e, f))
+    fn("add_%d_%d" % (e, f), [("a", T, W), ("b", T, W)], W, fl("apfloat::add%s(%s, %s)" % (P, a, b)), "add %d %d" % (e, f))
+    fn("mul_%d_%d" % (e, f), [("a", T, W), ("b", T, W)], W, fl("apfloat::mul%s(%s, %s)" % (P, a, b)), "mul %d %d" % (e, f))
+    fn("fromfixed_rz_%d_%d_32" % (e, f), [("x", "sN[32]", 32)], W,
+       fl("apfloat::cast_from_fixed_using_rz<u32:%d, u32:%d, u32:32>(x)" % (e, f)), "fromfixed_rz %d %d 32" % (e, f))
+
 open(sys.argv[1], "w").write("\n".join(out))
 open(sys.argv[2], "w").write("\n".join(tops) + "\n")
 print("%d functions" % len(tops))

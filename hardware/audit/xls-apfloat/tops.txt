@@ -145,3 +145,15 @@ down_even_5_6_to_5_2 12 8 down_even 5 6 5 2
 down_away_5_6_to_5_2 12 8 down_away 5 6 5 2
 up_5_2_to_5_6 8 12 up 5 2 5 6
 updaz_5_2_to_5_6 8 12 updaz 5 2 5 6
+fma_8_23 32,32,32 32 fma 8 23
+add_8_23 32,32 32 add 8 23
+mul_8_23 32,32 32 mul 8 23
+fromfixed_rz_8_23_32 32 32 fromfixed_rz 8 23 32
+fma_8_7 16,16,16 16 fma 8 7
+add_8_7 16,16 16 add 8 7
+mul_8_7 16,16 16 mul 8 7
+fromfixed_rz_8_7_32 32 16 fromfixed_rz 8 7 32
+fma_5_10 16,16,16 16 fma 5 10
+add_5_10 16,16 16 add 5 10
+mul_5_10 16,16 16 mul 5 10
+fromfixed_rz_5_10_32 32 16 fromfixed_rz 5 10 32

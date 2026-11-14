@@ -587,3 +587,51 @@ pub fn up_5_2_to_5_6(a: uN[8]) -> uN[12] {
 pub fn updaz_5_2_to_5_6(a: uN[8]) -> uN[12] {
     apfloat::flatten(apfloat::upcast_daz<u32:5, u32:6, u32:5, u32:2>(apfloat::unflatten<u32:5, u32:2>(a)))
 }
+
+pub fn fma_8_23(a: uN[32], b: uN[32], c: uN[32]) -> uN[32] {
+    apfloat::flatten(apfloat::fma<u32:8, u32:23>(apfloat::unflatten<u32:8, u32:23>(a), apfloat::unflatten<u32:8, u32:23>(b), apfloat::unflatten<u32:8, u32:23>(c)))
+}
+
+pub fn add_8_23(a: uN[32], b: uN[32]) -> uN[32] {
+    apfloat::flatten(apfloat::add<u32:8, u32:23>(apfloat::unflatten<u32:8, u32:23>(a), apfloat::unflatten<u32:8, u32:23>(b)))
+}
+
+pub fn mul_8_23(a: uN[32], b: uN[32]) -> uN[32] {
+    apfloat::flatten(apfloat::mul<u32:8, u32:23>(apfloat::unflatten<u32:8, u32:23>(a), apfloat::unflatten<u32:8, u32:23>(b)))
+}
+
+pub fn fromfixed_rz_8_23_32(x: sN[32]) -> uN[32] {
+    apfloat::flatten(apfloat::cast_from_fixed_using_rz<u32:8, u32:23, u32:32>(x))
+}
+
+pub fn fma_8_7(a: uN[16], b: uN[16], c: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::fma<u32:8, u32:7>(apfloat::unflatten<u32:8, u32:7>(a), apfloat::unflatten<u32:8, u32:7>(b), apfloat::unflatten<u32:8, u32:7>(c)))
+}
+
+pub fn add_8_7(a: uN[16], b: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::add<u32:8, u32:7>(apfloat::unflatten<u32:8, u32:7>(a), apfloat::unflatten<u32:8, u32:7>(b)))
+}
+
+pub fn mul_8_7(a: uN[16], b: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::mul<u32:8, u32:7>(apfloat::unflatten<u32:8, u32:7>(a), apfloat::unflatten<u32:8, u32:7>(b)))
+}
+
+pub fn fromfixed_rz_8_7_32(x: sN[32]) -> uN[16] {
+    apfloat::flatten(apfloat::cast_from_fixed_using_rz<u32:8, u32:7, u32:32>(x))
+}
+
+pub fn fma_5_10(a: uN[16], b: uN[16], c: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::fma<u32:5, u32:10>(apfloat::unflatten<u32:5, u32:10>(a), apfloat::unflatten<u32:5, u32:10>(b), apfloat::unflatten<u32:5, u32:10>(c)))
+}
+
+pub fn add_5_10(a: uN[16], b: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::add<u32:5, u32:10>(apfloat::unflatten<u32:5, u32:10>(a), apfloat::unflatten<u32:5, u32:10>(b)))
+}
+
+pub fn mul_5_10(a: uN[16], b: uN[16]) -> uN[16] {
+    apfloat::flatten(apfloat::mul<u32:5, u32:10>(apfloat::unflatten<u32:5, u32:10>(a), apfloat::unflatten<u32:5, u32:10>(b)))
+}
+
+pub fn fromfixed_rz_5_10_32(x: sN[32]) -> uN[16] {
+    apfloat::flatten(apfloat::cast_from_fixed_using_rz<u32:5, u32:10, u32:32>(x))
+}
