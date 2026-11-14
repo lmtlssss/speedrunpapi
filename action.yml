@@ -28,7 +28,7 @@ inputs:
     required: false
     default: 'v2.2.3'
   api_key:
-    description: 'Optional Colony API key. When set, a signed certificate is requested for every Certified or Broken result.'
+    description: 'Optional colony API key. When set, a signed certificate is requested for every Certified or Broken result.'
     required: false
   public:
     description: 'Publish signed verdicts to the public registry.'

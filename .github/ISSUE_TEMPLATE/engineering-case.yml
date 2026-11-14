@@ -1,4 +1,4 @@
-name: Colony engineering case
+name: colony engineering case
 description: Reproduce a bounded circuit result or report a soundness gap with source evidence.
 title: "[engineering] "
 body:
