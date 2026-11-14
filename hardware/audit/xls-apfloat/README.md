@@ -35,7 +35,7 @@ APFloat<5,2>  fma(NaN, 1.0, 1.0)     7c    +inf        7e is the NaN
 
 2,621,116 of the 16,777,216 triples of `APFloat<4,3>`, 1,161,180 of `APFloat<5,2>` and 69,084 of the 262,144 of `APFloat<3,2>`.
 
-With four or more fraction bits the result is a NaN whose quiet bit is clear, not the canonical one the documentation promises ([`cases.v`](cases.v)):
+With four or more fraction bits the result is a NaN whose quiet bit is clear, not the canonical one the documentation promises. In `APFloat<3,4>` that is `71` where `qnan()` is `78`, on 5,263,740 triples. At the standard widths ([`cases.v`](cases.v)):
 
 ```
 binary32  fma(NaN, 1.0, 1.0)     7f880000      qnan() is 7fc00000
@@ -45,7 +45,7 @@ binary16  fma(NaN, 1.0, 1.0)     7c40
 
 ## `fma` returns +0 for a negative zero product added to a negative zero
 
-`(1.0 * -0.0) + -0.0` is -0.0, and `add(-0.0, -0.0)` returns it. `fma` returns +0.0: binary32 `fma(3f800000, 80000000, 80000000)` is `00000000`. 29,696 triples of `APFloat<4,3>`, 7,808 of `APFloat<5,2>`, 1,664 of `APFloat<3,2>`.
+`(1.0 * -0.0) + -0.0` is -0.0, and `add(-0.0, -0.0)` returns it. `fma` returns +0.0: binary32 `fma(3f800000, 80000000, 80000000)` is `00000000`. 29,696 triples of `APFloat<4,3>`, 106,496 of `APFloat<3,4>`, 7,808 of `APFloat<5,2>`, 1,664 of `APFloat<3,2>`.
 
 ## `cast_from_fixed_using_rz` overflows to infinity
 
