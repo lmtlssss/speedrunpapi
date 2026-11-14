@@ -8,7 +8,7 @@ version = "0.7.1"
 description = "Output-determinism analysis for Circom circuits and R1CS; Python entry to the shared Node engine, with an independent Python checker"
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{name = "Colony Technology"}]
+authors = [{name = "colony.technology"}]
 license-files = ["LICENSE.md"]
 keywords = ["circom", "r1cs", "zero-knowledge", "under-constrained", "formal verification", "determinism"]
 classifiers = ["Programming Language :: Python :: 3", "Environment :: Console"]

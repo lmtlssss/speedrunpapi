@@ -4,7 +4,7 @@ This page carries the documentation of the hosted-job client and the ONNX checke
 
 ## Hosted jobs
 
-`speedrunpapi` includes a public client for Colony's hosted optimization and proof service. Set `COLONY_API_KEY` to an active, funded customer key. The same commands work from the npm and Python packages. The source is sent to the hosted API only when you run a hosted command.
+`speedrunpapi` includes a public client for colony's hosted optimization and proof service. Set `COLONY_API_KEY` to an active, funded customer key. The same commands work from the npm and Python packages. The source is sent to the hosted API only when you run a hosted command.
 
 ```sh
 export COLONY_API_KEY="your-customer-key"
@@ -53,4 +53,4 @@ The original source, mathematical candidate, separate verifier source, exact inp
 
 `python3 proofs/carry-frontier-4096/verifier/verify.py`
 
-This mathematical reproduction requires no Colony account, private optimizer, or network access. Its ephemeral Ed25519 signature is a laboratory attestation; commercial certificates and third-party challenge acceptance have separate issuance and review requirements. The [proof workflow](.github/workflows/portable-proof.yml) replays it on GitHub Actions. Additional source-bound operator evidence can be published beside this example when accepted externally.
+This mathematical reproduction requires no colony account, private optimizer, or network access. Its ephemeral Ed25519 signature is a laboratory attestation; commercial certificates and third-party challenge acceptance have separate issuance and review requirements. The [proof workflow](.github/workflows/portable-proof.yml) replays it on GitHub Actions. Additional source-bound operator evidence can be published beside this example when accepted externally.

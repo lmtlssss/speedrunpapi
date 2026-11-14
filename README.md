@@ -1,6 +1,6 @@
 # speedrunpapi
 
-Output-determinism analysis for Circom circuits and R1CS, by [Colony Technology](https://colony.technology).
+Output-determinism analysis for Circom circuits and R1CS, by [colony.technology](https://colony.technology).
 
 An under-constrained circuit accepts more than one output for the same input, so the prover decides the result instead of the circuit. `speedrunpapi` checks that property on the constraint system the compiler emits and returns one of three verdicts. Each is backed by something you can re-check without trusting this tool.
 
@@ -166,7 +166,7 @@ The Action installs the pinned circom compiler, scans, uploads the report, and f
 
 ## Signed certificates
 
-Local analysis is free. A paid API key adds an Ed25519-signed statement from Colony Technology that its service replayed your derivation, or re-evaluated your witness pair, against the R1CS you submitted:
+Local analysis is free. A paid API key adds an Ed25519-signed statement from colony.technology that its service replayed your derivation, or re-evaluated your witness pair, against the R1CS you submitted:
 
 ```sh
 export COLONY_API_KEY=...
@@ -195,7 +195,7 @@ The hosted-job client (`run`, `solve`, `quote`, `optimize`, `status`, `result`, 
 
 The same mathematics builds logic. Compilers, netlists and proofs are under [`hardware/`](hardware/).
 
-| EPFL benchmark | Published best | Colony |
+| EPFL benchmark | Published best | colony |
 | --- | --- | --- |
 | `voter`, size | 1145 LUT-6 | 987 LUT-6 |
 | `voter`, depth | 11 levels | 9 levels |
