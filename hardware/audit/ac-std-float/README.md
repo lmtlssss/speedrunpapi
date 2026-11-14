@@ -118,6 +118,8 @@ ac_std_float<40,11> y(x)            0000000000      0010000000, which is 2^-1022
 
 Cause. Line 518, `e_t e_r = f_e + rnd_ovf;`, adds only a carry out of the whole significand. For a subnormal the rounding carries into the hidden bit: the fraction comes out zero and the exponent field stays zero. The general `convert<WR,ER,QR>()` gets this case right.
 
+Reported on 13 November 2026 as [hlslibs/ac_types#44](https://github.com/hlslibs/ac_types/issues/44).
+
 ### A subnormal converted to a wider exponent comes out doubled, or zero
 
 `convert<WR,ER,QR>()` with `ER > E` normalizes a subnormal source. When the value is still subnormal in the target format, it shifts one place too far.
@@ -131,6 +133,8 @@ In all four rounding modes, truncation included: 96 of 147,456 calls, in the 16 
 
 Cause. Lines 624 to 626: `max_shift_left = f_e - r_min_exp + 1` is the first shift that is too large, and the limited case shifts by exactly that. binary16, binary32 and binary64 converted to one another never reach it, because every subnormal of the narrower format is a normal number in the wider one.
 
+Reported as [hlslibs/ac_types#45](https://github.com/hlslibs/ac_types/issues/45).
+
 ### From a fixed-point number or an integer with ties to odd: zero
 
 `assign_from<AC_RND_CONV_ODD>()` returns zero when the rounding carries into the next power of two.
@@ -143,6 +147,8 @@ ac_fixed<8,4,false> 7.9375   ->  ac_std_float<8,3>                           AC_
 67 of 4,400 calls in that mode, in 12 of 80 configurations. The other three modes are right on the same sources.
 
 Cause. Line 714 tests for a rounding that overflows the significand only when the mode is AC_RND_CONV or AC_RND_INF. With ties to odd the rounding carries too, whenever something lies above the tie. The constructors from `ac_fixed`, `ac_int`, `int` and `long long` use AC_RND_CONV and are right.
+
+Reported as [hlslibs/ac_types#46](https://github.com/hlslibs/ac_types/issues/46).
 
 ## The patch
 
