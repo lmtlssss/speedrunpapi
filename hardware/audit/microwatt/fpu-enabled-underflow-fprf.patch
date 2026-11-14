@@ -1,0 +1,11 @@
+--- a/fpu.vhdl
++++ b/fpu.vhdl
+@@ -2582,6 +2582,8 @@
+                 -- enabled underflow exception
+                 -- rounding and normalization has been done
+                 v.fpscr(FPSCR_UX) := '1';
++                -- the result is a normal number once the exponent is adjusted
++                v.denorm := '0';
+                 re_sel1 <= REXP1_R;
+                 re_con2 <= RECON2_BIAS;
+                 re_set_result <= '1';
